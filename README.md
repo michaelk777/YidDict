@@ -7,10 +7,10 @@ A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English loo
 - Search Yiddish→English and English→Yiddish
 - Input in Hebrew script or YIVO romanization
 - Aggregates results from two authoritative sources:
-  - **Finkel's dictionary** (free) — `cs.engr.uky.edu/~raphael/yiddish`
-  - **Verterbukh** (freemium) — `verterbukh.org`
-- Offline access via local SQLite cache
-- Search history with Anki CSV export for language learners
+  - **Finkel's dictionary** — `cs.engr.uky.edu/~raphael/yiddish`
+  - **Verterbukh** — `verterbukh.org`
+- Offline access via local cache
+- Search history with Anki CSV export option for language learners
 - Light and dark mode
 
 ## Status
