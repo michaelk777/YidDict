@@ -27,6 +27,7 @@ const TAB_ICONS: Record<keyof TabParamList, { focused: IoniconName; unfocused: I
 
 export default function AppNavigator() {
   const { theme, colorScheme } = useTheme();
+  console.log(`[YidDict] AppNavigator: rendering (colorScheme=${colorScheme})`);
 
   return (
     <Tab.Navigator

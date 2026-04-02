@@ -3,8 +3,11 @@ import * as SQLite from 'expo-sqlite';
 let db: SQLite.SQLiteDatabase | null = null;
 
 export async function initDatabase(): Promise<void> {
+  console.log('[YidDict] database: opening yiddict.db');
   db = await SQLite.openDatabaseAsync('yiddict.db');
+  console.log('[YidDict] database: db opened successfully');
 
+  console.log('[YidDict] database: creating tables');
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS search_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,6 +35,7 @@ export async function initDatabase(): Promise<void> {
       value TEXT NOT NULL
     );
   `);
+  console.log('[YidDict] database: tables created');
 
   const defaults: [string, string][] = [
     ['default_source', 'finkel'],
@@ -39,12 +43,15 @@ export async function initDatabase(): Promise<void> {
     ['theme', 'system'],
   ];
 
+  console.log('[YidDict] database: seeding default settings');
   for (const [key, value] of defaults) {
     await db.runAsync(
       'INSERT OR IGNORE INTO user_settings (key, value) VALUES (?, ?)',
       [key, value]
     );
+    console.log(`[YidDict] database: seeded "${key}" = "${value}"`);
   }
+  console.log('[YidDict] database: initDatabase complete');
 }
 
 export function getDatabase(): SQLite.SQLiteDatabase {
