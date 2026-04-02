@@ -5,6 +5,9 @@ changelog.md
 # Project docs (binary, not for version control)
 *.docx
 
+# IDE
+.idea/
+
 # macOS
 .DS_Store
 
