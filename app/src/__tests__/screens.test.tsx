@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
-import SearchScreen from '../screens/SearchScreen';
+// SearchScreen is tested separately in SearchScreen.test.tsx
 import HistoryScreen from '../screens/HistoryScreen';
 import ExportScreen from '../screens/ExportScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -28,41 +28,6 @@ function flatStyle(styles: object[]): Record<string, unknown> {
 describe('Screen stubs', () => {
   beforeEach(() => {
     mockUseColorScheme.mockReturnValue('light');
-  });
-
-  describe('SearchScreen', () => {
-    it('renders the "Search" label', () => {
-      wrap(<SearchScreen />);
-      expect(screen.getByText('Search')).toBeTruthy();
-    });
-
-    it('applies light theme background color to container', () => {
-      wrap(<SearchScreen />);
-      const flat = flatStyle(getContainerView().props.style);
-      expect(flat.backgroundColor).toBe('#FFFFFF');
-    });
-
-    it('applies light theme text color to label', () => {
-      wrap(<SearchScreen />);
-      const flat = flatStyle(screen.getByText('Search').props.style);
-      expect(flat.color).toBe('#1A1A1A');
-    });
-
-    it('switches to dark theme background when scheme is dark', () => {
-      mockUseColorScheme.mockReturnValue('dark');
-      wrap(<SearchScreen />);
-      const flat = flatStyle(getContainerView().props.style);
-      expect(flat.backgroundColor).toBe('#121212');
-      expect(flat.backgroundColor).not.toBe('#FFFFFF');
-    });
-
-    it('switches to dark theme text color when scheme is dark', () => {
-      mockUseColorScheme.mockReturnValue('dark');
-      wrap(<SearchScreen />);
-      const flat = flatStyle(screen.getByText('Search').props.style);
-      expect(flat.color).toBe('#F0F0F0');
-      expect(flat.color).not.toBe('#1A1A1A');
-    });
   });
 
   describe('HistoryScreen', () => {

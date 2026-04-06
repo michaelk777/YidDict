@@ -116,7 +116,26 @@ describe('database', () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const sql: string = mockDb.execAsync.mock.calls[0][0];
-      expect(sql).toMatch(/CHECK\(query_script IN \('hebrew', 'latin', 'english'\)\)/);
+      // 'english' was removed — Finkel accepts all scripts in one field
+      expect(sql).toMatch(/CHECK\(query_script IN \('hebrew', 'latin'\)\)/);
+    });
+
+    it('cached_results table includes a query column', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const sql: string = mockDb.execAsync.mock.calls[0][0];
+      const cachedMatch = sql.match(/CREATE TABLE IF NOT EXISTS cached_results\s*\(([\s\S]*?)\);/);
+      expect(cachedMatch).not.toBeNull();
+      expect(cachedMatch![1]).toMatch(/query\s+TEXT/);
+    });
+
+    it('cached_results table includes an is_phrase column', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const sql: string = mockDb.execAsync.mock.calls[0][0];
+      const cachedMatch = sql.match(/CREATE TABLE IF NOT EXISTS cached_results\s*\(([\s\S]*?)\);/);
+      expect(cachedMatch).not.toBeNull();
+      expect(cachedMatch![1]).toMatch(/is_phrase\s+INTEGER/);
     });
 
     it('schema enforces source CHECK constraint for cached_results', async () => {
