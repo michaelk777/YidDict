@@ -17,6 +17,7 @@ const HEBREW_RE = /[\u0590-\u05FF\uFB1D-\uFB4F]/;
 export type QueryScript = 'hebrew' | 'latin';
 
 export function detectInputScript(text: string): QueryScript {
-  if (HEBREW_RE.test(text.trim())) return 'hebrew';
-  return 'latin';
+  const script: QueryScript = HEBREW_RE.test(text.trim()) ? 'hebrew' : 'latin';
+  console.log(`[YidDict] inputDetector: detected script "${script}"`);
+  return script;
 }

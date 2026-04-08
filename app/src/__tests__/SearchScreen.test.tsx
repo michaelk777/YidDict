@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { ThemeProvider } from '../context/ThemeContext';
+import { ThemeProvider, lightTheme, darkTheme } from '../context/ThemeContext';
 import SearchScreen from '../screens/SearchScreen';
 import { FinkelEntry } from '../services/finkelService';
 
@@ -61,7 +61,6 @@ const sampleEntries: FinkelEntry[] = [
     partOfSpeech: 'adjective',
     conjugationInfo: null,
     isPhrase: false,
-    rawHtml: '<li>sheyn</li>',
   },
   {
     yiddishRomanized: 'sheynkayt',
@@ -70,7 +69,6 @@ const sampleEntries: FinkelEntry[] = [
     partOfSpeech: 'noun',
     conjugationInfo: 'gender f',
     isPhrase: true,
-    rawHtml: '<li>sheynkayt</li>',
   },
 ];
 
@@ -274,7 +272,7 @@ describe('SearchScreen — theme', () => {
     renderScreen();
     const root = screen.getByTestId('search-root');
     const flat = Object.assign({}, ...(root.props.style ?? []));
-    expect(flat.backgroundColor).toBe('#FFFFFF');
+    expect(flat.backgroundColor).toBe(lightTheme.background);
   });
 
   it('applies dark theme background when scheme is dark', () => {
@@ -282,6 +280,51 @@ describe('SearchScreen — theme', () => {
     renderScreen();
     const root = screen.getByTestId('search-root');
     const flat = Object.assign({}, ...(root.props.style ?? []));
-    expect(flat.backgroundColor).toBe('#121212');
+    expect(flat.backgroundColor).toBe(darkTheme.background);
+  });
+});
+
+describe('SearchScreen — input handling', () => {
+  it('does nothing when search is submitted with empty input', () => {
+    renderScreen();
+    fireEvent.press(screen.getByTestId('search-button'));
+    expect(mockGetCached).not.toHaveBeenCalled();
+    expect(mockLookup).not.toHaveBeenCalled();
+  });
+
+  it('calls lookupFinkel with isHebrew=true for Hebrew input', async () => {
+    mockLookup.mockResolvedValue([]);
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'שיין');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(mockLookup).toHaveBeenCalledTimes(1));
+    expect(mockLookup).toHaveBeenCalledWith('שיין', true);
+  });
+
+  it('calls lookupFinkel with isHebrew=false for Latin input', async () => {
+    mockLookup.mockResolvedValue([]);
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(mockLookup).toHaveBeenCalledTimes(1));
+    expect(mockLookup).toHaveBeenCalledWith('sheyn', false);
+  });
+});
+
+describe('SearchScreen — error recovery', () => {
+  it('clears the error state when a new search is started', async () => {
+    mockLookup.mockRejectedValueOnce(new Error('Network Error'));
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(screen.getByTestId('error-message')).toBeTruthy());
+
+    mockLookup.mockResolvedValueOnce(sampleEntries);
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(screen.queryByTestId('error-message')).toBeNull());
   });
 });

@@ -12,7 +12,6 @@ export interface FinkelEntry {
   partOfSpeech: string | null;
   conjugationInfo: string | null;
   isPhrase: boolean;
-  rawHtml: string;
 }
 
 /**
@@ -34,22 +33,30 @@ export async function lookupFinkel(
   isHebrew = false
 ): Promise<FinkelEntry[]> {
   const word = isHebrew ? stripNekudes(query) : query;
+  console.log(`[YidDict] finkelService: lookupFinkel query="${word}" isHebrew=${isHebrew}`);
 
   // Stage 1: fragment match
+  console.log('[YidDict] finkelService: stage 1 — POST word=<query>');
   const stage1 = await postToFinkel({ word });
+  console.log(`[YidDict] finkelService: stage 1 returned ${stage1.length} result(s)`);
   if (stage1.length > 0) return stage1;
 
   // Stage 2: inflected-form → stem lookup
-  return postToFinkel({ base: word });
+  console.log('[YidDict] finkelService: stage 1 empty, falling back to stage 2 — POST base=<query>');
+  const stage2 = await postToFinkel({ base: word });
+  console.log(`[YidDict] finkelService: stage 2 returned ${stage2.length} result(s)`);
+  return stage2;
 }
 
 async function postToFinkel(
   params: Record<string, string>
 ): Promise<FinkelEntry[]> {
+  console.log(`[YidDict] finkelService: POST to Finkel params=${JSON.stringify(params)}`);
   const body = new URLSearchParams(params).toString();
   const response = await axios.post<string>(FINKEL_URL, body, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
+  console.log('[YidDict] finkelService: Finkel responded, parsing HTML');
   return parseFinkelHtml(response.data);
 }
 
@@ -74,6 +81,7 @@ export function parseFinkelHtml(html: string): FinkelEntry[] {
 
   const entries: FinkelEntry[] = [];
   collectEntries(directLiChildren(resultUl), false, entries);
+  console.log(`[YidDict] finkelService: parseFinkelHtml found ${entries.length} entr(ies)`);
   return entries;
 }
 
@@ -154,7 +162,6 @@ function collectEntries(
       partOfSpeech,
       conjugationInfo,
       isPhrase,
-      rawHtml: li.outerHTML,
     });
 
     // Some entries have their phrase sub-entries inside the SAME <li> (rare

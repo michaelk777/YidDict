@@ -10,7 +10,7 @@ export interface Theme {
   border: string;
 }
 
-const lightTheme: Theme = {
+export const lightTheme: Theme = {
   background: '#FFFFFF',
   surface: '#F5F5F5',
   text: '#1A1A1A',
@@ -19,7 +19,7 @@ const lightTheme: Theme = {
   border: '#E0E0E0',
 };
 
-const darkTheme: Theme = {
+export const darkTheme: Theme = {
   background: '#121212',
   surface: '#1E1E1E',
   text: '#F0F0F0',

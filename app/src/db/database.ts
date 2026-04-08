@@ -59,6 +59,8 @@ export async function initDatabase(): Promise<void> {
     ['default_source', 'finkel'],
     ['max_history', '10'],
     ['theme', 'system'],
+    ['cache_ttl_days', '90'],
+    ['max_cache_entries', '1000'],
   ];
 
   console.log('[YidDict] database: seeding default settings');

@@ -133,12 +133,7 @@ describe('parseFinkelHtml', () => {
       expect(sheyndl!.english).toBeNull();
     });
 
-    it('includes rawHtml for each entry', () => {
-      entries.forEach(e => {
-        expect(typeof e.rawHtml).toBe('string');
-        expect(e.rawHtml.length).toBeGreaterThan(0);
-      });
-    });
+
   });
 });
 
@@ -180,6 +175,13 @@ describe('lookupFinkel', () => {
     mockAxios.post.mockResolvedValueOnce({ data: SHEYN_HTML });
     await lookupFinkel('sheyn');
     expect(mockAxios.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not modify Latin input before POSTing', async () => {
+    mockAxios.post.mockResolvedValue({ data: EMPTY_HTML });
+    await lookupFinkel('sheyne', false);
+    const body: string = mockAxios.post.mock.calls[0][1];
+    expect(body).toContain('word=sheyne');
   });
 
   it('strips nekudes from Hebrew input before POSTing', async () => {

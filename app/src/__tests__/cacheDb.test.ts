@@ -27,7 +27,6 @@ const sampleEntry: FinkelEntry = {
   partOfSpeech: 'adjective',
   conjugationInfo: null,
   isPhrase: false,
-  rawHtml: '<li>sheyn</li>',
 };
 
 const sampleRow = {
@@ -39,7 +38,6 @@ const sampleRow = {
   part_of_speech: 'adjective',
   conjugation_info: null,
   source: 'finkel',
-  raw_html: '<li>sheyn</li>',
   fetched_at: 1000000,
   is_phrase: 0,
 };
@@ -73,7 +71,28 @@ describe('getCachedEntries', () => {
     expect(result![0].yiddishRomanized).toBe('sheyn');
     expect(result![0].yiddishHebrew).toBe('שיין');
     expect(result![0].english).toBe('pretty');
+    expect(result![0].partOfSpeech).toBe('adjective');
+    expect(result![0].conjugationInfo).toBeNull();
     expect(result![0].isPhrase).toBe(false);
+  });
+
+  it('maps conjugationInfo from the row', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([
+      { ...sampleRow, conjugation_info: 'gender f; plural in -n' },
+    ]);
+    const result = await getCachedEntries('sheyn', 'finkel');
+    expect(result![0].conjugationInfo).toBe('gender f; plural in -n');
+  });
+
+  it('returns multiple rows in id ASC order', async () => {
+    const rows = [
+      { ...sampleRow, id: 1, yiddish_romanized: 'sheyn' },
+      { ...sampleRow, id: 2, yiddish_romanized: 'sheynkayt' },
+      { ...sampleRow, id: 3, yiddish_romanized: 'sheyndl' },
+    ];
+    __mockDb.getAllAsync.mockResolvedValueOnce(rows);
+    const result = await getCachedEntries('sheyn', 'finkel');
+    expect(result!.map(e => e.yiddishRomanized)).toEqual(['sheyn', 'sheynkayt', 'sheyndl']);
   });
 
   it('maps is_phrase=1 to isPhrase=true', async () => {
@@ -82,10 +101,27 @@ describe('getCachedEntries', () => {
     expect(result![0].isPhrase).toBe(true);
   });
 
-  it('maps null raw_html to empty string', async () => {
-    __mockDb.getAllAsync.mockResolvedValueOnce([{ ...sampleRow, raw_html: null }]);
-    const result = await getCachedEntries('sheyn', 'finkel');
-    expect(result![0].rawHtml).toBe('');
+  it('passes a TTL cutoff as the third SQL parameter', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([]);
+    const before = Date.now();
+    await getCachedEntries('sheyn', 'finkel'); // default 90 days
+    const after = Date.now();
+    const [sql, params] = __mockDb.getAllAsync.mock.calls[0];
+    expect(sql).toMatch(/fetched_at > \?/i);
+    const cutoff = params[2] as number;
+    expect(cutoff).toBeGreaterThanOrEqual(before - 90 * 24 * 60 * 60 * 1000);
+    expect(cutoff).toBeLessThanOrEqual(after - 90 * 24 * 60 * 60 * 1000);
+  });
+
+  it('uses a custom TTL when provided', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([]);
+    const before = Date.now();
+    await getCachedEntries('sheyn', 'finkel', 30);
+    const after = Date.now();
+    const [, params] = __mockDb.getAllAsync.mock.calls[0];
+    const cutoff = params[2] as number;
+    expect(cutoff).toBeGreaterThanOrEqual(before - 30 * 24 * 60 * 60 * 1000);
+    expect(cutoff).toBeLessThanOrEqual(after - 30 * 24 * 60 * 60 * 1000);
   });
 });
 
@@ -120,6 +156,23 @@ describe('saveToCache', () => {
   it('does nothing when entries array is empty', async () => {
     await saveToCache('sheyn', [], 'finkel');
     expect(__mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('trims to max entries after saving', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 1005 });
+    await saveToCache('sheyn', [sampleEntry], 'finkel', 1000);
+    const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
+      .filter(([sql]) => (sql as string).includes('DELETE'));
+    expect(deleteCalls.length).toBe(1);
+    expect(deleteCalls[0][1]).toContain(5); // 1005 - 1000 = 5 excess rows
+  });
+
+  it('does not trim when under max entries', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 500 });
+    await saveToCache('sheyn', [sampleEntry], 'finkel', 1000);
+    const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
+      .filter(([sql]) => (sql as string).includes('DELETE'));
+    expect(deleteCalls.length).toBe(0);
   });
 });
 

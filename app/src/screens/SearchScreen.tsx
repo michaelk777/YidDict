@@ -36,9 +36,11 @@ export default function SearchScreen() {
     try {
       const script = detectInputScript(trimmed);
       const isHebrew = script === 'hebrew';
+      console.log(`[YidDict] SearchScreen: search initiated query="${trimmed}" script=${script}`);
 
       const cached = await getCachedEntries(trimmed, 'finkel');
       if (cached) {
+        console.log('[YidDict] SearchScreen: serving results from cache');
         setEntries(cached);
         setFromCache(true);
         await logSearchHistory(trimmed, script, 'finkel');
@@ -46,6 +48,7 @@ export default function SearchScreen() {
       }
 
       const results = await lookupFinkel(trimmed, isHebrew);
+      console.log(`[YidDict] SearchScreen: live lookup returned ${results.length} result(s)`);
       setEntries(results);
 
       if (results.length > 0) {
@@ -182,8 +185,9 @@ function EntryRow({ entry, theme }: EntryRowProps) {
     <View
       style={[
         s.entryCard,
-        { backgroundColor: theme.surface, borderColor: theme.border },
-        entry.isPhrase && s.phraseCard,
+        entry.isPhrase
+          ? [s.phraseCard, { borderLeftColor: theme.primary, backgroundColor: theme.background }]
+          : { borderColor: theme.border, backgroundColor: theme.surface },
       ]}
       testID="entry-card"
     >
@@ -317,7 +321,16 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       marginBottom: 8,
     },
     phraseCard: {
-      marginLeft: 16,
+      marginLeft: 20,
+      marginBottom: 4,
+      borderTopWidth: 0,
+      borderRightWidth: 0,
+      borderBottomWidth: 0,
+      borderLeftWidth: 3,
+      borderRadius: 0,
+      borderTopRightRadius: 4,
+      borderBottomRightRadius: 4,
+      paddingVertical: 8,
     },
     headwordRow: {
       flexDirection: 'row',

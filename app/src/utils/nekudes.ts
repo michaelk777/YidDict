@@ -6,5 +6,9 @@
 const NEKUDES_RE = /[\u05B0-\u05C7]/g;
 
 export function stripNekudes(text: string): string {
-  return text.replace(NEKUDES_RE, '');
+  const stripped = text.replace(NEKUDES_RE, '');
+  if (stripped !== text) {
+    console.log('[YidDict] nekudes: stripped diacriticals from input');
+  }
+  return stripped;
 }
