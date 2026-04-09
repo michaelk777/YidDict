@@ -1,11 +1,12 @@
+// SearchScreen is tested in SearchScreen.test.tsx
+// SettingsScreen is tested in SettingsScreen.test.tsx
+
 import React from 'react';
 import { View } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
-// SearchScreen is tested separately in SearchScreen.test.tsx
 import HistoryScreen from '../screens/HistoryScreen';
 import ExportScreen from '../screens/ExportScreen';
-import SettingsScreen from '../screens/SettingsScreen';
 
 const mockUseColorScheme = jest.fn(() => 'light' as 'light' | 'dark');
 jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
@@ -100,38 +101,4 @@ describe('Screen stubs', () => {
     });
   });
 
-  describe('SettingsScreen', () => {
-    it('renders the "Settings" label', () => {
-      wrap(<SettingsScreen />);
-      expect(screen.getByText('Settings')).toBeTruthy();
-    });
-
-    it('applies light theme background color', () => {
-      wrap(<SettingsScreen />);
-      const flat = flatStyle(getContainerView().props.style);
-      expect(flat.backgroundColor).toBe('#FFFFFF');
-    });
-
-    it('applies light theme text color to label', () => {
-      wrap(<SettingsScreen />);
-      const flat = flatStyle(screen.getByText('Settings').props.style);
-      expect(flat.color).toBe('#1A1A1A');
-    });
-
-    it('switches to dark theme background when scheme is dark', () => {
-      mockUseColorScheme.mockReturnValue('dark');
-      wrap(<SettingsScreen />);
-      const flat = flatStyle(getContainerView().props.style);
-      expect(flat.backgroundColor).toBe('#121212');
-      expect(flat.backgroundColor).not.toBe('#FFFFFF');
-    });
-
-    it('switches to dark theme text color when scheme is dark', () => {
-      mockUseColorScheme.mockReturnValue('dark');
-      wrap(<SettingsScreen />);
-      const flat = flatStyle(screen.getByText('Settings').props.style);
-      expect(flat.color).toBe('#F0F0F0');
-      expect(flat.color).not.toBe('#1A1A1A');
-    });
-  });
 });

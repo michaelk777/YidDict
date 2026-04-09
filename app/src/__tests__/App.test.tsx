@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActivityIndicator } from 'react-native';
 import { render, screen, waitFor } from '@testing-library/react-native';
+import { lightTheme } from '../context/ThemeContext';
 
 // Mock SafeAreaProvider — its native component renders no children in the test environment
 jest.mock('react-native-safe-area-context', () => {
@@ -59,11 +60,11 @@ describe('App', () => {
     expect(flat.backgroundColor).toBe('#FFFFFF');
   });
 
-  it('loading spinner color uses theme.primary (light = #2563EB)', () => {
+  it('loading spinner color uses theme.primary', () => {
     mockInitDatabase.mockReturnValue(new Promise(() => {}));
     render(<App />);
     const spinner = screen.UNSAFE_getAllByType(ActivityIndicator)[0];
-    expect(spinner.props.color).toBe('#2563EB');
+    expect(spinner.props.color).toBe(lightTheme.primary);
   });
 
   it('hides the spinner and shows the navigator after DB initializes', async () => {

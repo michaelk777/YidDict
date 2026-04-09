@@ -15,4 +15,4 @@ A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English loo
 
 ## Status
 
-In development — Phase 2 complete. Finkel integration, SQLite caching, search history, and full test suite in place. Phase 3 (Verterbukh integration) in progress.
+In development — Phase 3 partially complete. Verterbukh auth module, HTML parser, and Settings screen (login/logout) are in place. Verterbukh search integration with SearchScreen is next.

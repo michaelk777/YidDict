@@ -8,6 +8,9 @@ export interface Theme {
   textSecondary: string;
   primary: string;
   border: string;
+  sourceFinkel: string;
+  sourceVerterbukh: string;
+  sourceGoogle: string;
 }
 
 export const lightTheme: Theme = {
@@ -15,8 +18,11 @@ export const lightTheme: Theme = {
   surface: '#F5F5F5',
   text: '#1A1A1A',
   textSecondary: '#6B6B6B',
-  primary: '#2563EB',
+  primary: '#0D9488',
   border: '#E0E0E0',
+  sourceFinkel: '#2563EB',
+  sourceVerterbukh: '#DC2626',
+  sourceGoogle: '#16A34A',
 };
 
 export const darkTheme: Theme = {
@@ -24,8 +30,11 @@ export const darkTheme: Theme = {
   surface: '#1E1E1E',
   text: '#F0F0F0',
   textSecondary: '#A0A0A0',
-  primary: '#60A5FA',
+  primary: '#2DD4BF',
   border: '#2E2E2E',
+  sourceFinkel: '#60A5FA',
+  sourceVerterbukh: '#F87171',
+  sourceGoogle: '#4ADE80',
 };
 
 type ColorSchemeOverride = 'light' | 'dark' | 'system';

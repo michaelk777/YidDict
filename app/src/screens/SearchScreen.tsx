@@ -149,7 +149,7 @@ export default function SearchScreen() {
         <FlatList
           data={entries}
           keyExtractor={(_, i) => String(i)}
-          renderItem={({ item }) => <EntryRow entry={item} theme={theme} />}
+          renderItem={({ item }) => <EntryRow entry={item} theme={theme} sourceColor={theme.sourceFinkel} />}
           contentContainerStyle={s.listContent}
           ListEmptyComponent={
             hasSearched ? (
@@ -177,16 +177,17 @@ export default function SearchScreen() {
 interface EntryRowProps {
   entry: FinkelEntry;
   theme: ReturnType<typeof useTheme>['theme'];
+  sourceColor: string;
 }
 
-function EntryRow({ entry, theme }: EntryRowProps) {
+function EntryRow({ entry, theme, sourceColor }: EntryRowProps) {
   const s = makeStyles(theme);
   return (
     <View
       style={[
         s.entryCard,
         entry.isPhrase
-          ? [s.phraseCard, { borderLeftColor: theme.primary, backgroundColor: theme.background }]
+          ? [s.phraseCard, { borderLeftColor: sourceColor, backgroundColor: theme.background }]
           : { borderColor: theme.border, backgroundColor: theme.surface },
       ]}
       testID="entry-card"
@@ -265,7 +266,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignItems: 'center',
     },
     searchBtnText: {
-      color: '#FFFFFF',
+      color: theme.background,
       fontSize: 15,
       fontWeight: '600',
     },
@@ -281,7 +282,13 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       borderRadius: 4,
     },
     badgeFinkel: {
-      backgroundColor: '#2563EB',
+      backgroundColor: theme.sourceFinkel,
+    },
+    badgeVerterbukh: {
+      backgroundColor: theme.sourceVerterbukh,
+    },
+    badgeGoogle: {
+      backgroundColor: theme.sourceGoogle,
     },
     badgeCached: {
       backgroundColor: '#6B7280',

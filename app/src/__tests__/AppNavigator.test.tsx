@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { ThemeProvider } from '../context/ThemeContext';
+import { ThemeProvider, lightTheme } from '../context/ThemeContext';
 import AppNavigator from '../navigation/AppNavigator';
 
 function renderNavigator() {
@@ -35,7 +35,7 @@ describe('AppNavigator', () => {
     // The filled icon for Search should exist and carry the active (primary) color
     const activeIcon = screen.queryByTestId('icon-search');
     expect(activeIcon).toBeTruthy();
-    expect(activeIcon!.props.style.color).toBe('#2563EB'); // theme.primary
+    expect(activeIcon!.props.style.color).toBe(lightTheme.primary);
   });
 
   it('inactive tab icons use outline variant and theme.textSecondary color', () => {
@@ -46,9 +46,9 @@ describe('AppNavigator', () => {
     expect(historyIcon).toBeTruthy();
     expect(exportIcon).toBeTruthy();
     expect(settingsIcon).toBeTruthy();
-    expect(historyIcon!.props.style.color).toBe('#6B6B6B'); // theme.textSecondary
-    expect(exportIcon!.props.style.color).toBe('#6B6B6B');
-    expect(settingsIcon!.props.style.color).toBe('#6B6B6B');
+    expect(historyIcon!.props.style.color).toBe(lightTheme.textSecondary);
+    expect(exportIcon!.props.style.color).toBe(lightTheme.textSecondary);
+    expect(settingsIcon!.props.style.color).toBe(lightTheme.textSecondary);
   });
 
   it('pressing History tab makes its icon filled and primary-colored', () => {
@@ -58,12 +58,12 @@ describe('AppNavigator', () => {
     // After pressing, History's filled icon should have primary color
     const activeIcon = screen.queryByTestId('icon-time');
     expect(activeIcon).toBeTruthy();
-    expect(activeIcon!.props.style.color).toBe('#2563EB'); // theme.primary
+    expect(activeIcon!.props.style.color).toBe(lightTheme.primary);
 
     // Search's outline icon should now have secondary color
     const inactiveIcon = screen.queryByTestId('icon-search-outline');
     expect(inactiveIcon).toBeTruthy();
-    expect(inactiveIcon!.props.style.color).toBe('#6B6B6B'); // theme.textSecondary
+    expect(inactiveIcon!.props.style.color).toBe(lightTheme.textSecondary);
   });
 
   it('shows Search screen content by default, not History', () => {

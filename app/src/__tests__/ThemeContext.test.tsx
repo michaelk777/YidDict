@@ -121,7 +121,7 @@ describe('ThemeContext', () => {
     spy.mockRestore();
   });
 
-  it('light theme exposes all six color tokens with correct values', () => {
+  it('light theme exposes all color tokens with correct values', () => {
     function FullConsumer() {
       const { theme } = useTheme();
       return (
@@ -132,6 +132,9 @@ describe('ThemeContext', () => {
           <Text testID="t-textSecondary">{theme.textSecondary}</Text>
           <Text testID="t-primary">{theme.primary}</Text>
           <Text testID="t-border">{theme.border}</Text>
+          <Text testID="t-sourceFinkel">{theme.sourceFinkel}</Text>
+          <Text testID="t-sourceVerterbukh">{theme.sourceVerterbukh}</Text>
+          <Text testID="t-sourceGoogle">{theme.sourceGoogle}</Text>
         </>
       );
     }
@@ -140,11 +143,14 @@ describe('ThemeContext', () => {
     expect(screen.getByTestId('t-surface').props.children).toBe('#F5F5F5');
     expect(screen.getByTestId('t-text').props.children).toBe('#1A1A1A');
     expect(screen.getByTestId('t-textSecondary').props.children).toBe('#6B6B6B');
-    expect(screen.getByTestId('t-primary').props.children).toBe('#2563EB');
+    expect(screen.getByTestId('t-primary').props.children).toBe('#0D9488');
     expect(screen.getByTestId('t-border').props.children).toBe('#E0E0E0');
+    expect(screen.getByTestId('t-sourceFinkel').props.children).toBe('#2563EB');
+    expect(screen.getByTestId('t-sourceVerterbukh').props.children).toBe('#DC2626');
+    expect(screen.getByTestId('t-sourceGoogle').props.children).toBe('#16A34A');
   });
 
-  it('dark theme exposes all six color tokens with correct values', () => {
+  it('dark theme exposes all color tokens with correct values', () => {
     mockUseColorScheme.mockReturnValue('dark');
     function FullConsumer() {
       const { theme } = useTheme();
@@ -156,6 +162,9 @@ describe('ThemeContext', () => {
           <Text testID="t-textSecondary">{theme.textSecondary}</Text>
           <Text testID="t-primary">{theme.primary}</Text>
           <Text testID="t-border">{theme.border}</Text>
+          <Text testID="t-sourceFinkel">{theme.sourceFinkel}</Text>
+          <Text testID="t-sourceVerterbukh">{theme.sourceVerterbukh}</Text>
+          <Text testID="t-sourceGoogle">{theme.sourceGoogle}</Text>
         </>
       );
     }
@@ -164,7 +173,10 @@ describe('ThemeContext', () => {
     expect(screen.getByTestId('t-surface').props.children).toBe('#1E1E1E');
     expect(screen.getByTestId('t-text').props.children).toBe('#F0F0F0');
     expect(screen.getByTestId('t-textSecondary').props.children).toBe('#A0A0A0');
-    expect(screen.getByTestId('t-primary').props.children).toBe('#60A5FA');
+    expect(screen.getByTestId('t-primary').props.children).toBe('#2DD4BF');
     expect(screen.getByTestId('t-border').props.children).toBe('#2E2E2E');
+    expect(screen.getByTestId('t-sourceFinkel').props.children).toBe('#60A5FA');
+    expect(screen.getByTestId('t-sourceVerterbukh').props.children).toBe('#F87171');
+    expect(screen.getByTestId('t-sourceGoogle').props.children).toBe('#4ADE80');
   });
 });
