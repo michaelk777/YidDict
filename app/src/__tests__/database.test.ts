@@ -60,21 +60,39 @@ describe('database', () => {
       expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS user_settings/);
     });
 
-    it('seeds the three default settings', async () => {
+    it('seeds the default settings including source order and history', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const keys = mockDb.runAsync.mock.calls.map(([, params]: [string, string[]]) => params[0]);
-      expect(keys).toContain('default_source');
+      expect(keys).toContain('source_order_1');
+      expect(keys).toContain('source_order_2');
+      expect(keys).toContain('source_order_3');
       expect(keys).toContain('max_history');
       expect(keys).toContain('theme');
     });
 
-    it('seeds default_source as "finkel"', async () => {
+    it('seeds source_order_1 as "finkel"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'default_source');
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_1');
       expect(call).toBeDefined();
       expect(call[1][1]).toBe('finkel');
+    });
+
+    it('seeds source_order_2 as "verterbukh"', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_2');
+      expect(call).toBeDefined();
+      expect(call[1][1]).toBe('verterbukh');
+    });
+
+    it('seeds source_order_3 as "google_translate"', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_3');
+      expect(call).toBeDefined();
+      expect(call[1][1]).toBe('google_translate');
     });
 
     it('seeds max_history as "10"', async () => {

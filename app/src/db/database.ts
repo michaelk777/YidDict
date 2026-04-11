@@ -56,7 +56,9 @@ export async function initDatabase(): Promise<void> {
   console.log('[YidDict] database: tables created');
 
   const defaults: [string, string][] = [
-    ['default_source', 'finkel'],
+    ['source_order_1', 'finkel'],
+    ['source_order_2', 'verterbukh'],
+    ['source_order_3', 'google_translate'],
     ['max_history', '10'],
     ['theme', 'system'],
     ['cache_ttl_days', '90'],

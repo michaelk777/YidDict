@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Modal,
+  Pressable,
+  Alert,
   StyleSheet,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
@@ -15,6 +18,14 @@ import {
   deleteCredentials,
   login,
 } from '../services/verterbukh-auth';
+import {
+  getSourceOrder,
+  setSourceOrderSlot,
+  availableOptionsForSlot,
+  SOURCE_LABELS,
+  SourceSlot,
+  SlotIndex,
+} from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,17 +41,25 @@ export default function SettingsScreen() {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
+  // Verterbukh login state
   const [savedUsername, setSavedUsername] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginStatus, setLoginStatus] = useState<LoginStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Load saved credentials on mount to determine login state
+  // Source order state
+  const [sourceOrder, setSourceOrder] = useState<SourceSlot[]>(['finkel', 'verterbukh', 'google_translate']);
+  const [pickerSlot, setPickerSlot] = useState<SlotIndex | null>(null);
+
+  // Load both credential state and source preferences on mount
   useEffect(() => {
     getCredentials().then(creds => {
       if (creds) setSavedUsername(creds.username);
     });
+    getSourceOrder()
+      .then(order => setSourceOrder(order))
+      .catch(() => { /* DB not ready — keep defaults */ });
   }, []);
 
   const handleLogin = useCallback(async () => {
@@ -75,7 +94,22 @@ export default function SettingsScreen() {
     setStatusMessage(null);
   }, []);
 
+  const handlePickerSelect = useCallback(async (value: SourceSlot) => {
+    if (pickerSlot === null) return;
+    const updated = [...sourceOrder] as SourceSlot[];
+    updated[pickerSlot - 1] = value;
+    setSourceOrder(updated);
+    setPickerSlot(null);
+    try {
+      await setSourceOrderSlot(pickerSlot, value);
+    } catch {
+      // Revert local state if DB write fails
+      setSourceOrder(sourceOrder);
+    }
+  }, [pickerSlot, sourceOrder]);
+
   const isLoggedIn = savedUsername !== null;
+  const pickerOptions = pickerSlot !== null ? availableOptionsForSlot(sourceOrder, pickerSlot) : [];
 
   return (
     <ScrollView
@@ -83,6 +117,70 @@ export default function SettingsScreen() {
       contentContainerStyle={s.scrollContent}
       testID="settings-root"
     >
+      {/* Search Preferences — active */}
+      <SectionHeader label="Search Preferences" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {([1, 2, 3] as SlotIndex[]).map(slot => (
+          <SourceOrderRow
+            key={slot}
+            slot={slot}
+            value={sourceOrder[slot - 1] ?? 'none'}
+            theme={theme}
+            onPress={() => setPickerSlot(slot)}
+          />
+        ))}
+      </View>
+
+      {/* Option picker modal */}
+      <Modal
+        visible={pickerSlot !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerSlot(null)}
+        testID="source-picker-modal"
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setPickerSlot(null)}>
+          <Pressable style={[s.modalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[s.modalTitle, { color: theme.text }]}>
+              {pickerSlot !== null ? `Position ${pickerSlot}` : ''}
+            </Text>
+            {pickerOptions.map(option => {
+              const locked = option === 'verterbukh' && !isLoggedIn;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    s.modalOption,
+                    option === sourceOrder[(pickerSlot ?? 1) - 1] && { backgroundColor: theme.primary + '22' },
+                    locked && { opacity: 0.45 },
+                  ]}
+                  onPress={() => {
+                    if (locked) {
+                      Alert.alert(
+                        'Login Required',
+                        'You must be logged in to Verterbukh before adding it to your search order. Add your credentials in the Verterbukh Login section.',
+                      );
+                      return;
+                    }
+                    handlePickerSelect(option);
+                  }}
+                  testID={`picker-option-${option}`}
+                >
+                  <Text style={[s.modalOptionText, { color: theme.text }]}>
+                    {SOURCE_LABELS[option]}
+                  </Text>
+                  {option === 'verterbukh' ? (
+                    <Text style={[s.modalOptionSub, { color: theme.textSecondary }]}>
+                      {locked ? 'login required' : 'pay per result'}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Verterbukh Login — active */}
       <SectionHeader label="Verterbukh Login" theme={theme} />
       <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -145,9 +243,6 @@ export default function SettingsScreen() {
       </View>
 
       {/* Placeholder sections */}
-      <SectionHeader label="Search Preferences" theme={theme} />
-      <PlaceholderRow label="Search Preferences" theme={theme} />
-
       <SectionHeader label="Appearance" theme={theme} />
       <PlaceholderRow label="Appearance" theme={theme} />
 
@@ -161,7 +256,78 @@ export default function SettingsScreen() {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Source order row
+// ---------------------------------------------------------------------------
+
+interface SourceOrderRowProps {
+  slot: SlotIndex;
+  value: SourceSlot;
+  theme: ReturnType<typeof useTheme>['theme'];
+  onPress: () => void;
+}
+
+function SourceOrderRow({ slot, value, theme, onPress }: SourceOrderRowProps) {
+  return (
+    <TouchableOpacity
+      style={[sourceRowStyle, { borderBottomColor: theme.border }]}
+      onPress={onPress}
+      testID={`source-order-row-${slot}`}
+    >
+      <View style={sourceRowLabelWrap}>
+        <Text style={[sourceRowPosition, { color: theme.textSecondary }]}>{slot}</Text>
+        <View>
+          <Text style={[sourceRowName, { color: theme.text }]}>
+            {SOURCE_LABELS[value]}
+          </Text>
+          {value === 'verterbukh' ? (
+            <Text style={[sourceRowSub, { color: theme.textSecondary }]}>
+              pay per result
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <Text style={[sourceRowChevron, { color: theme.textSecondary }]}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+const sourceRowStyle: object = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingVertical: 12,
+  borderBottomWidth: StyleSheet.hairlineWidth,
+};
+
+const sourceRowLabelWrap: object = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 14,
+};
+
+const sourceRowPosition: object = {
+  fontSize: 13,
+  fontWeight: '600',
+  width: 16,
+  textAlign: 'center',
+};
+
+const sourceRowName: object = {
+  fontSize: 15,
+};
+
+const sourceRowSub: object = {
+  fontSize: 11,
+  marginTop: 1,
+};
+
+const sourceRowChevron: object = {
+  fontSize: 20,
+  lineHeight: 24,
+};
+
+// ---------------------------------------------------------------------------
+// Sub-components (shared)
 // ---------------------------------------------------------------------------
 
 function SectionHeader({ label, theme }: { label: string; theme: ReturnType<typeof useTheme>['theme'] }) {
@@ -214,8 +380,9 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       marginHorizontal: 16,
       borderRadius: 8,
       borderWidth: 1,
-      padding: 16,
-      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+      gap: 0,
     },
     input: {
       height: 44,
@@ -223,12 +390,14 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       borderRadius: 8,
       paddingHorizontal: 12,
       fontSize: 15,
+      marginVertical: 6,
     },
     button: {
       height: 44,
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
+      marginVertical: 6,
     },
     buttonText: {
       fontSize: 15,
@@ -244,12 +413,47 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     spinner: {
       height: 44,
+      marginVertical: 6,
     },
     statusLine: {
       fontSize: 15,
+      paddingVertical: 6,
     },
     statusMessage: {
       fontSize: 13,
+      paddingBottom: 6,
+    },
+    // Modal
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalCard: {
+      width: 280,
+      borderRadius: 12,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    modalTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      letterSpacing: 0.5,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 8,
+    },
+    modalOption: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    modalOptionText: {
+      fontSize: 16,
+    },
+    modalOptionSub: {
+      fontSize: 11,
+      marginTop: 2,
     },
   });
 }

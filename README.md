@@ -15,4 +15,4 @@ A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English loo
 
 ## Status
 
-In development — Phase 3 partially complete. Verterbukh auth module, HTML parser, and Settings screen (login/logout) are in place. Verterbukh search integration with SearchScreen is next.
+In development — Phase 3 partially complete. Verterbukh auth, parser, configurable source order, and SearchScreen integration are done. Google Translate integration and zero-token handling remain before Phase 4 (History, Export).

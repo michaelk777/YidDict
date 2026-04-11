@@ -6,14 +6,37 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Alert,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { lookupFinkel, FinkelEntry } from '../services/finkelService';
+import { lookupVerterbukh, VerterbukEntry, VerterbukChoice, VerterbukQuota } from '../services/verterbukh-service';
+import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache, logSearchHistory } from '../db/cacheDb';
 import { detectInputScript } from '../utils/inputDetector';
+import { getSourceOrder, DictSource, SOURCE_LABELS } from '../db/settingsDb';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function verterbukToFinkelEntry(v: VerterbukEntry): FinkelEntry {
+  return {
+    yiddishHebrew: v.yiddishHebrew,
+    yiddishRomanized: v.yiddishRomanized,
+    english: v.english,
+    partOfSpeech: v.partOfSpeech,
+    conjugationInfo: v.grammaticalInfo,
+    isPhrase: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function SearchScreen() {
   const { theme } = useTheme();
@@ -23,6 +46,23 @@ export default function SearchScreen() {
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [resultSource, setResultSource] = useState<DictSource | null>(null);
+  // Verterbukh "other options" — alternatives to the auto-selected result.
+  // These can coexist with entries (server returns both in the same response).
+  const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
+  const [verterbukQuota, setVerterbukQuota] = useState<VerterbukQuota | null>(null);
+
+  const applyQuota = useCallback((quota: VerterbukQuota | null) => {
+    if (!quota) return;
+    setVerterbukQuota(quota);
+    const remaining = quota.total - quota.used;
+    if (remaining / quota.total < 0.10) {
+      Alert.alert(
+        'Low Verterbukh Tokens',
+        `You have ${remaining} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'} remaining. Consider purchasing more tokens soon.`,
+      );
+    }
+  }, []);
 
   const handleSearch = useCallback(async () => {
     const trimmed = query.trim();
@@ -32,32 +72,96 @@ export default function SearchScreen() {
     setError(null);
     setFromCache(false);
     setHasSearched(true);
+    setEntries([]);
+    setResultSource(null);
+    setOtherOptions(null);
 
     try {
       const script = detectInputScript(trimmed);
       const isHebrew = script === 'hebrew';
       console.log(`[YidDict] SearchScreen: search initiated query="${trimmed}" script=${script}`);
 
-      const cached = await getCachedEntries(trimmed, 'finkel');
-      if (cached) {
-        console.log('[YidDict] SearchScreen: serving results from cache');
-        setEntries(cached);
-        setFromCache(true);
-        await logSearchHistory(trimmed, script, 'finkel');
-        return;
+      const order = await getSourceOrder();
+      const creds = await getCredentials();
+      const verterbukhhLoggedIn = creds !== null;
+
+      for (const slot of order) {
+        if (slot === 'none') continue;
+        if (slot === 'google_translate') continue; // not yet implemented
+        if (slot === 'verterbukh' && !verterbukhhLoggedIn) {
+          console.log('[YidDict] SearchScreen: skipping Verterbukh — not logged in');
+          continue;
+        }
+
+        const source = slot as DictSource;
+
+        // Cache check — return immediately if a fresh cached result exists
+        const cached = await getCachedEntries(trimmed, source);
+        if (cached && cached.length > 0) {
+          console.log(`[YidDict] SearchScreen: serving ${source} results from cache`);
+          setEntries(cached);
+          setResultSource(source);
+          setFromCache(true);
+          await logSearchHistory(trimmed, script, source);
+          return;
+        }
+
+        // Live lookup
+        if (source === 'finkel') {
+          const results = await lookupFinkel(trimmed, isHebrew);
+          console.log(`[YidDict] SearchScreen: Finkel returned ${results.length} result(s)`);
+          if (results.length > 0) {
+            setEntries(results);
+            setResultSource('finkel');
+            await saveToCache(trimmed, results, 'finkel');
+            await logSearchHistory(trimmed, script, 'finkel');
+            return;
+          }
+        } else if (source === 'verterbukh') {
+          const vResult = await lookupVerterbukh(trimmed);
+          console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies), choices=${vResult.choices?.length ?? 0}`);
+          if (vResult.entries.length > 0) {
+            const mapped = vResult.entries.map(verterbukToFinkelEntry);
+            setEntries(mapped);
+            setResultSource('verterbukh');
+            if (vResult.choices && vResult.choices.length > 0) {
+              setOtherOptions(vResult.choices);
+            }
+            applyQuota(vResult.quota);
+            await saveToCache(trimmed, mapped, 'verterbukh');
+            await logSearchHistory(trimmed, script, 'verterbukh');
+            return;
+          }
+        }
+        // No results from this source — fall through to the next slot
       }
 
-      const results = await lookupFinkel(trimmed, isHebrew);
-      console.log(`[YidDict] SearchScreen: live lookup returned ${results.length} result(s)`);
-      setEntries(results);
-
-      if (results.length > 0) {
-        await saveToCache(trimmed, results, 'finkel');
-      }
-      await logSearchHistory(trimmed, script, 'finkel');
+      console.log('[YidDict] SearchScreen: all sources exhausted — no results');
     } catch (err) {
       setError('Could not reach the dictionary. Check your connection and try again.');
       console.error('[YidDict] SearchScreen lookup error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [query]);
+
+  const handleOtherOption = useCallback(async (choice: VerterbukChoice) => {
+    const trimmed = query.trim();
+    setIsLoading(true);
+    setOtherOptions(null);
+    try {
+      console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
+      const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma);
+      const mapped = vResult.entries.map(verterbukToFinkelEntry);
+      setEntries(mapped);
+      setResultSource('verterbukh');
+      applyQuota(vResult.quota);
+      if (mapped.length > 0) {
+        await saveToCache(trimmed, mapped, 'verterbukh');
+      }
+      await logSearchHistory(trimmed, detectInputScript(trimmed), 'verterbukh');
+    } catch {
+      setError('Could not retrieve that entry. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -69,9 +173,16 @@ export default function SearchScreen() {
     setError(null);
     setFromCache(false);
     setHasSearched(false);
+    setResultSource(null);
+    setOtherOptions(null);
+    setVerterbukQuota(null);
   }, []);
 
   const s = makeStyles(theme);
+
+  const sourceBadgeStyle = resultSource === 'verterbukh'
+    ? s.badgeVerterbukh
+    : s.badgeFinkel;
 
   return (
     <KeyboardAvoidingView
@@ -79,94 +190,146 @@ export default function SearchScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={[s.root, { backgroundColor: theme.background }]} testID="search-root">
-      {/* Search bar */}
-      <View style={s.searchRow}>
-        <TextInput
-          style={s.input}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={handleSearch}
-          placeholder="Search Yiddish or English…"
-          placeholderTextColor={theme.textSecondary}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-          spellCheck={false}
-          testID="search-input"
-        />
-        {query.length > 0 ? (
-          <TouchableOpacity
-            style={s.clearBtn}
-            onPress={handleClear}
-            accessibilityLabel="Clear search"
-            testID="clear-button"
-          >
-            <Text style={[s.clearBtnText, { color: theme.textSecondary }]}>✕</Text>
-          </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity
-          style={[s.searchBtn, { backgroundColor: theme.primary }]}
-          onPress={handleSearch}
-          accessibilityLabel="Search"
-          testID="search-button"
-        >
-          <Text style={s.searchBtnText}>Search</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Status badges */}
-      {hasSearched && !isLoading ? (
-        <View style={s.badgeRow}>
-          <View style={[s.badge, s.badgeFinkel]}>
-            <Text style={s.badgeText}>Finkel</Text>
-          </View>
-          {fromCache ? (
-            <View style={[s.badge, s.badgeCached]}>
-              <Text style={s.badgeText}>cached</Text>
-            </View>
+        {/* Search bar */}
+        <View style={s.searchRow}>
+          <TextInput
+            style={s.input}
+            value={query}
+            onChangeText={setQuery}
+            onSubmitEditing={handleSearch}
+            placeholder="Search Yiddish or English…"
+            placeholderTextColor={theme.textSecondary}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
+            testID="search-input"
+          />
+          {query.length > 0 ? (
+            <TouchableOpacity
+              style={s.clearBtn}
+              onPress={handleClear}
+              accessibilityLabel="Clear search"
+              testID="clear-button"
+            >
+              <Text style={[s.clearBtnText, { color: theme.textSecondary }]}>✕</Text>
+            </TouchableOpacity>
           ) : null}
+          <TouchableOpacity
+            style={[s.searchBtn, { backgroundColor: theme.primary }]}
+            onPress={handleSearch}
+            accessibilityLabel="Search"
+            testID="search-button"
+          >
+            <Text style={s.searchBtnText}>Search</Text>
+          </TouchableOpacity>
         </View>
-      ) : null}
 
-      {/* Loading */}
-      {isLoading ? (
-        <ActivityIndicator
-          style={s.spinner}
-          color={theme.primary}
-          testID="loading-indicator"
-        />
-      ) : null}
-
-      {/* Error */}
-      {error ? (
-        <Text style={[s.errorText, { color: theme.text }]} testID="error-message">
-          {error}
-        </Text>
-      ) : null}
-
-      {/* Results */}
-      {!isLoading && !error ? (
-        <FlatList
-          data={entries}
-          keyExtractor={(_, i) => String(i)}
-          renderItem={({ item }) => <EntryRow entry={item} theme={theme} sourceColor={theme.sourceFinkel} />}
-          contentContainerStyle={s.listContent}
-          ListEmptyComponent={
-            hasSearched ? (
-              <View testID="no-results">
-                <Text style={[s.emptyText, { color: theme.textSecondary }]}>
-                  No results in Finkel's dictionary.
-                </Text>
-                <Text style={[s.emptyHint, { color: theme.textSecondary }]}>
-                  Verterbukh lookup coming in the next update.
-                </Text>
+        {/* Source + cache badges */}
+        {hasSearched && !isLoading && resultSource ? (
+          <View style={s.badgeRow}>
+            <View style={[s.badge, sourceBadgeStyle]}>
+              <Text style={s.badgeText}>{SOURCE_LABELS[resultSource]}</Text>
+            </View>
+            {resultSource === 'verterbukh' && verterbukQuota ? (
+              <View style={[s.badge, s.badgeQuota]} testID="quota-badge">
+                <Text style={s.badgeText}>{verterbukQuota.used}/{verterbukQuota.total}</Text>
               </View>
-            ) : null
-          }
-        />
-      ) : null}
+            ) : null}
+            {fromCache ? (
+              <View style={[s.badge, s.badgeCached]}>
+                <Text style={s.badgeText}>cached</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Loading */}
+        {isLoading ? (
+          <ActivityIndicator
+            style={s.spinner}
+            color={theme.primary}
+            testID="loading-indicator"
+          />
+        ) : null}
+
+        {/* Error */}
+        {error ? (
+          <Text style={[s.errorText, { color: theme.text }]} testID="error-message">
+            {error}
+          </Text>
+        ) : null}
+
+        {/* Results */}
+        {!isLoading && !error ? (
+          <FlatList
+            data={entries}
+            keyExtractor={(_, i) => String(i)}
+            renderItem={({ item }) => (
+              <EntryRow
+                entry={item}
+                theme={theme}
+                sourceColor={resultSource === 'verterbukh' ? theme.sourceVerterbukh : theme.sourceFinkel}
+              />
+            )}
+            contentContainerStyle={s.listContent}
+            ListEmptyComponent={
+              hasSearched ? (
+                <View testID="no-results">
+                  <Text style={[s.emptyText, { color: theme.textSecondary }]}>
+                    No results found. Try another word or stem.
+                  </Text>
+                </View>
+              ) : null
+            }
+            ListFooterComponent={
+              otherOptions && !isLoading ? (
+                <OtherOptionsView
+                  choices={otherOptions}
+                  onSelect={handleOtherOption}
+                  theme={theme}
+                  s={s}
+                />
+              ) : null
+            }
+          />
+        ) : null}
+
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Other options panel (Verterbukh disambiguation alternatives)
+// ---------------------------------------------------------------------------
+
+interface OtherOptionsViewProps {
+  choices: VerterbukChoice[];
+  onSelect: (choice: VerterbukChoice) => void;
+  theme: ReturnType<typeof useTheme>['theme'];
+  s: ReturnType<typeof makeStyles>;
+}
+
+function OtherOptionsView({ choices, onSelect, theme, s }: OtherOptionsViewProps) {
+  return (
+    <View testID="other-options-view" style={s.otherOptionsWrap}>
+      <Text style={[s.otherOptionsTitle, { color: theme.textSecondary }]}>
+        Other options
+      </Text>
+      {choices.map(choice => (
+        <TouchableOpacity
+          key={choice.hebrewLemma}
+          style={[s.otherOption, { borderColor: theme.border, backgroundColor: theme.surface }]}
+          onPress={() => onSelect(choice)}
+          testID={`other-option-${choice.hebrewLemma}`}
+        >
+          <Text style={[s.otherOptionLabel, { color: theme.text }]}>{choice.label}</Text>
+          <Text style={[s.otherOptionHebrew, { color: theme.textSecondary }]}>{choice.hebrewLemma}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
   );
 }
 
@@ -188,7 +351,7 @@ function EntryRow({ entry, theme, sourceColor }: EntryRowProps) {
         s.entryCard,
         entry.isPhrase
           ? [s.phraseCard, { borderLeftColor: sourceColor, backgroundColor: theme.background }]
-          : { borderColor: theme.border, backgroundColor: theme.surface },
+          : { borderColor: sourceColor, backgroundColor: sourceColor + '18' },
       ]}
       testID="entry-card"
     >
@@ -287,8 +450,8 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     badgeVerterbukh: {
       backgroundColor: theme.sourceVerterbukh,
     },
-    badgeGoogle: {
-      backgroundColor: theme.sourceGoogle,
+    badgeQuota: {
+      backgroundColor: '#6B7280',
     },
     badgeCached: {
       backgroundColor: '#6B7280',
@@ -316,11 +479,34 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       textAlign: 'center',
       fontSize: 15,
     },
-    emptyHint: {
-      marginTop: 8,
-      textAlign: 'center',
-      fontSize: 13,
+    // Other options (Verterbukh alternatives)
+    otherOptionsWrap: {
+      marginTop: 24,
+      paddingHorizontal: 0,
     },
+    otherOptionsTitle: {
+      fontSize: 11,
+      fontWeight: '600',
+      letterSpacing: 0.8,
+      marginBottom: 8,
+    },
+    otherOption: {
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    otherOptionLabel: {
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    otherOptionHebrew: {
+      fontSize: 15,
+    },
+    // Entry cards
     entryCard: {
       borderWidth: 1,
       borderRadius: 8,

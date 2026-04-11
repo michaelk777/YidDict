@@ -28,19 +28,22 @@ const mockEnsureSession = ensureSession as jest.Mock;
 const mockIsLoggedOut = isLoggedOut as jest.Mock;
 
 // ---------------------------------------------------------------------------
-// HTML fixtures (captured from live endpoint 2026-04-08)
+// HTML fixtures
 // ---------------------------------------------------------------------------
 
+// Variant A: .gram and .glossed on the same <span class="gram glossed"> element
 const NOUN_HTML = `
 <div id="definition">
   <div class="def">
     <div dir="rtl" lang="yi" class="rtl">
       <span class="lemma">פּאַסירל</span>
     </div>
+    <div lang="en" class="translit">PASIRL</div>
     <div dir="rtl" lang="yi" class="rtl">
       <span class="gram glossed">דאָס <span class="help">neuter noun</span></span>
       <span class="glossed">(עך <span class="help">plural</span>)</span>
     </div>
+    <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">N<span class="help">plural</span></span>)</div>
     <div lang="en" class="gloss">pass, permit</div>
   </div>
 </div>
@@ -52,15 +55,36 @@ const VERB_HTML = `
     <div dir="rtl" lang="yi" class="rtl">
       <span class="lemma">לױפֿ|ן</span>
     </div>
+    <div lang="en" class="translit">LOYFN</div>
     <div dir="rtl" lang="yi" class="rtl">
       <span class="gram glossed">װ <span class="help">verb</span></span>
       <span class="glossed">(איז געלאָפֿן <span class="help">past participle</span>)</span>
     </div>
+    <div lang="en" class="translit">v. (past part. ...)</div>
     <div lang="en" class="gloss">run; <span class="field">(water, fluids)</span> flow; <span class="field">(time)</span> fly</div>
     <div dir="rtl" lang="yi" class="rtl sep">
       <span>זאָל ער/זי לױפֿן און בעטן</span>
     </div>
     <div lang="en" class="gloss">may he/she make haste and intercede on our behalf in Heaven</div>
+  </div>
+</div>
+`;
+
+// Variant B: .gram wraps .glossed in separate nested elements.
+// Based on actual live HTML captured 2026-04-10 (word: צײַ'געניש).
+const NOUN_NESTED_HTML = `
+<div id="definition">
+  <div class="def">
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="lemma">צײַ'געניש</span>
+    </div>
+    <div lang="en" class="translit">TSAY'GENISh</div>
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="gram"><span class="glossed">דאָס<span class="help">neuter noun</span></span></span>
+      <span class="glossed">(ן<span class="help">plural</span>)</span>
+    </div>
+    <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">N<span class="help">plural</span></span>)</div>
+    <div lang="en" class="gloss">certificate, diploma</div>
   </div>
 </div>
 `;
@@ -106,21 +130,28 @@ beforeEach(() => {
 // Parser — noun
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — noun entry', () => {
+describe('parseVerterbukhhHtml — noun entry (variant A: .gram.glossed same element)', () => {
   it('extracts the headword with no stem separator', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
     expect(entries[0].yiddishHebrew).toBe('פּאַסירל');
   });
 
-  it('extracts the primary part of speech from .gram.glossed', () => {
+  it('extracts YIVO romanization from first .translit div', () => {
+    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
+    expect(entries[0].yiddishRomanized).toBe('PASIRL');
+  });
+
+  it('extracts the primary part of speech', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
     expect(entries[0].partOfSpeech).toBe('neuter noun');
   });
 
-  it('extracts secondary grammatical info (plural)', () => {
+  it('extracts secondary grammatical info (plural) and excludes .translit .glossed spans', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
     expect(entries[0].grammaticalInfo).toContain('plural');
     expect(entries[0].grammaticalInfo).toContain('עך');
+    // Should NOT contain romanized grammar labels from the second .translit div
+    expect(entries[0].grammaticalInfo).not.toContain('neut.');
   });
 
   it('extracts the English definition', () => {
@@ -144,11 +175,16 @@ describe('parseVerterbukhhHtml — noun entry', () => {
 // Parser — verb with example phrase
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — verb entry', () => {
+describe('parseVerterbukhhHtml — verb entry (variant A: .gram.glossed same element)', () => {
   it('strips the | stem separator from the headword', () => {
     const { entries } = parseVerterbukhhHtml(VERB_HTML);
     expect(entries[0].yiddishHebrew).toBe('לױפֿן');
     expect(entries[0].yiddishHebrew).not.toContain('|');
+  });
+
+  it('extracts YIVO romanization from first .translit div', () => {
+    const { entries } = parseVerterbukhhHtml(VERB_HTML);
+    expect(entries[0].yiddishRomanized).toBe('LOYFN');
   });
 
   it('extracts verb as primary part of speech', () => {
@@ -175,6 +211,46 @@ describe('parseVerterbukhhHtml — verb entry', () => {
   it('extracts the example translation from the second .gloss', () => {
     const { entries } = parseVerterbukhhHtml(VERB_HTML);
     expect(entries[0].exampleEnglish).toContain('make haste');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parser — noun entry variant B (nested .gram > .glossed, live HTML 2026-04-10)
+// ---------------------------------------------------------------------------
+
+describe('parseVerterbukhhHtml — noun entry (variant B: .gram wraps .glossed)', () => {
+  it('extracts the headword', () => {
+    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    expect(entries[0].yiddishHebrew).toBe("צײַ'געניש");
+  });
+
+  it('extracts YIVO romanization from first .translit div', () => {
+    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    expect(entries[0].yiddishRomanized).toBe("TSAY'GENISh");
+  });
+
+  it('extracts POS from nested .gram > .glossed structure', () => {
+    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    expect(entries[0].partOfSpeech).toBe('neuter noun');
+  });
+
+  it('extracts secondary grammatical info and excludes .translit .glossed spans', () => {
+    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    expect(entries[0].grammaticalInfo).toContain('plural');
+    expect(entries[0].grammaticalInfo).toContain('ן');
+    // Should NOT pick up romanized labels from the second .translit div
+    expect(entries[0].grammaticalInfo).not.toContain('neut.');
+  });
+
+  it('extracts the English definition', () => {
+    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    expect(entries[0].english).toBe('certificate, diploma');
+  });
+
+  it('returns null yiddishRomanized when no .translit div is present', () => {
+    const noTranslit = `<div class="def"><div class="rtl"><span class="lemma">טעסט</span></div><div class="gloss">test</div></div>`;
+    const { entries } = parseVerterbukhhHtml(noTranslit);
+    expect(entries[0].yiddishRomanized).toBeNull();
   });
 });
 
@@ -231,7 +307,7 @@ describe('lookupVerterbukh — happy path', () => {
     mockGet.mockResolvedValue({ data: NOUN_HTML });
     await lookupVerterbukh('pasirl');
     expect(mockGet).toHaveBeenCalledWith('https://verterbukh.org/vb', {
-      params: { yq: 'pasirl', dir: 'from', tsu: 'en' },
+      params: { yq: 'pasirl', dir: 'from', tsu: 'en', trns: 't' },
     });
   });
 
@@ -239,7 +315,7 @@ describe('lookupVerterbukh — happy path', () => {
     mockGet.mockResolvedValue({ data: NOUN_HTML });
     await lookupVerterbukh('loyf', 'לױפֿן');
     expect(mockGet).toHaveBeenCalledWith('https://verterbukh.org/vb', {
-      params: { yq: 'loyf', dir: 'from', tsu: 'en', ln: 'לױפֿן' },
+      params: { yq: 'loyf', dir: 'from', tsu: 'en', trns: 't', ln: 'לױפֿן' },
     });
   });
 

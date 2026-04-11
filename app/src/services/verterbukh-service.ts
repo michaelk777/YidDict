@@ -10,6 +10,7 @@ const BASE_URL = 'https://verterbukh.org/vb';
 
 export interface VerterbukEntry {
   yiddishHebrew: string | null;
+  yiddishRomanized: string | null;   // YIVO romanization — first .translit div; present when trns=t is sent
   partOfSpeech: string | null;       // e.g. "verb", "neuter noun"
   grammaticalInfo: string | null;    // e.g. "past participle: איז געלאָפֿן", "plural: עך"
   english: string | null;            // main definition (with domain labels preserved)
@@ -22,9 +23,15 @@ export interface VerterbukChoice {
   hebrewLemma: string;  // ln= parameter value, e.g. "לױפֿן"
 }
 
+export interface VerterbukQuota {
+  used: number;
+  total: number;
+}
+
 export interface VerterbukResult {
   entries: VerterbukEntry[];
   choices: VerterbukChoice[] | null; // null when no disambiguation needed
+  quota: VerterbukQuota | null;      // null when quota-box not present in response
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +73,7 @@ async function fetchSearch(query: string, ln?: string): Promise<string> {
     yq: query,
     dir: 'from',
     tsu: 'en',
+    trns: 't',  // request YIVO romanization alongside Hebrew headwords
   };
   if (ln) params.ln = ln;
 
@@ -86,8 +94,8 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
   const root = parse(html);
 
   const entries = root.querySelectorAll('.def').map(parseDef);
-  const choiceNodes = root.querySelectorAll('.choice_box .option:not(.extend)');
 
+  const choiceNodes = root.querySelectorAll('.choice_box .option:not(.extend)');
   const choices: VerterbukChoice[] | null =
     choiceNodes.length > 0
       ? choiceNodes.map(node => {
@@ -101,7 +109,28 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
         }).filter(c => c.label && c.hebrewLemma)
       : null;
 
-  return { entries, choices };
+  // Quota — parse "used X/Y" from .quota-box (present when logged in)
+  let quota: VerterbukQuota | null = null;
+  const quotaBox = root.querySelector('.quota-box');
+  if (quotaBox) {
+    const match = quotaBox.text.match(/used\s+(\d+)\/(\d+)/i);
+    if (match) {
+      quota = { used: parseInt(match[1], 10), total: parseInt(match[2], 10) };
+      console.log(`[YidDict] VerterbukService: quota ${quota.used}/${quota.total}`);
+    }
+  }
+
+  return { entries, choices, quota };
+}
+
+/** Walk up the ancestor chain checking for an element with a given class. */
+function isInsideClass(node: ReturnType<typeof parse>, className: string): boolean {
+  let parent = node.parentNode as ReturnType<typeof parse> | null;
+  while (parent) {
+    if (parent.classList?.contains(className)) return true;
+    parent = parent.parentNode as ReturnType<typeof parse> | null;
+  }
+  return false;
 }
 
 function parseDef(defNode: ReturnType<typeof parse>): VerterbukEntry {
@@ -109,26 +138,43 @@ function parseDef(defNode: ReturnType<typeof parse>): VerterbukEntry {
   const lemmaNode = defNode.querySelector('.lemma');
   const yiddishHebrew = lemmaNode ? lemmaNode.text.replace(/\|/g, '').trim() : null;
 
-  // Grammar block — collect all .glossed spans
+  // YIVO romanization — the first .translit div contains only the headword romanization.
+  // A second .translit div (if present) contains romanized grammar info; we skip it.
+  const translitNodes = defNode.querySelectorAll('.translit');
+  const yiddishRomanized = translitNodes.length > 0
+    ? translitNodes[0].text.trim() || null
+    : null;
+
+  // Grammar block — .glossed spans appear in two variants in the wild:
+  //   (A) <span class="gram glossed"> — both classes on the same element
+  //   (B) <span class="gram"><span class="glossed"> — .gram wraps .glossed
+  // .glossed also appears inside .translit divs (romanized grammar — skip those).
   const glossedNodes = defNode.querySelectorAll('.glossed');
   let partOfSpeech: string | null = null;
   const grammaticalParts: string[] = [];
 
   for (const glossed of glossedNodes) {
+    // Skip romanized grammar inside .translit divs
+    if (isInsideClass(glossed, 'translit')) continue;
+
     const helpNode = glossed.querySelector('.help');
     const englishLabel = helpNode?.text.trim() ?? null;
-    // Yiddish particle = text content of .glossed minus the .help text
-    const yiddishParticle = helpNode
-      ? glossed.text.replace(helpNode.text, '').trim()
-      : glossed.text.trim();
-
     if (!englishLabel) continue;
 
-    // First .glossed that has .gram on the same element is the primary POS
-    if (glossed.classList.contains('gram') && !partOfSpeech) {
+    // Strip the English label text and surrounding parentheses to get the Yiddish particle
+    const yiddishParticle = helpNode
+      ? glossed.text.replace(helpNode.text, '').replace(/^[\s()]+|[\s()]+$/g, '')
+      : glossed.text.replace(/^[\s()]+|[\s()]+$/g, '');
+
+    // Primary POS: variant A (.gram on same element) or variant B (.gram is immediate parent)
+    const isPrimary =
+      glossed.classList.contains('gram') ||
+      (glossed.parentNode as ReturnType<typeof parse> | null)?.classList?.contains('gram') === true;
+
+    if (isPrimary && !partOfSpeech) {
       partOfSpeech = englishLabel;
-    } else {
-      // Secondary grammar: "past participle: איז געלאָפֿן", "plural: עך"
+    } else if (!isPrimary && !isInsideClass(glossed, 'gram')) {
+      // Secondary grammar: "plural: עך", "past participle: איז געלאָפֿן", etc.
       const part = yiddishParticle
         ? `${englishLabel}: ${yiddishParticle}`
         : englishLabel;
@@ -164,5 +210,5 @@ function parseDef(defNode: ReturnType<typeof parse>): VerterbukEntry {
     }
   }
 
-  return { yiddishHebrew, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish };
+  return { yiddishHebrew, yiddishRomanized, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish };
 }
