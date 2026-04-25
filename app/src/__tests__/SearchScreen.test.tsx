@@ -459,13 +459,12 @@ describe('SearchScreen — Verterbukh quota badge', () => {
     expect(screen.queryByTestId('quota-badge')).toBeNull();
   });
 
-  it('fires Alert when remaining tokens are below 10%', async () => {
+  it('fires Alert when used tokens exceed 90%', async () => {
     const alertSpy = jest.spyOn(require('react-native'), 'Alert', 'get').mockReturnValue({ alert: jest.fn() });
     const mockAlert = jest.fn();
     jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
 
-    // 9 used out of 100 → 91 remaining → above threshold — not triggered
-    // 92 used out of 100 → 8 remaining → 8% < 10% → triggers
+    // 92 used out of 100 → 92% used > 90% threshold → triggers
     mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 92, total: 100 } });
 
     renderScreen();
@@ -475,17 +474,17 @@ describe('SearchScreen — Verterbukh quota badge', () => {
     await waitFor(() => screen.getByTestId('quota-badge'));
     expect(mockAlert).toHaveBeenCalledWith(
       'Low Verterbukh Tokens',
-      expect.stringContaining('8'),
+      expect.stringContaining('92'),
     );
 
     alertSpy.mockRestore();
   });
 
-  it('does NOT fire low-token Alert when remaining tokens are above 10%', async () => {
+  it('does NOT fire low-token Alert when used tokens are below 90%', async () => {
     const mockAlert = jest.fn();
     jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
 
-    // 50 used out of 100 → 50% remaining → no alert
+    // 50 used out of 100 → 50% used → no alert
     mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 50, total: 100 } });
 
     renderScreen();

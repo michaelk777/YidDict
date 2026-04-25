@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -52,15 +52,40 @@ export default function SearchScreen() {
   const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
   const [verterbukQuota, setVerterbukQuota] = useState<VerterbukQuota | null>(null);
 
-  const applyQuota = useCallback((quota: VerterbukQuota | null) => {
+  // Session-scoped exhaustion tracking. A useRef so updates don't trigger re-renders.
+  const verterbukExhausted = useRef(false);
+  const searchesSinceExhaustion = useRef(0);
+  const VERTERBUKH_RECHECK_AFTER = 5; // try Verterbukh again after this many skipped searches
+
+  /**
+   * Update quota state and manage exhaustion alerts.
+   * - used === total: set exhausted flag; alert once (first detection only).
+   * - used < total after exhaustion: clear flag (tokens available again).
+   * - used / total > 90%: low-token warning.
+   */
+  const processQuota = useCallback((quota: VerterbukQuota | null) => {
     if (!quota) return;
     setVerterbukQuota(quota);
-    const remaining = quota.total - quota.used;
-    if (remaining / quota.total < 0.10) {
-      Alert.alert(
-        'Low Verterbukh Tokens',
-        `You have ${remaining} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'} remaining. Consider purchasing more tokens soon.`,
-      );
+    if (quota.used === quota.total) {
+      if (!verterbukExhausted.current) {
+        Alert.alert(
+          'No Verterbukh Tokens',
+          'You have used all your Verterbukh lookups. Searches will use the next available source based on your settings until your tokens are replenished.',
+        );
+      }
+      verterbukExhausted.current = true;
+      searchesSinceExhaustion.current = 0;
+    } else {
+      if (verterbukExhausted.current) {
+        verterbukExhausted.current = false;
+        console.log('[YidDict] SearchScreen: Verterbukh tokens available again — resuming normally');
+      }
+      if (quota.used / quota.total > 0.90) {
+        Alert.alert(
+          'Low Verterbukh Tokens',
+          `You have used ${quota.used} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'}. Consider purchasing more tokens soon.`,
+        );
+      }
     }
   }, []);
 
@@ -127,7 +152,7 @@ export default function SearchScreen() {
             if (vResult.choices && vResult.choices.length > 0) {
               setOtherOptions(vResult.choices);
             }
-            applyQuota(vResult.quota);
+            processQuota(vResult.quota);
             await saveToCache(trimmed, mapped, 'verterbukh');
             await logSearchHistory(trimmed, script, 'verterbukh');
             return;
@@ -155,7 +180,7 @@ export default function SearchScreen() {
       const mapped = vResult.entries.map(verterbukToFinkelEntry);
       setEntries(mapped);
       setResultSource('verterbukh');
-      applyQuota(vResult.quota);
+      processQuota(vResult.quota);
       if (mapped.length > 0) {
         await saveToCache(trimmed, mapped, 'verterbukh');
       }
