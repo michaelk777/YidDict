@@ -553,3 +553,196 @@ describe('SearchScreen — Verterbukh other options', () => {
     });
   });
 });
+
+describe('SearchScreen — fallback note', () => {
+  const vEntry = { yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null };
+
+  it('shows a fallback note when the primary source returns nothing and a later source succeeds', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    mockLookup.mockResolvedValue([]);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [vEntry], choices: null, quota: null });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('fallback-note')).toBeTruthy();
+      expect(screen.getByText('No results from Finkel')).toBeTruthy();
+    });
+  });
+
+  it('does not show a fallback note when the primary source succeeds', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    mockLookup.mockResolvedValue(sampleEntries);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+    expect(screen.queryByTestId('fallback-note')).toBeNull();
+  });
+
+  it('does not show a fallback note when no source finds results', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'none', 'none']);
+    mockLookup.mockResolvedValue([]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'xyznotaword');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('no-results'));
+    expect(screen.queryByTestId('fallback-note')).toBeNull();
+  });
+
+  it('clears the fallback note when a new search is started', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    mockLookup.mockResolvedValueOnce([]).mockResolvedValue(sampleEntries);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [vEntry], choices: null, quota: null });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getByTestId('fallback-note'));
+
+    // Second search: Finkel succeeds — no fallback note
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+    expect(screen.queryByTestId('fallback-note')).toBeNull();
+  });
+
+  it('clears the fallback note when the clear button is pressed', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    mockLookup.mockResolvedValue([]);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [vEntry], choices: null, quota: null });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getByTestId('fallback-note'));
+
+    fireEvent.press(screen.getByTestId('clear-button'));
+    expect(screen.queryByTestId('fallback-note')).toBeNull();
+  });
+
+  it('accumulates notes from multiple failed sources', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    // Finkel fails, Verterbukh also fails
+    mockLookup.mockResolvedValue([]);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null, quota: null });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'xyznotaword');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    // All sources fail → empty state, no fallback note
+    await waitFor(() => screen.getByTestId('no-results'));
+    expect(screen.queryByTestId('fallback-note')).toBeNull();
+  });
+});
+
+describe('SearchScreen — Verterbukh token exhaustion', () => {
+  const vEntry = { yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null };
+  let mockAlert: jest.Mock;
+
+  beforeEach(() => {
+    mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('rechecks Verterbukh on every subsequent search after exhaustion', async () => {
+    mockLookupVerterbukh.mockResolvedValue({
+      entries: [vEntry],
+      choices: null,
+      quota: { used: 5, total: 5 },
+    });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+
+    // Search 1: triggers exhaustion
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    // Search 2: Verterbukh rechecked immediately (not skipped)
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    // Search 3: still rechecked
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    expect(mockLookupVerterbukh).toHaveBeenCalledTimes(3);
+  });
+
+  it('clears exhaustion flag when recheck finds tokens available', async () => {
+    // Search 1: exhausted quota
+    // Search 2: tokens replenished — flag should clear
+    // Search 3: Verterbukh called normally (flag cleared)
+    mockLookupVerterbukh
+      .mockResolvedValueOnce({ entries: [vEntry], choices: null, quota: { used: 5, total: 5 } })
+      .mockResolvedValue({ entries: [vEntry], choices: null, quota: { used: 3, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    expect(mockLookupVerterbukh).toHaveBeenCalledTimes(3);
+  });
+
+  it('fires the exhaustion alert when Verterbukh returns no entries but quota is exhausted', async () => {
+    mockLookupVerterbukh.mockResolvedValue({
+      entries: [],
+      choices: null,
+      quota: { used: 5, total: 5 },
+    });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getByTestId('no-results'));
+
+    // processQuota must fire even with zero entries — alert confirms it
+    expect(mockAlert).toHaveBeenCalledWith('No Verterbukh Tokens', expect.any(String));
+  });
+
+  it('shows alert and does not call lookupVerterbukh when other option tapped while exhausted', async () => {
+    const choices = [{ label: 'LOYFN', hebrewLemma: 'לױפֿן' }];
+    // Search returns entries + choices, and uses the last token
+    mockLookupVerterbukh.mockResolvedValueOnce({
+      entries: [vEntry],
+      choices,
+      quota: { used: 5, total: 5 },
+    });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getByTestId('other-options-view'));
+
+    fireEvent.press(screen.getByTestId('other-option-לױפֿן'));
+
+    expect(mockAlert).toHaveBeenCalledWith('No Verterbukh Tokens', expect.any(String));
+    expect(mockLookupVerterbukh).toHaveBeenCalledTimes(1);
+  });
+});

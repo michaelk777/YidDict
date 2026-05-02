@@ -51,11 +51,12 @@ export default function SearchScreen() {
   // These can coexist with entries (server returns both in the same response).
   const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
   const [verterbukQuota, setVerterbukQuota] = useState<VerterbukQuota | null>(null);
+  const [fallbackNote, setFallbackNote] = useState<string | null>(null);
 
   // Session-scoped exhaustion tracking. A useRef so updates don't trigger re-renders.
   const verterbukExhausted = useRef(false);
   const searchesSinceExhaustion = useRef(0);
-  const VERTERBUKH_RECHECK_AFTER = 5; // try Verterbukh again after this many skipped searches
+  const VERTERBUKH_RECHECK_AFTER = 1; // recheck Verterbukh on every search after exhaustion
 
   /**
    * Update quota state and manage exhaustion alerts.
@@ -100,6 +101,7 @@ export default function SearchScreen() {
     setEntries([]);
     setResultSource(null);
     setOtherOptions(null);
+    setFallbackNote(null);
 
     try {
       const script = detectInputScript(trimmed);
@@ -109,6 +111,7 @@ export default function SearchScreen() {
       const order = await getSourceOrder();
       const creds = await getCredentials();
       const verterbukhhLoggedIn = creds !== null;
+      const notes: string[] = [];
 
       for (const slot of order) {
         if (slot === 'none') continue;
@@ -116,6 +119,11 @@ export default function SearchScreen() {
         if (slot === 'verterbukh' && !verterbukhhLoggedIn) {
           console.log('[YidDict] SearchScreen: skipping Verterbukh — not logged in');
           continue;
+        }
+
+        if (slot === 'verterbukh' && verterbukExhausted.current) {
+          searchesSinceExhaustion.current = 0;
+          console.log('[YidDict] SearchScreen: rechecking Verterbukh after exhaustion');
         }
 
         const source = slot as DictSource;
@@ -127,6 +135,7 @@ export default function SearchScreen() {
           setEntries(cached);
           setResultSource(source);
           setFromCache(true);
+          if (notes.length > 0) setFallbackNote(notes.join(' · '));
           await logSearchHistory(trimmed, script, source);
           return;
         }
@@ -138,13 +147,16 @@ export default function SearchScreen() {
           if (results.length > 0) {
             setEntries(results);
             setResultSource('finkel');
+            if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, results, 'finkel');
             await logSearchHistory(trimmed, script, 'finkel');
             return;
           }
+          notes.push(`No results from ${SOURCE_LABELS.finkel}`);
         } else if (source === 'verterbukh') {
           const vResult = await lookupVerterbukh(trimmed);
           console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies), choices=${vResult.choices?.length ?? 0}`);
+          processQuota(vResult.quota);
           if (vResult.entries.length > 0) {
             const mapped = vResult.entries.map(verterbukToFinkelEntry);
             setEntries(mapped);
@@ -152,11 +164,12 @@ export default function SearchScreen() {
             if (vResult.choices && vResult.choices.length > 0) {
               setOtherOptions(vResult.choices);
             }
-            processQuota(vResult.quota);
+            if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, mapped, 'verterbukh');
             await logSearchHistory(trimmed, script, 'verterbukh');
             return;
           }
+          notes.push(`No results from ${SOURCE_LABELS.verterbukh}`);
         }
         // No results from this source — fall through to the next slot
       }
@@ -168,10 +181,19 @@ export default function SearchScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [query]);
+  }, [query, processQuota]);
 
   const handleOtherOption = useCallback(async (choice: VerterbukChoice) => {
     const trimmed = query.trim();
+
+    if (verterbukExhausted.current) {
+      Alert.alert(
+        'No Verterbukh Tokens',
+        'You have used all your Verterbukh lookups. Additional options are not available until your tokens are replenished.',
+      );
+      return;
+    }
+
     setIsLoading(true);
     setOtherOptions(null);
     try {
@@ -201,6 +223,7 @@ export default function SearchScreen() {
     setResultSource(null);
     setOtherOptions(null);
     setVerterbukQuota(null);
+    setFallbackNote(null);
   }, []);
 
   const s = makeStyles(theme);
@@ -268,6 +291,13 @@ export default function SearchScreen() {
               </View>
             ) : null}
           </View>
+        ) : null}
+
+        {/* Fallback note — shown when results come from a non-primary source */}
+        {fallbackNote && !isLoading ? (
+          <Text style={[s.fallbackNote, { color: theme.textSecondary }]} testID="fallback-note">
+            {fallbackNote}
+          </Text>
         ) : null}
 
         {/* Loading */}
@@ -485,6 +515,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       color: '#FFFFFF',
       fontSize: 11,
       fontWeight: '600',
+    },
+    fallbackNote: {
+      fontSize: 12,
+      fontStyle: 'italic',
+      paddingHorizontal: 12,
+      paddingBottom: 6,
     },
     spinner: {
       marginTop: 32,
