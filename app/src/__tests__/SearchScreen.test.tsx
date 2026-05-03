@@ -12,7 +12,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ThemeProvider, lightTheme, darkTheme } from '../context/ThemeContext';
 import SearchScreen from '../screens/SearchScreen';
-import { FinkelEntry } from '../services/finkelService';
+import { DictEntry } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -29,6 +29,10 @@ jest.mock('../services/finkelService', () => ({
 
 jest.mock('../services/verterbukh-service', () => ({
   lookupVerterbukh: jest.fn(),
+}));
+
+jest.mock('../services/google-translate-service', () => ({
+  lookupGoogleTranslate: jest.fn(),
 }));
 
 jest.mock('../services/verterbukh-auth', () => ({
@@ -48,12 +52,14 @@ jest.mock('../db/settingsDb', () => ({
 
 import { lookupFinkel } from '../services/finkelService';
 import { lookupVerterbukh } from '../services/verterbukh-service';
+import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache, logSearchHistory } from '../db/cacheDb';
 import { getSourceOrder } from '../db/settingsDb';
 
 const mockLookup = lookupFinkel as jest.Mock;
 const mockLookupVerterbukh = lookupVerterbukh as jest.Mock;
+const mockLookupGoogleTranslate = lookupGoogleTranslate as jest.Mock;
 const mockGetCredentials = getCredentials as jest.Mock;
 const mockGetCached = getCachedEntries as jest.Mock;
 const mockSaveCache = saveToCache as jest.Mock;
@@ -72,22 +78,26 @@ function renderScreen() {
   );
 }
 
-const sampleEntries: FinkelEntry[] = [
+const sampleEntries: DictEntry[] = [
   {
     yiddishRomanized: 'sheyn',
     yiddishHebrew: 'שיין',
     english: 'pretty',
     partOfSpeech: 'adjective',
-    conjugationInfo: null,
+    grammaticalInfo: null,
     isPhrase: false,
+    exampleYiddish: null,
+    exampleEnglish: null,
   },
   {
     yiddishRomanized: 'sheynkayt',
     yiddishHebrew: null,
     english: 'beauty',
     partOfSpeech: 'noun',
-    conjugationInfo: 'gender f',
+    grammaticalInfo: 'gender f',
     isPhrase: true,
+    exampleYiddish: null,
+    exampleEnglish: null,
   },
 ];
 
@@ -104,6 +114,7 @@ beforeEach(() => {
   mockGetCached.mockResolvedValue(null);
   mockLookup.mockResolvedValue([]);
   mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null });
+  mockLookupGoogleTranslate.mockResolvedValue([]);
   mockSaveCache.mockResolvedValue(undefined);
   mockLogHistory.mockResolvedValue(undefined);
 });
@@ -379,7 +390,7 @@ describe('SearchScreen — source order', () => {
   });
 
   it('falls through to Verterbukh when Finkel returns nothing and user is logged in', async () => {
-    const verterbukSample = { entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null }], choices: null };
+    const verterbukSample = { entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValue([]);            // Finkel returns nothing
@@ -396,7 +407,7 @@ describe('SearchScreen — source order', () => {
   });
 
   it('shows Verterbukh badge when Verterbukh is the result source', async () => {
-    const verterbukSample = { entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null }], choices: null };
+    const verterbukSample = { entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookupVerterbukh.mockResolvedValue(verterbukSample);
@@ -413,7 +424,7 @@ describe('SearchScreen — source order', () => {
 
 describe('SearchScreen — Verterbukh quota badge', () => {
   const sampleVerterbukEntry = {
-    entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null }],
+    entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }],
     choices: null,
   };
 
@@ -501,7 +512,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     { label: 'LOYFN', hebrewLemma: 'לױפֿן' },
     { label: 'LOYFER', hebrewLemma: 'לױפֿער' },
   ];
-  const sampleVerterbukEntry = { entries: [{ yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null }], choices: sampleChoices };
+  const sampleVerterbukEntry = { entries: [{ yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: sampleChoices };
 
   beforeEach(() => {
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
@@ -537,7 +548,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   it('fetches the selected other option and replaces results', async () => {
     mockLookupVerterbukh
       .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
-      .mockResolvedValueOnce({ entries: [{ yiddishHebrew: 'לױפֿער', yiddishRomanized: 'loyfer', english: 'runner', partOfSpeech: 'noun', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null }], choices: null }); // choice lookup
+      .mockResolvedValueOnce({ entries: [{ yiddishHebrew: 'לױפֿער', yiddishRomanized: 'loyfer', english: 'runner', partOfSpeech: 'noun', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null }); // choice lookup
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
@@ -555,7 +566,7 @@ describe('SearchScreen — Verterbukh other options', () => {
 });
 
 describe('SearchScreen — fallback note', () => {
-  const vEntry = { yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null };
+  const vEntry = { yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
 
   it('shows a fallback note when the primary source returns nothing and a later source succeeds', async () => {
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
@@ -648,7 +659,7 @@ describe('SearchScreen — fallback note', () => {
 });
 
 describe('SearchScreen — Verterbukh token exhaustion', () => {
-  const vEntry = { yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null };
+  const vEntry = { yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
   let mockAlert: jest.Mock;
 
   beforeEach(() => {
@@ -744,5 +755,107 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
 
     expect(mockAlert).toHaveBeenCalledWith('No Verterbukh Tokens', expect.any(String));
     expect(mockLookupVerterbukh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SearchScreen — Google Translate source', () => {
+  const gtEntry = {
+    yiddishHebrew: 'שיין',
+    yiddishRomanized: null,
+    english: 'pretty',
+    partOfSpeech: null,
+    grammaticalInfo: null,
+    isPhrase: false as const,
+  };
+
+  beforeEach(() => {
+    mockGetSourceOrder.mockResolvedValue(['google_translate', 'none', 'none']);
+    mockGetCredentials.mockResolvedValue(null);
+  });
+
+  it('calls lookupGoogleTranslate when it is in the source order', async () => {
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(mockLookupGoogleTranslate).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows the Google Translate badge when it is the result source', async () => {
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Google Translate')).toBeTruthy();
+    });
+  });
+
+  it('renders the entry card from Google Translate', async () => {
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('entry-card').length).toBe(1);
+      expect(screen.getByText('pretty')).toBeTruthy();
+    });
+  });
+
+  it('falls through to Google Translate when Finkel returns nothing', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'google_translate', 'none']);
+    mockLookup.mockResolvedValue([]);
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Google Translate')).toBeTruthy();
+      expect(screen.getByTestId('fallback-note')).toBeTruthy();
+      expect(screen.getByText('No results from Finkel')).toBeTruthy();
+    });
+  });
+
+  it('saves Google Translate results to cache', async () => {
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(mockSaveCache).toHaveBeenCalledTimes(1));
+    expect(mockSaveCache).toHaveBeenCalledWith('pretty', [gtEntry], 'google_translate');
+  });
+
+  it('logs Google Translate searches to history', async () => {
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(mockLogHistory).toHaveBeenCalledTimes(1));
+    expect(mockLogHistory).toHaveBeenCalledWith('pretty', expect.any(String), 'google_translate');
+  });
+
+  it('shows no-results when Google Translate also returns nothing', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'google_translate', 'none']);
+    mockLookup.mockResolvedValue([]);
+    mockLookupGoogleTranslate.mockResolvedValue([]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'xyznotaword');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => expect(screen.getByTestId('no-results')).toBeTruthy());
+    expect(mockSaveCache).not.toHaveBeenCalled();
   });
 });

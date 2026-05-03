@@ -1,5 +1,5 @@
 import { getDatabase } from './database';
-import { FinkelEntry } from '../services/finkelService';
+import { DictEntry } from '../types';
 import { QueryScript } from '../utils/inputDetector';
 
 type DictSource = 'finkel' | 'verterbukh' | 'google_translate';
@@ -32,7 +32,7 @@ export interface HistoryEntry {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns cached FinkelEntry rows for (query, source), or null if not cached
+ * Returns cached DictEntry rows for (query, source), or null if not cached
  * or if the cached result is older than cacheTtlDays (default 90).
  * Results are ordered by insertion (id ASC) to preserve the original ranking.
  */
@@ -40,7 +40,7 @@ export async function getCachedEntries(
   query: string,
   source: DictSource,
   cacheTtlDays = 90
-): Promise<FinkelEntry[] | null> {
+): Promise<DictEntry[] | null> {
   console.log(`[YidDict] cacheDb: getCachedEntries query="${query}" source="${source}" ttl=${cacheTtlDays}d`);
   const db = getDatabase();
   const cutoff = Date.now() - cacheTtlDays * 24 * 60 * 60 * 1000;
@@ -54,13 +54,13 @@ export async function getCachedEntries(
 }
 
 /**
- * Saves FinkelEntry results to the cache. One row per entry.
+ * Saves DictEntry results to the cache. One row per entry.
  * After saving, trims the cache to maxCacheEntries (default 1000) by
  * deleting the oldest rows first.
  */
 export async function saveToCache(
   query: string,
-  entries: FinkelEntry[],
+  entries: DictEntry[],
   source: DictSource,
   maxCacheEntries = 1000
 ): Promise<void> {
@@ -80,7 +80,7 @@ export async function saveToCache(
         entry.yiddishRomanized,
         entry.english,
         entry.partOfSpeech,
-        entry.conjugationInfo,
+        entry.grammaticalInfo,
         source,
         now,
         entry.isPhrase ? 1 : 0,
@@ -147,13 +147,15 @@ async function trimCache(maxEntries: number): Promise<void> {
   }
 }
 
-function rowToEntry(row: CachedResultRow): FinkelEntry {
+function rowToEntry(row: CachedResultRow): DictEntry {
   return {
     yiddishRomanized: row.yiddish_romanized,
     yiddishHebrew: row.yiddish_hebrew,
     english: row.english,
     partOfSpeech: row.part_of_speech,
-    conjugationInfo: row.conjugation_info,
+    grammaticalInfo: row.conjugation_info,
     isPhrase: row.is_phrase === 1,
+    exampleYiddish: null,
+    exampleEnglish: null,
   };
 }

@@ -1,22 +1,9 @@
 import axios from 'axios';
 import { parse } from 'node-html-parser';
 import { ensureSession, isLoggedOut } from './verterbukh-auth';
+import { DictEntry } from '../types';
 
 const BASE_URL = 'https://verterbukh.org/vb';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface VerterbukEntry {
-  yiddishHebrew: string | null;
-  yiddishRomanized: string | null;   // YIVO romanization — first .translit div; present when trns=t is sent
-  partOfSpeech: string | null;       // e.g. "verb", "neuter noun"
-  grammaticalInfo: string | null;    // e.g. "past participle: איז געלאָפֿן", "plural: עך"
-  english: string | null;            // main definition (with domain labels preserved)
-  exampleYiddish: string | null;     // .sep example phrase
-  exampleEnglish: string | null;     // .gloss translation of the example
-}
 
 export interface VerterbukChoice {
   label: string;        // YIVO label shown to user, e.g. "LOYFN"
@@ -29,7 +16,7 @@ export interface VerterbukQuota {
 }
 
 export interface VerterbukResult {
-  entries: VerterbukEntry[];
+  entries: DictEntry[];
   choices: VerterbukChoice[] | null; // null when no disambiguation needed
   quota: VerterbukQuota | null;      // null when quota-box not present in response
 }
@@ -93,7 +80,7 @@ async function fetchSearch(query: string, ln?: string): Promise<string> {
 export function parseVerterbukhhHtml(html: string): VerterbukResult {
   const root = parse(html);
 
-  const entries = root.querySelectorAll('.def').map(parseDef);
+  const entries: DictEntry[] = root.querySelectorAll('.def').map(parseDef);
 
   const choiceNodes = root.querySelectorAll('.choice_box .option:not(.extend)');
   const choices: VerterbukChoice[] | null =
@@ -133,7 +120,7 @@ function isInsideClass(node: ReturnType<typeof parse>, className: string): boole
   return false;
 }
 
-function parseDef(defNode: ReturnType<typeof parse>): VerterbukEntry {
+function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
   // Headword — strip the | stem separator
   const lemmaNode = defNode.querySelector('.lemma');
   const yiddishHebrew = lemmaNode ? lemmaNode.text.replace(/\|/g, '').trim() : null;
@@ -210,5 +197,5 @@ function parseDef(defNode: ReturnType<typeof parse>): VerterbukEntry {
     }
   }
 
-  return { yiddishHebrew, yiddishRomanized, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish };
+  return { yiddishHebrew, yiddishRomanized, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish, isPhrase: false };
 }

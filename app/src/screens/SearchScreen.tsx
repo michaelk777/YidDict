@@ -12,27 +12,14 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import { lookupFinkel, FinkelEntry } from '../services/finkelService';
-import { lookupVerterbukh, VerterbukEntry, VerterbukChoice, VerterbukQuota } from '../services/verterbukh-service';
+import { DictEntry } from '../types';
+import { lookupFinkel } from '../services/finkelService';
+import { lookupVerterbukh, VerterbukChoice, VerterbukQuota } from '../services/verterbukh-service';
+import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache, logSearchHistory } from '../db/cacheDb';
 import { detectInputScript } from '../utils/inputDetector';
 import { getSourceOrder, DictSource, SOURCE_LABELS } from '../db/settingsDb';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function verterbukToFinkelEntry(v: VerterbukEntry): FinkelEntry {
-  return {
-    yiddishHebrew: v.yiddishHebrew,
-    yiddishRomanized: v.yiddishRomanized,
-    english: v.english,
-    partOfSpeech: v.partOfSpeech,
-    conjugationInfo: v.grammaticalInfo,
-    isPhrase: false,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -41,7 +28,7 @@ function verterbukToFinkelEntry(v: VerterbukEntry): FinkelEntry {
 export default function SearchScreen() {
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
-  const [entries, setEntries] = useState<FinkelEntry[]>([]);
+  const [entries, setEntries] = useState<DictEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
@@ -115,7 +102,6 @@ export default function SearchScreen() {
 
       for (const slot of order) {
         if (slot === 'none') continue;
-        if (slot === 'google_translate') continue; // not yet implemented
         if (slot === 'verterbukh' && !verterbukhhLoggedIn) {
           console.log('[YidDict] SearchScreen: skipping Verterbukh — not logged in');
           continue;
@@ -158,18 +144,29 @@ export default function SearchScreen() {
           console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies), choices=${vResult.choices?.length ?? 0}`);
           processQuota(vResult.quota);
           if (vResult.entries.length > 0) {
-            const mapped = vResult.entries.map(verterbukToFinkelEntry);
-            setEntries(mapped);
+            setEntries(vResult.entries);
             setResultSource('verterbukh');
             if (vResult.choices && vResult.choices.length > 0) {
               setOtherOptions(vResult.choices);
             }
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
-            await saveToCache(trimmed, mapped, 'verterbukh');
+            await saveToCache(trimmed, vResult.entries, 'verterbukh');
             await logSearchHistory(trimmed, script, 'verterbukh');
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.verterbukh}`);
+        } else if (source === 'google_translate') {
+          const gtResults = await lookupGoogleTranslate(trimmed, isHebrew);
+          console.log(`[YidDict] SearchScreen: Google Translate returned ${gtResults.length} result(s)`);
+          if (gtResults.length > 0) {
+            setEntries(gtResults);
+            setResultSource('google_translate');
+            if (notes.length > 0) setFallbackNote(notes.join(' · '));
+            await saveToCache(trimmed, gtResults, 'google_translate');
+            await logSearchHistory(trimmed, script, 'google_translate');
+            return;
+          }
+          notes.push(`No results from ${SOURCE_LABELS.google_translate}`);
         }
         // No results from this source — fall through to the next slot
       }
@@ -199,12 +196,11 @@ export default function SearchScreen() {
     try {
       console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
       const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma);
-      const mapped = vResult.entries.map(verterbukToFinkelEntry);
-      setEntries(mapped);
+      setEntries(vResult.entries);
       setResultSource('verterbukh');
       processQuota(vResult.quota);
-      if (mapped.length > 0) {
-        await saveToCache(trimmed, mapped, 'verterbukh');
+      if (vResult.entries.length > 0) {
+        await saveToCache(trimmed, vResult.entries, 'verterbukh');
       }
       await logSearchHistory(trimmed, detectInputScript(trimmed), 'verterbukh');
     } catch {
@@ -228,8 +224,9 @@ export default function SearchScreen() {
 
   const s = makeStyles(theme);
 
-  const sourceBadgeStyle = resultSource === 'verterbukh'
-    ? s.badgeVerterbukh
+  const sourceBadgeStyle =
+    resultSource === 'verterbukh' ? s.badgeVerterbukh
+    : resultSource === 'google_translate' ? s.badgeGoogle
     : s.badgeFinkel;
 
   return (
@@ -325,7 +322,11 @@ export default function SearchScreen() {
               <EntryRow
                 entry={item}
                 theme={theme}
-                sourceColor={resultSource === 'verterbukh' ? theme.sourceVerterbukh : theme.sourceFinkel}
+                sourceColor={
+              resultSource === 'verterbukh' ? theme.sourceVerterbukh
+              : resultSource === 'google_translate' ? theme.sourceGoogle
+              : theme.sourceFinkel
+            }
               />
             )}
             contentContainerStyle={s.listContent}
@@ -393,7 +394,7 @@ function OtherOptionsView({ choices, onSelect, theme, s }: OtherOptionsViewProps
 // ---------------------------------------------------------------------------
 
 interface EntryRowProps {
-  entry: FinkelEntry;
+  entry: DictEntry;
   theme: ReturnType<typeof useTheme>['theme'];
   sourceColor: string;
 }
@@ -428,7 +429,7 @@ function EntryRow({ entry, theme, sourceColor }: EntryRowProps) {
       {entry.partOfSpeech ? (
         <Text style={[s.grammar, { color: theme.textSecondary }]}>
           {entry.partOfSpeech}
-          {entry.conjugationInfo ? `  ${entry.conjugationInfo}` : ''}
+          {entry.grammaticalInfo ? `  ${entry.grammaticalInfo}` : ''}
         </Text>
       ) : null}
 
@@ -504,6 +505,9 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     badgeVerterbukh: {
       backgroundColor: theme.sourceVerterbukh,
+    },
+    badgeGoogle: {
+      backgroundColor: theme.sourceGoogle,
     },
     badgeQuota: {
       backgroundColor: '#6B7280',

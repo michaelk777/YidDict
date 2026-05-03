@@ -1,18 +1,10 @@
 import axios from 'axios';
 import { parse, HTMLElement, Node } from 'node-html-parser';
 import { stripNekudes } from '../utils/nekudes';
+import { DictEntry } from '../types';
 
 const FINKEL_URL =
   'https://www.cs.engr.uky.edu/~raphael/yiddish/dictionary.cgi';
-
-export interface FinkelEntry {
-  yiddishRomanized: string | null;
-  yiddishHebrew: string | null;
-  english: string | null;
-  partOfSpeech: string | null;
-  conjugationInfo: string | null;
-  isPhrase: boolean;
-}
 
 /**
  * Look up a word in Finkel's dictionary.
@@ -31,7 +23,7 @@ export interface FinkelEntry {
 export async function lookupFinkel(
   query: string,
   isHebrew = false
-): Promise<FinkelEntry[]> {
+): Promise<DictEntry[]> {
   const word = isHebrew ? stripNekudes(query) : query;
   console.log(`[YidDict] finkelService: lookupFinkel query="${word}" isHebrew=${isHebrew}`);
 
@@ -50,7 +42,7 @@ export async function lookupFinkel(
 
 async function postToFinkel(
   params: Record<string, string>
-): Promise<FinkelEntry[]> {
+): Promise<DictEntry[]> {
   console.log(`[YidDict] finkelService: POST to Finkel params=${JSON.stringify(params)}`);
   const body = new URLSearchParams(params).toString();
   const response = await axios.post<string>(FINKEL_URL, body, {
@@ -64,7 +56,7 @@ async function postToFinkel(
 // HTML parser
 // ---------------------------------------------------------------------------
 
-export function parseFinkelHtml(html: string): FinkelEntry[] {
+export function parseFinkelHtml(html: string): DictEntry[] {
   const root = parse(html);
 
   // Results live in the first <ul> that contains at least one .definition span.
@@ -79,7 +71,7 @@ export function parseFinkelHtml(html: string): FinkelEntry[] {
   }
   if (!resultUl) return [];
 
-  const entries: FinkelEntry[] = [];
+  const entries: DictEntry[] = [];
   collectEntries(directLiChildren(resultUl), false, entries);
   console.log(`[YidDict] finkelService: parseFinkelHtml found ${entries.length} entr(ies)`);
   return entries;
@@ -111,7 +103,7 @@ function directChildByClass(
 function collectEntries(
   lis: HTMLElement[],
   isPhrase: boolean,
-  out: FinkelEntry[]
+  out: DictEntry[]
 ): void {
   for (const li of lis) {
     const lexemeSpan = directChildByClass(li, 'lexeme');
@@ -142,11 +134,11 @@ function collectEntries(
     const definitionSpan = li.querySelector('.definition');
     const english = definitionSpan?.text.trim() || null;
 
-    // --- partOfSpeech / conjugationInfo ---
+    // --- partOfSpeech / grammaticalInfo ---
     const grammarSpans = li.querySelectorAll('.grammar');
     const partOfSpeech =
       grammarSpans.length > 0 ? grammarSpans[0].text.trim() || null : null;
-    const conjugationInfo =
+    const grammaticalInfo =
       grammarSpans.length > 1
         ? grammarSpans
             .slice(1)
@@ -160,8 +152,10 @@ function collectEntries(
       yiddishHebrew,
       english,
       partOfSpeech,
-      conjugationInfo,
+      grammaticalInfo,
       isPhrase,
+      exampleYiddish: null,
+      exampleEnglish: null,
     });
 
     // Some entries have their phrase sub-entries inside the SAME <li> (rare

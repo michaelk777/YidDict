@@ -16,7 +16,8 @@
 
 jest.mock('axios');
 import axios from 'axios';
-import { lookupFinkel, parseFinkelHtml, FinkelEntry } from '../services/finkelService';
+import { lookupFinkel, parseFinkelHtml } from '../services/finkelService';
+import { DictEntry } from '../types';
 
 const mockAxios = axios as jest.Mocked<typeof axios>;
 
@@ -62,7 +63,7 @@ describe('parseFinkelHtml', () => {
   });
 
   describe('with sheyn fixture', () => {
-    let entries: FinkelEntry[];
+    let entries: DictEntry[];
     beforeAll(() => {
       entries = parseFinkelHtml(SHEYN_HTML);
     });
@@ -180,7 +181,7 @@ describe('lookupFinkel', () => {
   it('does not modify Latin input before POSTing', async () => {
     mockAxios.post.mockResolvedValue({ data: EMPTY_HTML });
     await lookupFinkel('sheyne', false);
-    const body: string = mockAxios.post.mock.calls[0][1];
+    const body = mockAxios.post.mock.calls[0][1] as string;
     expect(body).toContain('word=sheyne');
   });
 
@@ -189,7 +190,7 @@ describe('lookupFinkel', () => {
     mockAxios.post.mockResolvedValueOnce({ data: EMPTY_HTML });
     // שֵׁין with tsere (U+05B5) on shin
     await lookupFinkel('שֵׁין', true);
-    const body: string = mockAxios.post.mock.calls[0][1];
+    const body = mockAxios.post.mock.calls[0][1] as string;
     // Should not contain tsere (U+05B5)
     expect(body).not.toMatch(/\u05B5/);
   });

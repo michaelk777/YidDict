@@ -16,17 +16,19 @@ import {
   logSearchHistory,
   getSearchHistory,
 } from '../db/cacheDb';
-import { FinkelEntry } from '../services/finkelService';
+import { DictEntry } from '../types';
 
 const mockGetDatabase = getDatabase as jest.Mock;
 
-const sampleEntry: FinkelEntry = {
+const sampleEntry: DictEntry = {
   yiddishRomanized: 'sheyn',
   yiddishHebrew: 'שיין',
   english: 'pretty',
   partOfSpeech: 'adjective',
-  conjugationInfo: null,
+  grammaticalInfo: null,
   isPhrase: false,
+  exampleYiddish: null,
+  exampleEnglish: null,
 };
 
 const sampleRow = {
@@ -63,7 +65,7 @@ describe('getCachedEntries', () => {
     expect(params).toContain('finkel');
   });
 
-  it('returns mapped FinkelEntry array when rows exist', async () => {
+  it('returns mapped DictEntry array when rows exist', async () => {
     __mockDb.getAllAsync.mockResolvedValueOnce([sampleRow]);
     const result = await getCachedEntries('sheyn', 'finkel');
     expect(result).not.toBeNull();
@@ -72,16 +74,16 @@ describe('getCachedEntries', () => {
     expect(result![0].yiddishHebrew).toBe('שיין');
     expect(result![0].english).toBe('pretty');
     expect(result![0].partOfSpeech).toBe('adjective');
-    expect(result![0].conjugationInfo).toBeNull();
+    expect(result![0].grammaticalInfo).toBeNull();
     expect(result![0].isPhrase).toBe(false);
   });
 
-  it('maps conjugationInfo from the row', async () => {
+  it('maps grammaticalInfo from the row', async () => {
     __mockDb.getAllAsync.mockResolvedValueOnce([
       { ...sampleRow, conjugation_info: 'gender f; plural in -n' },
     ]);
     const result = await getCachedEntries('sheyn', 'finkel');
-    expect(result![0].conjugationInfo).toBe('gender f; plural in -n');
+    expect(result![0].grammaticalInfo).toBe('gender f; plural in -n');
   });
 
   it('returns multiple rows in id ASC order', async () => {
