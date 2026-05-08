@@ -1,6 +1,5 @@
 import { getDatabase } from './database';
 import { DictEntry } from '../types';
-import { QueryScript } from '../utils/inputDetector';
 
 type DictSource = 'finkel' | 'verterbukh' | 'google_translate';
 
@@ -16,15 +15,6 @@ interface CachedResultRow {
   source: string;
   fetched_at: number;
   is_phrase: number; // SQLite stores booleans as 0/1
-}
-
-// Shape of a row read from search_history
-export interface HistoryEntry {
-  id: number;
-  query: string;
-  query_script: QueryScript;
-  timestamp: number;
-  source: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,42 +79,6 @@ export async function saveToCache(
   }
   console.log(`[YidDict] cacheDb: saved ${entries.length} entr(ies) to cache`);
   await trimCache(maxCacheEntries);
-}
-
-// ---------------------------------------------------------------------------
-// History
-// ---------------------------------------------------------------------------
-
-/**
- * Appends one row to search_history. Called after every lookup (cached or
- * live) so the user sees a complete chronological record.
- */
-export async function logSearchHistory(
-  query: string,
-  queryScript: QueryScript,
-  source: string
-): Promise<void> {
-  console.log(`[YidDict] cacheDb: logSearchHistory query="${query}" script="${queryScript}" source="${source}"`);
-  const db = getDatabase();
-  await db.runAsync(
-    `INSERT INTO search_history (query, query_script, timestamp, source)
-     VALUES (?, ?, ?, ?)`,
-    [query, queryScript, Date.now(), source]
-  );
-}
-
-/**
- * Returns the most recent history entries, newest first.
- * Respects the max_history user setting by default; pass a custom limit
- * to override (e.g. for the History screen which lets the user scroll).
- */
-export async function getSearchHistory(limit = 10): Promise<HistoryEntry[]> {
-  console.log(`[YidDict] cacheDb: getSearchHistory limit=${limit}`);
-  const db = getDatabase();
-  return db.getAllAsync<HistoryEntry>(
-    'SELECT * FROM search_history ORDER BY timestamp DESC LIMIT ?',
-    [limit]
-  );
 }
 
 // ---------------------------------------------------------------------------

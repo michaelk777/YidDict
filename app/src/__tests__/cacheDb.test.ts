@@ -10,12 +10,7 @@ jest.mock('../db/database');
 
 import { getDatabase } from '../db/database';
 import { __mockDb } from '../../__mocks__/expo-sqlite';
-import {
-  getCachedEntries,
-  saveToCache,
-  logSearchHistory,
-  getSearchHistory,
-} from '../db/cacheDb';
+import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { DictEntry } from '../types';
 
 const mockGetDatabase = getDatabase as jest.Mock;
@@ -178,68 +173,3 @@ describe('saveToCache', () => {
   });
 });
 
-describe('logSearchHistory', () => {
-  it('inserts one row into search_history', async () => {
-    await logSearchHistory('sheyn', 'latin', 'finkel');
-    expect(__mockDb.runAsync).toHaveBeenCalledTimes(1);
-    const [sql] = __mockDb.runAsync.mock.calls[0];
-    expect(sql).toMatch(/INSERT INTO search_history/i);
-  });
-
-  it('logs the correct query, script, and source', async () => {
-    await logSearchHistory('sheyn', 'latin', 'finkel');
-    const [, params] = __mockDb.runAsync.mock.calls[0];
-    expect(params).toContain('sheyn');
-    expect(params).toContain('latin');
-    expect(params).toContain('finkel');
-  });
-
-  it('logs hebrew script correctly', async () => {
-    await logSearchHistory('שיין', 'hebrew', 'finkel');
-    const [, params] = __mockDb.runAsync.mock.calls[0];
-    expect(params).toContain('שיין');
-    expect(params).toContain('hebrew');
-  });
-
-  it('includes a numeric timestamp', async () => {
-    const before = Date.now();
-    await logSearchHistory('sheyn', 'latin', 'finkel');
-    const after = Date.now();
-    const [, params] = __mockDb.runAsync.mock.calls[0];
-    const ts = params[2] as number;
-    expect(ts).toBeGreaterThanOrEqual(before);
-    expect(ts).toBeLessThanOrEqual(after);
-  });
-});
-
-describe('getSearchHistory', () => {
-  it('queries search_history ordered by timestamp DESC', async () => {
-    __mockDb.getAllAsync.mockResolvedValueOnce([]);
-    await getSearchHistory();
-    const [sql] = __mockDb.getAllAsync.mock.calls[0];
-    expect(sql).toMatch(/ORDER BY timestamp DESC/i);
-  });
-
-  it('applies default limit of 10', async () => {
-    __mockDb.getAllAsync.mockResolvedValueOnce([]);
-    await getSearchHistory();
-    const [, params] = __mockDb.getAllAsync.mock.calls[0];
-    expect(params).toContain(10);
-  });
-
-  it('applies custom limit when provided', async () => {
-    __mockDb.getAllAsync.mockResolvedValueOnce([]);
-    await getSearchHistory(25);
-    const [, params] = __mockDb.getAllAsync.mock.calls[0];
-    expect(params).toContain(25);
-  });
-
-  it('returns the rows from the database', async () => {
-    const fakeRows = [
-      { id: 1, query: 'sheyn', query_script: 'latin', timestamp: 1000, source: 'finkel' },
-    ];
-    __mockDb.getAllAsync.mockResolvedValueOnce(fakeRows);
-    const result = await getSearchHistory();
-    expect(result).toEqual(fakeRows);
-  });
-});

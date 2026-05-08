@@ -17,8 +17,10 @@ import { lookupFinkel } from '../services/finkelService';
 import { lookupVerterbukh, VerterbukChoice, VerterbukQuota } from '../services/verterbukh-service';
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
-import { getCachedEntries, saveToCache, logSearchHistory } from '../db/cacheDb';
+import { getCachedEntries, saveToCache } from '../db/cacheDb';
+import { saveEntry, saveEntries, getSavedKeySet } from '../db/savedDb';
 import { detectInputScript } from '../utils/inputDetector';
+import { Ionicons } from '@expo/vector-icons';
 import { getSourceOrder, DictSource, SOURCE_LABELS } from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +41,7 @@ export default function SearchScreen() {
   const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
   const [verterbukQuota, setVerterbukQuota] = useState<VerterbukQuota | null>(null);
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
+  const [savedKeySet, setSavedKeySet] = useState<Set<string>>(new Set());
 
   // Session-scoped exhaustion tracking. A useRef so updates don't trigger re-renders.
   const verterbukExhausted = useRef(false);
@@ -122,7 +125,7 @@ export default function SearchScreen() {
           setResultSource(source);
           setFromCache(true);
           if (notes.length > 0) setFallbackNote(notes.join(' · '));
-          await logSearchHistory(trimmed, script, source);
+          setSavedKeySet(await getSavedKeySet());
           return;
         }
 
@@ -135,7 +138,7 @@ export default function SearchScreen() {
             setResultSource('finkel');
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, results, 'finkel');
-            await logSearchHistory(trimmed, script, 'finkel');
+            setSavedKeySet(await getSavedKeySet());
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.finkel}`);
@@ -151,7 +154,7 @@ export default function SearchScreen() {
             }
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, vResult.entries, 'verterbukh');
-            await logSearchHistory(trimmed, script, 'verterbukh');
+            setSavedKeySet(await getSavedKeySet());
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.verterbukh}`);
@@ -163,7 +166,7 @@ export default function SearchScreen() {
             setResultSource('google_translate');
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, gtResults, 'google_translate');
-            await logSearchHistory(trimmed, script, 'google_translate');
+            setSavedKeySet(await getSavedKeySet());
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.google_translate}`);
@@ -202,13 +205,28 @@ export default function SearchScreen() {
       if (vResult.entries.length > 0) {
         await saveToCache(trimmed, vResult.entries, 'verterbukh');
       }
-      await logSearchHistory(trimmed, detectInputScript(trimmed), 'verterbukh');
+      setSavedKeySet(await getSavedKeySet());
     } catch {
       setError('Could not retrieve that entry. Try again.');
     } finally {
       setIsLoading(false);
     }
   }, [query]);
+
+  const handleSaveEntry = useCallback(async (entry: DictEntry, source: DictSource) => {
+    const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
+    if (savedKeySet.has(key)) return;
+    const trimmed = query.trim();
+    await saveEntry(trimmed, entry, source);
+    setSavedKeySet(prev => new Set([...prev, key]));
+  }, [query, savedKeySet]);
+
+  const handleSaveAll = useCallback(async () => {
+    if (!resultSource || entries.length === 0) return;
+    const trimmed = query.trim();
+    await saveEntries(trimmed, entries, resultSource);
+    setSavedKeySet(await getSavedKeySet());
+  }, [query, entries, resultSource]);
 
   const handleClear = useCallback(() => {
     setQuery('');
@@ -220,6 +238,7 @@ export default function SearchScreen() {
     setOtherOptions(null);
     setVerterbukQuota(null);
     setFallbackNote(null);
+    setSavedKeySet(new Set());
   }, []);
 
   const s = makeStyles(theme);
@@ -318,18 +337,35 @@ export default function SearchScreen() {
           <FlatList
             data={entries}
             keyExtractor={(_, i) => String(i)}
-            renderItem={({ item }) => (
-              <EntryRow
-                entry={item}
-                theme={theme}
-                sourceColor={
-              resultSource === 'verterbukh' ? theme.sourceVerterbukh
-              : resultSource === 'google_translate' ? theme.sourceGoogle
-              : theme.sourceFinkel
-            }
-              />
-            )}
+            renderItem={({ item }) => {
+              const key = `${item.yiddishHebrew ?? ''}|${item.english ?? ''}|${resultSource ?? ''}`;
+              return (
+                <EntryRow
+                  entry={item}
+                  theme={theme}
+                  sourceColor={
+                    resultSource === 'verterbukh' ? theme.sourceVerterbukh
+                    : resultSource === 'google_translate' ? theme.sourceGoogle
+                    : theme.sourceFinkel
+                  }
+                  isSaved={savedKeySet.has(key)}
+                  onSave={() => resultSource && handleSaveEntry(item, resultSource)}
+                />
+              );
+            }}
             contentContainerStyle={s.listContent}
+            ListHeaderComponent={
+              entries.length > 0 ? (
+                <TouchableOpacity
+                  style={[s.saveAllBtn, { borderColor: theme.border }]}
+                  onPress={handleSaveAll}
+                  testID="save-all-button"
+                >
+                  <Ionicons name="bookmark-outline" size={14} color={theme.textSecondary} />
+                  <Text style={[s.saveAllText, { color: theme.textSecondary }]}>Save all</Text>
+                </TouchableOpacity>
+              ) : null
+            }
             ListEmptyComponent={
               hasSearched ? (
                 <View testID="no-results">
@@ -397,9 +433,11 @@ interface EntryRowProps {
   entry: DictEntry;
   theme: ReturnType<typeof useTheme>['theme'];
   sourceColor: string;
+  isSaved: boolean;
+  onSave: () => void;
 }
 
-function EntryRow({ entry, theme, sourceColor }: EntryRowProps) {
+function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps) {
   const s = makeStyles(theme);
   return (
     <View
@@ -411,18 +449,32 @@ function EntryRow({ entry, theme, sourceColor }: EntryRowProps) {
       ]}
       testID="entry-card"
     >
-      {/* Yiddish headword row: YIVO (LTR) + Hebrew script (RTL) */}
+      {/* Yiddish headword row: YIVO (LTR) + Hebrew script (RTL) + bookmark */}
       <View style={s.headwordRow}>
-        {entry.yiddishRomanized ? (
-          <Text style={[s.romanized, { color: theme.text }]}>
-            {entry.yiddishRomanized}
-          </Text>
-        ) : null}
-        {entry.yiddishHebrew ? (
-          <Text style={[s.hebrew, { color: theme.text }]}>
-            {entry.yiddishHebrew}
-          </Text>
-        ) : null}
+        <View style={s.headwordText}>
+          {entry.yiddishRomanized ? (
+            <Text style={[s.romanized, { color: theme.text }]}>
+              {entry.yiddishRomanized}
+            </Text>
+          ) : null}
+          {entry.yiddishHebrew ? (
+            <Text style={[s.hebrew, { color: theme.text }]}>
+              {entry.yiddishHebrew}
+            </Text>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          onPress={onSave}
+          accessibilityLabel={isSaved ? 'Saved' : 'Save entry'}
+          testID="save-entry-button"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={18}
+            color={isSaved ? theme.primary : theme.textSecondary}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Part of speech */}
@@ -593,8 +645,28 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     headwordRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'baseline',
+      alignItems: 'center',
       marginBottom: 4,
+    },
+    headwordText: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 8,
+    },
+    saveAllBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      alignSelf: 'flex-end',
+      borderWidth: 1,
+      borderRadius: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      marginBottom: 8,
+    },
+    saveAllText: {
+      fontSize: 12,
     },
     romanized: {
       fontSize: 17,

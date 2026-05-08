@@ -3,14 +3,12 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import SearchScreen from '../screens/SearchScreen';
-import HistoryScreen from '../screens/HistoryScreen';
-import ExportScreen from '../screens/ExportScreen';
+import SavedScreen from '../screens/SavedScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 type TabParamList = {
   Search: undefined;
-  History: undefined;
-  Export: undefined;
+  Saved: undefined;
   Settings: undefined;
 };
 
@@ -20,8 +18,7 @@ type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const TAB_ICONS: Record<keyof TabParamList, { focused: IoniconName; unfocused: IoniconName }> = {
   Search:   { focused: 'search',          unfocused: 'search-outline' },
-  History:  { focused: 'time',            unfocused: 'time-outline' },
-  Export:   { focused: 'share-social',    unfocused: 'share-social-outline' },
+  Saved:    { focused: 'bookmark',        unfocused: 'bookmark-outline' },
   Settings: { focused: 'settings',        unfocused: 'settings-outline' },
 };
 
@@ -45,8 +42,7 @@ export default function AppNavigator() {
       })}
     >
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="History" component={HistoryScreen} />
-      <Tab.Screen name="Export" component={ExportScreen} />
+      <Tab.Screen name="Saved" component={SavedScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );

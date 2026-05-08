@@ -9,13 +9,17 @@ export async function initDatabase(): Promise<void> {
 
   console.log('[YidDict] database: creating tables');
   await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS search_history (
+    CREATE TABLE IF NOT EXISTS saved_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       query TEXT NOT NULL,
-      query_script TEXT NOT NULL CHECK(query_script IN ('hebrew', 'latin')),
-      timestamp INTEGER NOT NULL,
-      source TEXT NOT NULL,
-      result_id INTEGER
+      yiddish_hebrew TEXT,
+      yiddish_romanized TEXT,
+      english TEXT,
+      part_of_speech TEXT,
+      grammatical_info TEXT,
+      source TEXT NOT NULL CHECK(source IN ('finkel', 'verterbukh', 'google_translate')),
+      saved_at INTEGER NOT NULL,
+      is_phrase INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS cached_results (
@@ -44,7 +48,6 @@ export async function initDatabase(): Promise<void> {
   const migrations = [
     'ALTER TABLE cached_results ADD COLUMN query TEXT NOT NULL DEFAULT ""',
     'ALTER TABLE cached_results ADD COLUMN is_phrase INTEGER NOT NULL DEFAULT 0',
-    'ALTER TABLE search_history ADD COLUMN result_id INTEGER',
   ];
   for (const sql of migrations) {
     try {
@@ -59,7 +62,7 @@ export async function initDatabase(): Promise<void> {
     ['source_order_1', 'finkel'],
     ['source_order_2', 'verterbukh'],
     ['source_order_3', 'google_translate'],
-    ['max_history', '10'],
+    ['max_saved_entries', '500'],
     ['theme', 'system'],
     ['cache_ttl_days', '90'],
     ['max_cache_entries', '1000'],

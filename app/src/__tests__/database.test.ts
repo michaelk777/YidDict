@@ -55,19 +55,19 @@ describe('database', () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const sql: string = mockDb.execAsync.mock.calls[0][0];
-      expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS search_history/);
+      expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS saved_entries/);
       expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS cached_results/);
       expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS user_settings/);
     });
 
-    it('seeds the default settings including source order and history', async () => {
+    it('seeds the default settings including source order and max_saved_entries', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const keys = mockDb.runAsync.mock.calls.map(([, params]: [string, string[]]) => params[0]);
       expect(keys).toContain('source_order_1');
       expect(keys).toContain('source_order_2');
       expect(keys).toContain('source_order_3');
-      expect(keys).toContain('max_history');
+      expect(keys).toContain('max_saved_entries');
       expect(keys).toContain('theme');
     });
 
@@ -95,12 +95,12 @@ describe('database', () => {
       expect(call[1][1]).toBe('google_translate');
     });
 
-    it('seeds max_history as "10"', async () => {
+    it('seeds max_saved_entries as "500"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'max_history');
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'max_saved_entries');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('10');
+      expect(call[1][1]).toBe('500');
     });
 
     it('seeds theme as "system"', async () => {
@@ -119,23 +119,13 @@ describe('database', () => {
       });
     });
 
-    it('search_history table includes a source column', async () => {
+    it('saved_entries table includes a source column with CHECK constraint', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const sql: string = mockDb.execAsync.mock.calls[0][0];
-      // Verify source column exists in search_history (it has no CHECK constraint,
-      // unlike cached_results, so we check the column definition directly)
-      const historyTableMatch = sql.match(/CREATE TABLE IF NOT EXISTS search_history\s*\(([\s\S]*?)\);/);
-      expect(historyTableMatch).not.toBeNull();
-      expect(historyTableMatch![1]).toMatch(/source\s+TEXT\s+NOT NULL/);
-    });
-
-    it('schema enforces query_script CHECK constraint', async () => {
-      const { initDatabase, mockDb } = freshModules();
-      await initDatabase();
-      const sql: string = mockDb.execAsync.mock.calls[0][0];
-      // 'english' was removed — Finkel accepts all scripts in one field
-      expect(sql).toMatch(/CHECK\(query_script IN \('hebrew', 'latin'\)\)/);
+      const savedMatch = sql.match(/CREATE TABLE IF NOT EXISTS saved_entries\s*\(([\s\S]*?)\);/);
+      expect(savedMatch).not.toBeNull();
+      expect(savedMatch![1]).toMatch(/source\s+TEXT\s+NOT NULL/);
     });
 
     it('cached_results table includes a query column', async () => {

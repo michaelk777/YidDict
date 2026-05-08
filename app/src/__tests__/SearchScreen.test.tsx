@@ -42,7 +42,12 @@ jest.mock('../services/verterbukh-auth', () => ({
 jest.mock('../db/cacheDb', () => ({
   getCachedEntries: jest.fn(),
   saveToCache: jest.fn(),
-  logSearchHistory: jest.fn(),
+}));
+
+jest.mock('../db/savedDb', () => ({
+  saveEntry: jest.fn().mockResolvedValue(undefined),
+  saveEntries: jest.fn().mockResolvedValue(undefined),
+  getSavedKeySet: jest.fn().mockResolvedValue(new Set()),
 }));
 
 jest.mock('../db/settingsDb', () => ({
@@ -54,7 +59,8 @@ import { lookupFinkel } from '../services/finkelService';
 import { lookupVerterbukh } from '../services/verterbukh-service';
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
-import { getCachedEntries, saveToCache, logSearchHistory } from '../db/cacheDb';
+import { getCachedEntries, saveToCache } from '../db/cacheDb';
+import { getSavedKeySet } from '../db/savedDb';
 import { getSourceOrder } from '../db/settingsDb';
 
 const mockLookup = lookupFinkel as jest.Mock;
@@ -63,7 +69,7 @@ const mockLookupGoogleTranslate = lookupGoogleTranslate as jest.Mock;
 const mockGetCredentials = getCredentials as jest.Mock;
 const mockGetCached = getCachedEntries as jest.Mock;
 const mockSaveCache = saveToCache as jest.Mock;
-const mockLogHistory = logSearchHistory as jest.Mock;
+const mockGetSavedKeySet = getSavedKeySet as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
 
 // ---------------------------------------------------------------------------
@@ -116,7 +122,7 @@ beforeEach(() => {
   mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null });
   mockLookupGoogleTranslate.mockResolvedValue([]);
   mockSaveCache.mockResolvedValue(undefined);
-  mockLogHistory.mockResolvedValue(undefined);
+  mockGetSavedKeySet.mockResolvedValue(new Set());
 });
 
 describe('SearchScreen — initial render', () => {
@@ -199,13 +205,32 @@ describe('SearchScreen — results from network', () => {
     expect(mockSaveCache).toHaveBeenCalledWith('sheyn', sampleEntries, 'finkel');
   });
 
-  it('logs the search to history', async () => {
+  it('loads the saved key set after results land', async () => {
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    await waitFor(() => expect(mockLogHistory).toHaveBeenCalledTimes(1));
-    expect(mockLogHistory).toHaveBeenCalledWith('sheyn', expect.any(String), 'finkel');
+    await waitFor(() => expect(mockGetSavedKeySet).toHaveBeenCalledTimes(1));
+  });
+
+  it('renders a save button on each entry card', async () => {
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('save-entry-button').length).toBe(2);
+    });
+  });
+
+  it('renders the Save All button when results are present', async () => {
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('save-all-button')).toBeTruthy();
+    });
   });
 
   it('does not show the cached badge for fresh results', async () => {
@@ -242,12 +267,12 @@ describe('SearchScreen — cache hit', () => {
     expect(mockLookup).not.toHaveBeenCalled();
   });
 
-  it('still logs the search to history on a cache hit', async () => {
+  it('loads the saved key set on a cache hit', async () => {
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    await waitFor(() => expect(mockLogHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockGetSavedKeySet).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -835,15 +860,14 @@ describe('SearchScreen — Google Translate source', () => {
     expect(mockSaveCache).toHaveBeenCalledWith('pretty', [gtEntry], 'google_translate');
   });
 
-  it('logs Google Translate searches to history', async () => {
+  it('loads the saved key set after Google Translate results land', async () => {
     mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    await waitFor(() => expect(mockLogHistory).toHaveBeenCalledTimes(1));
-    expect(mockLogHistory).toHaveBeenCalledWith('pretty', expect.any(String), 'google_translate');
+    await waitFor(() => expect(mockGetSavedKeySet).toHaveBeenCalledTimes(1));
   });
 
   it('shows no-results when Google Translate also returns nothing', async () => {
