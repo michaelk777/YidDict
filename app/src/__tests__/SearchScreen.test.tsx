@@ -47,7 +47,11 @@ jest.mock('../db/cacheDb', () => ({
 jest.mock('../db/savedDb', () => ({
   saveEntry: jest.fn().mockResolvedValue(undefined),
   saveEntries: jest.fn().mockResolvedValue(undefined),
-  getSavedKeySet: jest.fn().mockResolvedValue(new Set()),
+  deleteEntriesByKey: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../context/SavedContext', () => ({
+  useSaved: jest.fn(),
 }));
 
 jest.mock('../db/settingsDb', () => ({
@@ -60,8 +64,9 @@ import { lookupVerterbukh } from '../services/verterbukh-service';
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
-import { getSavedKeySet } from '../db/savedDb';
+import { deleteEntriesByKey } from '../db/savedDb';
 import { getSourceOrder } from '../db/settingsDb';
+import { useSaved } from '../context/SavedContext';
 
 const mockLookup = lookupFinkel as jest.Mock;
 const mockLookupVerterbukh = lookupVerterbukh as jest.Mock;
@@ -69,8 +74,9 @@ const mockLookupGoogleTranslate = lookupGoogleTranslate as jest.Mock;
 const mockGetCredentials = getCredentials as jest.Mock;
 const mockGetCached = getCachedEntries as jest.Mock;
 const mockSaveCache = saveToCache as jest.Mock;
-const mockGetSavedKeySet = getSavedKeySet as jest.Mock;
+const mockDeleteEntriesByKey = deleteEntriesByKey as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
+const mockUseSaved = useSaved as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,7 +128,12 @@ beforeEach(() => {
   mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null });
   mockLookupGoogleTranslate.mockResolvedValue([]);
   mockSaveCache.mockResolvedValue(undefined);
-  mockGetSavedKeySet.mockResolvedValue(new Set());
+  mockUseSaved.mockReturnValue({
+    savedKeySet: new Set(),
+    savedEntries: [],
+    isLoading: false,
+    refreshSaved: jest.fn().mockResolvedValue(undefined),
+  });
 });
 
 describe('SearchScreen — initial render', () => {
@@ -205,12 +216,22 @@ describe('SearchScreen — results from network', () => {
     expect(mockSaveCache).toHaveBeenCalledWith('sheyn', sampleEntries, 'finkel');
   });
 
-  it('loads the saved key set after results land', async () => {
+  it('calls refreshSaved after saving an entry', async () => {
+    const mockRefreshSaved = jest.fn().mockResolvedValue(undefined);
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: mockRefreshSaved,
+    });
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    await waitFor(() => expect(mockGetSavedKeySet).toHaveBeenCalledTimes(1));
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(mockRefreshSaved).toHaveBeenCalled());
   });
 
   it('renders a save button on each entry card', async () => {
@@ -223,6 +244,28 @@ describe('SearchScreen — results from network', () => {
     });
   });
 
+  it('calls deleteEntriesByKey when a saved entry bookmark is pressed', async () => {
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(['שיין|pretty|finkel']),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: jest.fn().mockResolvedValue(undefined),
+    });
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => {
+      expect(mockDeleteEntriesByKey).toHaveBeenCalledWith(
+        [expect.objectContaining({ yiddishHebrew: 'שיין', english: 'pretty' })],
+        'finkel'
+      );
+    });
+  });
+
   it('renders the Save All button when results are present', async () => {
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -230,6 +273,46 @@ describe('SearchScreen — results from network', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('save-all-button')).toBeTruthy();
+    });
+  });
+
+  it('shows "Unsave all" and highlights button when all entries are already saved', async () => {
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(['שיין|pretty|finkel', '|beauty|finkel']),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: jest.fn().mockResolvedValue(undefined),
+    });
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Unsave all')).toBeTruthy();
+    });
+  });
+
+  it('calls deleteEntriesByKey when "Unsave all" is pressed', async () => {
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(['שיין|pretty|finkel', '|beauty|finkel']),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: jest.fn().mockResolvedValue(undefined),
+    });
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByText('Unsave all'));
+    fireEvent.press(screen.getByTestId('save-all-button'));
+
+    await waitFor(() => {
+      expect(mockDeleteEntriesByKey).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ yiddishHebrew: 'שיין', english: 'pretty' }),
+        ]),
+        'finkel'
+      );
     });
   });
 
@@ -267,12 +350,22 @@ describe('SearchScreen — cache hit', () => {
     expect(mockLookup).not.toHaveBeenCalled();
   });
 
-  it('loads the saved key set on a cache hit', async () => {
+  it('shows filled bookmark for entries already in the saved key set', async () => {
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(['שיין|pretty|finkel']),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: jest.fn().mockResolvedValue(undefined),
+    });
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    await waitFor(() => expect(mockGetSavedKeySet).toHaveBeenCalledTimes(1));
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    // First bookmark should be filled (saved), second should be outline (unsaved)
+    const btns = screen.getAllByTestId('save-entry-button');
+    expect(btns[0].props.accessibilityLabel).toBe('Remove from saved');
+    expect(btns[1].props.accessibilityLabel).toBe('Save entry');
   });
 });
 
@@ -860,14 +953,24 @@ describe('SearchScreen — Google Translate source', () => {
     expect(mockSaveCache).toHaveBeenCalledWith('pretty', [gtEntry], 'google_translate');
   });
 
-  it('loads the saved key set after Google Translate results land', async () => {
+  it('calls refreshSaved after Google Translate results land', async () => {
+    const mockRefreshSaved = jest.fn().mockResolvedValue(undefined);
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: mockRefreshSaved,
+    });
     mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    await waitFor(() => expect(mockGetSavedKeySet).toHaveBeenCalledTimes(1));
+    // Google Translate results land — save entry should trigger refreshSaved
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+    await waitFor(() => expect(mockRefreshSaved).toHaveBeenCalled());
   });
 
   it('shows no-results when Google Translate also returns nothing', async () => {

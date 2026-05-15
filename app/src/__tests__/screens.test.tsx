@@ -20,6 +20,15 @@ jest.mock('../db/savedDb', () => ({
   generateTsv: jest.fn().mockReturnValue(''),
 }));
 
+jest.mock('../context/SavedContext', () => ({
+  useSaved: jest.fn(() => ({
+    savedEntries: [],
+    savedKeySet: new Set(),
+    isLoading: false,
+    refreshSaved: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 jest.mock('expo-file-system/legacy');
 jest.mock('expo-sharing');
 

@@ -110,6 +110,20 @@ export async function deleteEntry(id: number): Promise<void> {
   await db.runAsync('DELETE FROM saved_entries WHERE id = ?', [id]);
 }
 
+export async function deleteEntriesByKey(
+  entries: DictEntry[],
+  source: DictSource,
+): Promise<void> {
+  console.log(`[YidDict] savedDb: deleteEntriesByKey source="${source}" count=${entries.length}`);
+  const db = getDatabase();
+  for (const entry of entries) {
+    await db.runAsync(
+      'DELETE FROM saved_entries WHERE yiddish_hebrew IS ? AND english IS ? AND source = ?',
+      [entry.yiddishHebrew ?? null, entry.english ?? null, source]
+    );
+  }
+}
+
 export async function clearSaved(): Promise<void> {
   console.log('[YidDict] savedDb: clearSaved');
   const db = getDatabase();

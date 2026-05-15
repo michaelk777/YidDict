@@ -31,6 +31,11 @@ jest.mock('../db/database', () => ({
   initDatabase: jest.fn(),
 }));
 
+// SavedProvider is mounted after DB init — stub it so it doesn't call getSavedEntries
+jest.mock('../context/SavedContext', () => ({
+  SavedProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 import { initDatabase } from '../db/database';
 import App from '../../App';
 

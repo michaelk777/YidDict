@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../context/ThemeContext';
+import { SavedProvider } from '../context/SavedContext';
 import SavedScreen from '../screens/SavedScreen';
 import { SavedEntry } from '../db/savedDb';
 
@@ -55,7 +56,9 @@ const sampleEntries: SavedEntry[] = [
 function renderScreen() {
   return render(
     <ThemeProvider>
-      <SavedScreen />
+      <SavedProvider>
+        <SavedScreen />
+      </SavedProvider>
     </ThemeProvider>
   );
 }
@@ -152,6 +155,10 @@ describe('SavedScreen — delete', () => {
   });
 
   it('removes the deleted row from the list', async () => {
+    // initial load: both entries; refresh after delete: one entry
+    mockGetSavedEntries
+      .mockResolvedValueOnce(sampleEntries)
+      .mockResolvedValueOnce([sampleEntries[1]]);
     renderScreen();
     await waitFor(() => screen.getAllByTestId('delete-entry-button'));
     fireEvent.press(screen.getAllByTestId('delete-entry-button')[0]);
@@ -176,6 +183,11 @@ describe('SavedScreen — clear all', () => {
   });
 
   it('calls clearSaved and empties the list when confirmed', async () => {
+    // initial load: both entries; refresh after clear: empty
+    mockGetSavedEntries
+      .mockResolvedValueOnce(sampleEntries)
+      .mockResolvedValueOnce([]);
+
     const alertSpy = jest.spyOn(require('react-native').Alert, 'alert')
       .mockImplementation((_title, _msg, buttons) => {
         const destructive = (buttons as { text: string; onPress?: () => void }[])

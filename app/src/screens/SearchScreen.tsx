@@ -18,7 +18,8 @@ import { lookupVerterbukh, VerterbukChoice, VerterbukQuota } from '../services/v
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
-import { saveEntry, saveEntries, getSavedKeySet } from '../db/savedDb';
+import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
+import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { Ionicons } from '@expo/vector-icons';
 import { getSourceOrder, DictSource, SOURCE_LABELS } from '../db/settingsDb';
@@ -41,7 +42,7 @@ export default function SearchScreen() {
   const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
   const [verterbukQuota, setVerterbukQuota] = useState<VerterbukQuota | null>(null);
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
-  const [savedKeySet, setSavedKeySet] = useState<Set<string>>(new Set());
+  const { savedKeySet, refreshSaved } = useSaved();
 
   // Session-scoped exhaustion tracking. A useRef so updates don't trigger re-renders.
   const verterbukExhausted = useRef(false);
@@ -125,7 +126,6 @@ export default function SearchScreen() {
           setResultSource(source);
           setFromCache(true);
           if (notes.length > 0) setFallbackNote(notes.join(' · '));
-          setSavedKeySet(await getSavedKeySet());
           return;
         }
 
@@ -138,7 +138,6 @@ export default function SearchScreen() {
             setResultSource('finkel');
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, results, 'finkel');
-            setSavedKeySet(await getSavedKeySet());
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.finkel}`);
@@ -154,7 +153,6 @@ export default function SearchScreen() {
             }
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, vResult.entries, 'verterbukh');
-            setSavedKeySet(await getSavedKeySet());
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.verterbukh}`);
@@ -166,7 +164,6 @@ export default function SearchScreen() {
             setResultSource('google_translate');
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             await saveToCache(trimmed, gtResults, 'google_translate');
-            setSavedKeySet(await getSavedKeySet());
             return;
           }
           notes.push(`No results from ${SOURCE_LABELS.google_translate}`);
@@ -205,7 +202,6 @@ export default function SearchScreen() {
       if (vResult.entries.length > 0) {
         await saveToCache(trimmed, vResult.entries, 'verterbukh');
       }
-      setSavedKeySet(await getSavedKeySet());
     } catch {
       setError('Could not retrieve that entry. Try again.');
     } finally {
@@ -215,18 +211,26 @@ export default function SearchScreen() {
 
   const handleSaveEntry = useCallback(async (entry: DictEntry, source: DictSource) => {
     const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
-    if (savedKeySet.has(key)) return;
-    const trimmed = query.trim();
-    await saveEntry(trimmed, entry, source);
-    setSavedKeySet(prev => new Set([...prev, key]));
-  }, [query, savedKeySet]);
+    if (savedKeySet.has(key)) {
+      await deleteEntriesByKey([entry], source);
+    } else {
+      await saveEntry(query.trim(), entry, source);
+    }
+    await refreshSaved();
+  }, [query, savedKeySet, refreshSaved]);
 
   const handleSaveAll = useCallback(async () => {
     if (!resultSource || entries.length === 0) return;
-    const trimmed = query.trim();
-    await saveEntries(trimmed, entries, resultSource);
-    setSavedKeySet(await getSavedKeySet());
-  }, [query, entries, resultSource]);
+    const isAllSaved = entries.every(e =>
+      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${resultSource}`)
+    );
+    if (isAllSaved) {
+      await deleteEntriesByKey(entries, resultSource);
+    } else {
+      await saveEntries(query.trim(), entries, resultSource);
+    }
+    await refreshSaved();
+  }, [query, entries, resultSource, savedKeySet, refreshSaved]);
 
   const handleClear = useCallback(() => {
     setQuery('');
@@ -238,8 +242,14 @@ export default function SearchScreen() {
     setOtherOptions(null);
     setVerterbukQuota(null);
     setFallbackNote(null);
-    setSavedKeySet(new Set());
   }, []);
+
+  const allSaved =
+    entries.length > 0 &&
+    resultSource !== null &&
+    entries.every(e =>
+      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${resultSource}`)
+    );
 
   const s = makeStyles(theme);
 
@@ -357,12 +367,18 @@ export default function SearchScreen() {
             ListHeaderComponent={
               entries.length > 0 ? (
                 <TouchableOpacity
-                  style={[s.saveAllBtn, { borderColor: theme.border }]}
+                  style={[s.saveAllBtn, { borderColor: allSaved ? theme.primary : theme.border }]}
                   onPress={handleSaveAll}
                   testID="save-all-button"
                 >
-                  <Ionicons name="bookmark-outline" size={14} color={theme.textSecondary} />
-                  <Text style={[s.saveAllText, { color: theme.textSecondary }]}>Save all</Text>
+                  <Ionicons
+                    name={allSaved ? 'bookmark' : 'bookmark-outline'}
+                    size={14}
+                    color={allSaved ? theme.primary : theme.textSecondary}
+                  />
+                  <Text style={[s.saveAllText, { color: allSaved ? theme.primary : theme.textSecondary }]}>
+                    {allSaved ? 'Unsave all' : 'Save all'}
+                  </Text>
                 </TouchableOpacity>
               ) : null
             }
@@ -465,7 +481,7 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
         </View>
         <TouchableOpacity
           onPress={onSave}
-          accessibilityLabel={isSaved ? 'Saved' : 'Save entry'}
+          accessibilityLabel={isSaved ? 'Remove from saved' : 'Save entry'}
           testID="save-entry-button"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >

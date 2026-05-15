@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,10 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { useSaved } from '../context/SavedContext';
 import { DictSource, SOURCE_LABELS } from '../db/settingsDb';
 import {
   SavedEntry,
-  getSavedEntries,
   deleteEntry,
   clearSaved,
   generateCsv,
@@ -24,24 +24,12 @@ import {
 
 export default function SavedScreen() {
   const { theme } = useTheme();
-  const [entries, setEntries] = useState<SavedEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      setEntries(await getSavedEntries());
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const { savedEntries: entries, isLoading, refreshSaved } = useSaved();
 
   const handleDelete = useCallback(async (id: number) => {
     await deleteEntry(id);
-    setEntries(prev => prev.filter(e => e.id !== id));
-  }, []);
+    await refreshSaved();
+  }, [refreshSaved]);
 
   const handleClearAll = useCallback(() => {
     Alert.alert(
@@ -54,12 +42,12 @@ export default function SavedScreen() {
           style: 'destructive',
           onPress: async () => {
             await clearSaved();
-            setEntries([]);
+            await refreshSaved();
           },
         },
       ]
     );
-  }, []);
+  }, [refreshSaved]);
 
   const exportAs = useCallback(async (format: 'csv' | 'tsv') => {
     const content = format === 'csv' ? generateCsv(entries) : generateTsv(entries);

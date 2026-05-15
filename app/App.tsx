@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { SavedProvider } from './src/context/SavedContext';
 import { initDatabase } from './src/db/database';
 import AppNavigator from './src/navigation/AppNavigator';
 
@@ -37,9 +38,11 @@ function Root() {
   return (
     <>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>
+      <SavedProvider>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </SavedProvider>
     </>
   );
 }
