@@ -1,4 +1,5 @@
 import { getDatabase } from './database';
+import { getMaxSavedEntries } from './settingsDb';
 import { DictEntry } from '../types';
 
 type DictSource = 'finkel' | 'verterbukh' | 'google_translate';
@@ -64,9 +65,10 @@ export async function saveEntry(
   query: string,
   entry: DictEntry,
   source: DictSource,
-  maxSavedEntries = 500
+  maxSavedEntries?: number
 ): Promise<void> {
   console.log(`[YidDict] savedDb: saveEntry query="${query}" source="${source}"`);
+  const max = maxSavedEntries ?? await getMaxSavedEntries();
   const db = getDatabase();
   await db.runAsync(
     `INSERT INTO saved_entries
@@ -85,18 +87,20 @@ export async function saveEntry(
       entry.isPhrase ? 1 : 0,
     ]
   );
-  await trimSaved(maxSavedEntries);
+  await trimSaved(max);
 }
 
 export async function saveEntries(
   query: string,
   entries: DictEntry[],
   source: DictSource,
-  maxSavedEntries = 500
+  maxSavedEntries?: number
 ): Promise<void> {
   console.log(`[YidDict] savedDb: saveEntries query="${query}" source="${source}" count=${entries.length}`);
+  if (entries.length === 0) return;
+  const max = maxSavedEntries ?? await getMaxSavedEntries();
   for (const entry of entries) {
-    await saveEntry(query, entry, source, maxSavedEntries);
+    await saveEntry(query, entry, source, max);
   }
 }
 

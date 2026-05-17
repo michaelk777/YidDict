@@ -63,6 +63,7 @@ export async function initDatabase(): Promise<void> {
     ['source_order_2', 'verterbukh'],
     ['source_order_3', 'google_translate'],
     ['max_saved_entries', '500'],
+    ['low_token_threshold', '90'],
     ['theme', 'system'],
     ['cache_ttl_days', '90'],
     ['max_cache_entries', '1000'],

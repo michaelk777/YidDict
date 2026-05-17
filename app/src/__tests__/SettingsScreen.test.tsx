@@ -32,6 +32,10 @@ jest.mock('../db/settingsDb', () => ({
   setSourceOrderSlot: jest.fn(),
   availableOptionsForSlot: jest.requireActual('../db/settingsDb').availableOptionsForSlot,
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
+  getMaxSavedEntries: jest.fn(),
+  setMaxSavedEntries: jest.fn(),
+  getLowTokenThreshold: jest.fn(),
+  setLowTokenThreshold: jest.fn(),
 }));
 
 import {
@@ -41,7 +45,14 @@ import {
   login,
 } from '../services/verterbukh-auth';
 
-import { getSourceOrder, setSourceOrderSlot } from '../db/settingsDb';
+import {
+  getSourceOrder,
+  setSourceOrderSlot,
+  getMaxSavedEntries,
+  setMaxSavedEntries,
+  getLowTokenThreshold,
+  setLowTokenThreshold,
+} from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
 const mockSaveCredentials = saveCredentials as jest.Mock;
@@ -49,6 +60,10 @@ const mockDeleteCredentials = deleteCredentials as jest.Mock;
 const mockLogin = login as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
 const mockSetSourceOrderSlot = setSourceOrderSlot as jest.Mock;
+const mockGetMaxSavedEntries = getMaxSavedEntries as jest.Mock;
+const mockSetMaxSavedEntries = setMaxSavedEntries as jest.Mock;
+const mockGetLowTokenThreshold = getLowTokenThreshold as jest.Mock;
+const mockSetLowTokenThreshold = setLowTokenThreshold as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,6 +89,10 @@ beforeEach(() => {
   mockLogin.mockResolvedValue(undefined);
   mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'google_translate']);
   mockSetSourceOrderSlot.mockResolvedValue(undefined);
+  mockGetMaxSavedEntries.mockResolvedValue(500);
+  mockSetMaxSavedEntries.mockResolvedValue(undefined);
+  mockGetLowTokenThreshold.mockResolvedValue(90);
+  mockSetLowTokenThreshold.mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -84,8 +103,9 @@ describe('SettingsScreen — section headers', () => {
   it('renders all section labels', async () => {
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('SEARCH PREFERENCES')).toBeTruthy();
-      expect(screen.getByText('VERTERBUKH LOGIN')).toBeTruthy();
+      expect(screen.getByText('SEARCH SOURCE ORDER')).toBeTruthy();
+      expect(screen.getByText('SAVED ENTRIES')).toBeTruthy();
+      expect(screen.getByText('VERTERBUKH SETTINGS')).toBeTruthy();
       expect(screen.getByText('APPEARANCE')).toBeTruthy();
       expect(screen.getByText('LANGUAGE')).toBeTruthy();
       expect(screen.getByText('SECURITY')).toBeTruthy();
@@ -193,6 +213,70 @@ describe('SettingsScreen — Search Preferences', () => {
     await waitFor(() => screen.getByTestId('picker-option-verterbukh'));
     expect(screen.getByText('login required')).toBeTruthy();
     expect(screen.queryByText('pay per result')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Numeric settings
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — numeric settings', () => {
+  it('shows the loaded max saved entries value', async () => {
+    mockGetMaxSavedEntries.mockResolvedValue(750);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('max-saved-entries-input').props.value).toBe('750');
+    });
+  });
+
+  it('shows the loaded low-token threshold value', async () => {
+    mockGetLowTokenThreshold.mockResolvedValue(75);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('low-token-threshold-input').props.value).toBe('75');
+    });
+  });
+
+  it('saves max saved entries on blur with a valid value', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('max-saved-entries-input'));
+    fireEvent.changeText(screen.getByTestId('max-saved-entries-input'), '800');
+    fireEvent(screen.getByTestId('max-saved-entries-input'), 'blur');
+    await waitFor(() => {
+      expect(mockSetMaxSavedEntries).toHaveBeenCalledWith(800);
+    });
+  });
+
+  it('saves low-token threshold on blur with a valid value', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('low-token-threshold-input'));
+    fireEvent.changeText(screen.getByTestId('low-token-threshold-input'), '75');
+    fireEvent(screen.getByTestId('low-token-threshold-input'), 'blur');
+    await waitFor(() => {
+      expect(mockSetLowTokenThreshold).toHaveBeenCalledWith(75);
+    });
+  });
+
+  it('reverts max saved entries to the current value on invalid input', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('max-saved-entries-input'));
+    fireEvent.changeText(screen.getByTestId('max-saved-entries-input'), 'abc');
+    fireEvent(screen.getByTestId('max-saved-entries-input'), 'blur');
+    await waitFor(() => {
+      expect(screen.getByTestId('max-saved-entries-input').props.value).toBe('500');
+    });
+    expect(mockSetMaxSavedEntries).not.toHaveBeenCalled();
+  });
+
+  it('reverts low-token threshold on out-of-range input', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('low-token-threshold-input'));
+    fireEvent.changeText(screen.getByTestId('low-token-threshold-input'), '0');
+    fireEvent(screen.getByTestId('low-token-threshold-input'), 'blur');
+    await waitFor(() => {
+      expect(screen.getByTestId('low-token-threshold-input').props.value).toBe('90');
+    });
+    expect(mockSetLowTokenThreshold).not.toHaveBeenCalled();
   });
 });
 

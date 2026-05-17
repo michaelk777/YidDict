@@ -8,7 +8,16 @@
 jest.mock('expo-sqlite');
 jest.mock('../db/database');
 
-import { getSourceOrder, setSourceOrderSlot, availableOptionsForSlot, SourceSlot } from '../db/settingsDb';
+import {
+  getSourceOrder,
+  setSourceOrderSlot,
+  availableOptionsForSlot,
+  getNumericSetting,
+  setNumericSetting,
+  getMaxSavedEntries,
+  getLowTokenThreshold,
+  SourceSlot,
+} from '../db/settingsDb';
 import { getDatabase } from '../db/database';
 
 const mockGetDatabase = getDatabase as jest.Mock;
@@ -78,6 +87,56 @@ describe('setSourceOrderSlot()', () => {
       expect.anything(),
       ['source_order_3', 'none']
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getNumericSetting / setNumericSetting
+// ---------------------------------------------------------------------------
+
+describe('getNumericSetting()', () => {
+  it('returns the stored integer value', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ max_saved_entries: '750' }));
+    const v = await getNumericSetting('max_saved_entries', 500);
+    expect(v).toBe(750);
+  });
+
+  it('returns the default when the key is missing', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    const v = await getNumericSetting('max_saved_entries', 500);
+    expect(v).toBe(500);
+  });
+
+  it('returns the default when the stored value is not a number', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ max_saved_entries: 'bad' }));
+    const v = await getNumericSetting('max_saved_entries', 500);
+    expect(v).toBe(500);
+  });
+});
+
+describe('setNumericSetting()', () => {
+  it('writes the value as a string with INSERT OR REPLACE', async () => {
+    const mockDb = makeMockDb();
+    mockGetDatabase.mockReturnValue(mockDb);
+    await setNumericSetting('max_saved_entries', 750);
+    expect(mockDb.runAsync).toHaveBeenCalledWith(
+      'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+      ['max_saved_entries', '750']
+    );
+  });
+});
+
+describe('getMaxSavedEntries()', () => {
+  it('defaults to 500 when the key is absent', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    expect(await getMaxSavedEntries()).toBe(500);
+  });
+});
+
+describe('getLowTokenThreshold()', () => {
+  it('defaults to 90 when the key is absent', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    expect(await getLowTokenThreshold()).toBe(90);
   });
 });
 

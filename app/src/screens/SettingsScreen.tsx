@@ -25,6 +25,10 @@ import {
   SOURCE_LABELS,
   SourceSlot,
   SlotIndex,
+  getMaxSavedEntries,
+  setMaxSavedEntries,
+  getLowTokenThreshold,
+  setLowTokenThreshold,
 } from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
@@ -52,7 +56,11 @@ export default function SettingsScreen() {
   const [sourceOrder, setSourceOrder] = useState<SourceSlot[]>(['finkel', 'verterbukh', 'google_translate']);
   const [pickerSlot, setPickerSlot] = useState<SlotIndex | null>(null);
 
-  // Load both credential state and source preferences on mount
+  // Numeric settings state
+  const [maxSavedEntries, setMaxSavedEntriesState] = useState(500);
+  const [lowTokenThreshold, setLowTokenThresholdState] = useState(90);
+
+  // Load all settings on mount
   useEffect(() => {
     getCredentials().then(creds => {
       if (creds) setSavedUsername(creds.username);
@@ -60,6 +68,8 @@ export default function SettingsScreen() {
     getSourceOrder()
       .then(order => setSourceOrder(order))
       .catch(() => { /* DB not ready — keep defaults */ });
+    getMaxSavedEntries().then(setMaxSavedEntriesState).catch(() => {});
+    getLowTokenThreshold().then(setLowTokenThresholdState).catch(() => {});
   }, []);
 
   const handleLogin = useCallback(async () => {
@@ -94,6 +104,16 @@ export default function SettingsScreen() {
     setStatusMessage(null);
   }, []);
 
+  const handleSaveMaxEntries = useCallback(async (value: number) => {
+    setMaxSavedEntriesState(value);
+    await setMaxSavedEntries(value).catch(() => {});
+  }, []);
+
+  const handleSaveLowTokenThreshold = useCallback(async (value: number) => {
+    setLowTokenThresholdState(value);
+    await setLowTokenThreshold(value).catch(() => {});
+  }, []);
+
   const handlePickerSelect = useCallback(async (value: SourceSlot) => {
     if (pickerSlot === null) return;
     const updated = [...sourceOrder] as SourceSlot[];
@@ -117,8 +137,8 @@ export default function SettingsScreen() {
       contentContainerStyle={s.scrollContent}
       testID="settings-root"
     >
-      {/* Search Preferences — active */}
-      <SectionHeader label="Search Preferences" theme={theme} />
+      {/* Search Source Order */}
+      <SectionHeader label="Search Source Order" theme={theme} />
       <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {([1, 2, 3] as SlotIndex[]).map(slot => (
           <SourceOrderRow
@@ -181,8 +201,25 @@ export default function SettingsScreen() {
         </Pressable>
       </Modal>
 
-      {/* Verterbukh Login — active */}
-      <SectionHeader label="Verterbukh Login" theme={theme} />
+      {/* Saved Entries */}
+      <SectionHeader label="Saved Entries" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <NumericSettingRow
+          label="Max saved entries"
+          value={maxSavedEntries}
+          min={10}
+          max={10000}
+          inputWidth={64}
+          onSave={handleSaveMaxEntries}
+          theme={theme}
+          s={s}
+          testID="max-saved-entries-input"
+          showDivider={false}
+        />
+      </View>
+
+      {/* Verterbukh Settings */}
+      <SectionHeader label="Verterbukh Settings" theme={theme} />
       <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {isLoggedIn ? (
           <>
@@ -240,6 +277,18 @@ export default function SettingsScreen() {
             {statusMessage}
           </Text>
         ) : null}
+        <NumericSettingRow
+          label="Low-token alert"
+          value={lowTokenThreshold}
+          suffix="%"
+          min={1}
+          max={99}
+          inputWidth={40}
+          onSave={handleSaveLowTokenThreshold}
+          theme={theme}
+          s={s}
+          testID="low-token-threshold-input"
+        />
       </View>
 
       {/* Placeholder sections */}
@@ -252,6 +301,65 @@ export default function SettingsScreen() {
       <SectionHeader label="Security" theme={theme} />
       <PlaceholderRow label="Security" theme={theme} />
     </ScrollView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Numeric setting row
+// ---------------------------------------------------------------------------
+
+interface NumericSettingRowProps {
+  label: string;
+  value: number;
+  suffix?: string;
+  min: number;
+  max: number;
+  inputWidth?: number;
+  onSave: (n: number) => void;
+  theme: ReturnType<typeof useTheme>['theme'];
+  s: ReturnType<typeof makeStyles>;
+  testID?: string;
+  showDivider?: boolean;
+}
+
+function NumericSettingRow({ label, value, suffix, min, max, inputWidth, onSave, theme, s, testID, showDivider = true }: NumericSettingRowProps) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const n = parseInt(text, 10);
+    if (!isNaN(n) && n >= min && n <= max) {
+      onSave(n);
+    } else {
+      setText(String(value));
+    }
+  };
+
+  return (
+    <View style={[s.numericRow, showDivider && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+      <Text style={[s.numericLabel, { color: theme.text }]}>{label}</Text>
+      <View style={s.numericRight}>
+        <TextInput
+          style={[s.numericInput, { color: theme.text, borderColor: theme.border }, inputWidth ? { width: inputWidth } : null]}
+          value={text}
+          onChangeText={setText}
+          onBlur={commit}
+          onSubmitEditing={commit}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          selectTextOnFocus
+          testID={testID}
+        />
+        {suffix ? (
+          <View style={s.numericSuffixWrap}>
+            <Text style={[s.numericSuffix, { color: theme.text }]}>{suffix}</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -339,7 +447,7 @@ function SectionHeader({ label, theme }: { label: string; theme: ReturnType<type
 }
 
 const sectionHeaderStyle: object = {
-  fontSize: 11,
+  fontSize: 14,
   fontWeight: '600',
   letterSpacing: 0.8,
   marginTop: 24,
@@ -422,6 +530,38 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     statusMessage: {
       fontSize: 13,
       paddingBottom: 6,
+    },
+    // Numeric setting row
+    numericRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+    },
+    numericLabel: {
+      fontSize: 15,
+      flex: 1,
+    },
+    numericRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    numericInput: {
+      width: 72,
+      height: 40,
+      borderWidth: 1,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      fontSize: 15,
+      textAlign: 'right',
+    },
+    numericSuffixWrap: {
+      height: 40,
+      justifyContent: 'center',
+    },
+    numericSuffix: {
+      fontSize: 15,
     },
     // Modal
     modalOverlay: {

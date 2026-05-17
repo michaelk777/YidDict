@@ -56,6 +56,7 @@ jest.mock('../context/SavedContext', () => ({
 
 jest.mock('../db/settingsDb', () => ({
   getSourceOrder: jest.fn(),
+  getLowTokenThreshold: jest.fn().mockResolvedValue(90),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 

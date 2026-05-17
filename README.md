@@ -6,13 +6,15 @@ A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English loo
 
 - Search Yiddish→English and English→Yiddish
 - Input in Hebrew script or YIVO romanization
-- Aggregates results from two authoritative sources:
-  - **Finkel's dictionary** — `cs.engr.uky.edu/~raphael/yiddish`
-  - **Verterbukh** — `verterbukh.org`
+- Aggregates results from three sources:
+  - **Finkel's dictionary** — `cs.engr.uky.edu/~raphael/yiddish` (free)
+  - **Verterbukh** — `verterbukh.org` (freemium)
+  - **Google Translate** (free fallback)
 - Offline access via local SQLite cache (default 90-day TTL, default max 1000 entries; both configurable in Settings)
-- Search history with Anki CSV export option for language learners
+- Save entries with one tap; export to Anki-compatible CSV or TSV (UTF-8 BOM, with Tags column)
+- Configurable source order, Verterbukh login, and low-token alert threshold in Settings
 - Light and dark mode
 
 ## Status
 
-In development — Phase 3 partially complete. Verterbukh auth, parser, configurable source order, and SearchScreen integration are done. Google Translate integration and zero-token handling remain before Phase 4 (History, Export).
+In development — Phases 1–5 complete. Settings polish and device testing in progress. Pre-release items: Finkel bare-text-node parser fix; Google Translate live integration tests.

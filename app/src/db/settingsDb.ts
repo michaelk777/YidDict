@@ -46,6 +46,34 @@ export async function setSourceOrderSlot(slot: SlotIndex, value: SourceSlot): Pr
 }
 
 // ---------------------------------------------------------------------------
+// Generic numeric settings
+// ---------------------------------------------------------------------------
+
+export async function getNumericSetting(key: string, defaultValue: number): Promise<number> {
+  console.log(`[YidDict] settingsDb: getNumericSetting key="${key}"`);
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', [key]
+  );
+  const parsed = parseInt(row?.value ?? '', 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+export async function setNumericSetting(key: string, value: number): Promise<void> {
+  console.log(`[YidDict] settingsDb: setNumericSetting key="${key}" value=${value}`);
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    [key, String(value)]
+  );
+}
+
+export const getMaxSavedEntries = (): Promise<number> => getNumericSetting('max_saved_entries', 500);
+export const setMaxSavedEntries = (v: number): Promise<void> => setNumericSetting('max_saved_entries', v);
+export const getLowTokenThreshold = (): Promise<number> => getNumericSetting('low_token_threshold', 90);
+export const setLowTokenThreshold = (v: number): Promise<void> => setNumericSetting('low_token_threshold', v);
+
+// ---------------------------------------------------------------------------
 // Helpers (pure — usable in UI logic without hitting the DB)
 // ---------------------------------------------------------------------------
 

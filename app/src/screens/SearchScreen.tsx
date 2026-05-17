@@ -22,7 +22,7 @@ import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold } from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -55,7 +55,7 @@ export default function SearchScreen() {
    * - used < total after exhaustion: clear flag (tokens available again).
    * - used / total > 90%: low-token warning.
    */
-  const processQuota = useCallback((quota: VerterbukQuota | null) => {
+  const processQuota = useCallback((quota: VerterbukQuota | null, threshold: number) => {
     if (!quota) return;
     setVerterbukQuota(quota);
     if (quota.used === quota.total) {
@@ -72,7 +72,7 @@ export default function SearchScreen() {
         verterbukExhausted.current = false;
         console.log('[YidDict] SearchScreen: Verterbukh tokens available again — resuming normally');
       }
-      if (quota.used / quota.total > 0.90) {
+      if (quota.used / quota.total > threshold) {
         Alert.alert(
           'Low Verterbukh Tokens',
           `You have used ${quota.used} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'}. Consider purchasing more tokens soon.`,
@@ -98,6 +98,9 @@ export default function SearchScreen() {
       const script = detectInputScript(trimmed);
       const isHebrew = script === 'hebrew';
       console.log(`[YidDict] SearchScreen: search initiated query="${trimmed}" script=${script}`);
+
+      const thresholdPct = await getLowTokenThreshold();
+      const threshold = thresholdPct / 100;
 
       const order = await getSourceOrder();
       const creds = await getCredentials();
@@ -144,7 +147,7 @@ export default function SearchScreen() {
         } else if (source === 'verterbukh') {
           const vResult = await lookupVerterbukh(trimmed);
           console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies), choices=${vResult.choices?.length ?? 0}`);
-          processQuota(vResult.quota);
+          processQuota(vResult.quota, threshold);
           if (vResult.entries.length > 0) {
             setEntries(vResult.entries);
             setResultSource('verterbukh');
@@ -195,10 +198,11 @@ export default function SearchScreen() {
     setOtherOptions(null);
     try {
       console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
+      const thresholdPct = await getLowTokenThreshold();
       const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma);
       setEntries(vResult.entries);
       setResultSource('verterbukh');
-      processQuota(vResult.quota);
+      processQuota(vResult.quota, thresholdPct / 100);
       if (vResult.entries.length > 0) {
         await saveToCache(trimmed, vResult.entries, 'verterbukh');
       }
