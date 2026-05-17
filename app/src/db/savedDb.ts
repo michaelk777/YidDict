@@ -146,7 +146,7 @@ export function buildFullGrammar(
   return partOfSpeech ?? grammaticalInfo ?? '';
 }
 
-const EXPORT_HEADER = ['Yiddish (Hebrew)', 'YIVO', 'English', 'Full Grammar', 'Source'];
+const EXPORT_HEADER = ['Yiddish', 'Transliteration', 'English', 'Grammar', 'Source', 'Tags'];
 
 function entryToColumns(e: SavedEntry): string[] {
   return [
@@ -155,6 +155,7 @@ function entryToColumns(e: SavedEntry): string[] {
     e.english ?? '',
     buildFullGrammar(e.partOfSpeech, e.grammaticalInfo),
     e.source,
+    'YidDict',
   ];
 }
 
@@ -169,7 +170,7 @@ export function generateCsv(entries: SavedEntry[]): string {
       .map(v => `"${v.replace(/"/g, '""')}"`)
       .join(',')
   );
-  return [header, ...rows].join('\n');
+  return '﻿' + [header, ...rows].join('\n');
 }
 
 /**
@@ -178,7 +179,7 @@ export function generateCsv(entries: SavedEntry[]): string {
 export function generateTsv(entries: SavedEntry[]): string {
   const header = EXPORT_HEADER.join('\t');
   const rows = entries.map(e => entryToColumns(e).join('\t'));
-  return [header, ...rows].join('\n');
+  return '﻿' + [header, ...rows].join('\n');
 }
 
 // ---------------------------------------------------------------------------

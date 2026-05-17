@@ -230,22 +230,22 @@ describe('SavedScreen — export', () => {
     jest.restoreAllMocks();
   });
 
-  it('shows a format picker when export is pressed with entries', async () => {
-    const mockAlert = jest.fn();
-    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+  it('shows a format picker when export is pressed with entries (iOS action sheet)', async () => {
+    const mockActionSheet = jest.fn();
+    jest.spyOn(require('react-native').ActionSheetIOS, 'showActionSheetWithOptions')
+      .mockImplementation(mockActionSheet);
 
     mockGetSavedEntries.mockResolvedValue(sampleEntries);
     renderScreen();
     await waitFor(() => screen.getAllByTestId('saved-entry-row'));
     fireEvent.press(screen.getByTestId('export-button'));
 
-    expect(mockAlert).toHaveBeenCalledWith(
-      'Export Format',
-      expect.any(String),
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'CSV' }),
-        expect.objectContaining({ text: 'TSV' }),
-      ])
+    expect(mockActionSheet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.arrayContaining(['CSV', 'TSV', 'Cancel']),
+        cancelButtonIndex: 0,
+      }),
+      expect.any(Function)
     );
     jest.restoreAllMocks();
   });

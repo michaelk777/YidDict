@@ -5,6 +5,8 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  ActionSheetIOS,
+  Platform,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
@@ -79,15 +81,25 @@ export default function SavedScreen() {
       Alert.alert('Nothing to Export', 'Save some entries first.');
       return;
     }
-    Alert.alert(
-      'Export Format',
-      'Choose a file format.',
-      [
-        { text: 'CSV', onPress: () => exportAs('csv') },
-        { text: 'TSV', onPress: () => exportAs('tsv') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Cancel', 'CSV', 'TSV'], cancelButtonIndex: 0 },
+        (index) => {
+          if (index === 1) exportAs('csv');
+          else if (index === 2) exportAs('tsv');
+        }
+      );
+    } else {
+      Alert.alert(
+        'Export Format',
+        'Choose a file format.',
+        [
+          { text: 'CSV', onPress: () => exportAs('csv') },
+          { text: 'TSV', onPress: () => exportAs('tsv') },
+        ],
+        { cancelable: true }
+      );
+    }
   }, [entries, exportAs]);
 
   const s = makeStyles(theme);
@@ -104,7 +116,7 @@ export default function SavedScreen() {
           testID="export-button"
         >
           <Ionicons name="share-outline" size={15} color={theme.textSecondary} />
-          <Text style={[s.actionBtnText, { color: theme.textSecondary }]}>Export CSV</Text>
+          <Text style={[s.actionBtnText, { color: theme.textSecondary }]}>Export</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.actionBtn, { borderColor: theme.border }]}

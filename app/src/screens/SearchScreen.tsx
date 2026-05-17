@@ -313,7 +313,7 @@ export default function SearchScreen() {
             ) : null}
             {fromCache ? (
               <View style={[s.badge, s.badgeCached]}>
-                <Text style={s.badgeText}>cached</Text>
+                <Text style={s.badgeText}>Cached</Text>
               </View>
             ) : null}
           </View>

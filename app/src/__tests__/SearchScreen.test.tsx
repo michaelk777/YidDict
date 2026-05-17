@@ -322,7 +322,7 @@ describe('SearchScreen — results from network', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => screen.getAllByTestId('entry-card'));
-    expect(screen.queryByText('cached')).toBeNull();
+    expect(screen.queryByText('Cached')).toBeNull();
   });
 });
 
@@ -337,7 +337,7 @@ describe('SearchScreen — cache hit', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('cached')).toBeTruthy();
+      expect(screen.getByText('Cached')).toBeTruthy();
     });
   });
 

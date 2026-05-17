@@ -251,10 +251,12 @@ describe('generateCsv', () => {
   it('includes a header row', () => {
     const csv = generateCsv([]);
     const firstLine = csv.split('\n')[0];
-    expect(firstLine).toContain('Yiddish (Hebrew)');
+    expect(firstLine).toContain('Yiddish');
+    expect(firstLine).toContain('Transliteration');
     expect(firstLine).toContain('English');
-    expect(firstLine).toContain('Full Grammar');
+    expect(firstLine).toContain('Grammar');
     expect(firstLine).toContain('Source');
+    expect(firstLine).toContain('Tags');
   });
 
   it('includes one data row per entry', () => {
@@ -266,7 +268,13 @@ describe('generateCsv', () => {
   it('comma-separates values', () => {
     const csv = generateCsv([savedEntry]);
     const dataLine = csv.split('\n')[1];
-    expect(dataLine.split(',').length).toBeGreaterThanOrEqual(5);
+    expect(dataLine.split(',').length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('includes YidDict in the Tags column', () => {
+    const csv = generateCsv([savedEntry]);
+    const dataLine = csv.split('\n')[1];
+    expect(dataLine).toContain('YidDict');
   });
 
   it('quotes values to handle commas in content', () => {
@@ -290,19 +298,27 @@ describe('generateTsv', () => {
   it('includes a header row', () => {
     const tsv = generateTsv([]);
     const firstLine = tsv.split('\n')[0];
-    expect(firstLine).toContain('Yiddish (Hebrew)');
-    expect(firstLine).toContain('Full Grammar');
+    expect(firstLine).toContain('Yiddish');
+    expect(firstLine).toContain('Transliteration');
+    expect(firstLine).toContain('Grammar');
+    expect(firstLine).toContain('Tags');
   });
 
   it('tab-separates values', () => {
     const tsv = generateTsv([savedEntry]);
     const dataLine = tsv.split('\n')[1];
-    expect(dataLine.split('\t').length).toBeGreaterThanOrEqual(5);
+    expect(dataLine.split('\t').length).toBeGreaterThanOrEqual(6);
   });
 
   it('includes one data row per entry', () => {
     const tsv = generateTsv([savedEntry]);
     const lines = tsv.split('\n');
     expect(lines.length).toBe(2); // header + 1 data row
+  });
+
+  it('includes YidDict in the Tags column', () => {
+    const tsv = generateTsv([savedEntry]);
+    const dataLine = tsv.split('\n')[1];
+    expect(dataLine).toContain('YidDict');
   });
 });
