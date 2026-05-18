@@ -148,6 +148,8 @@ function collectEntries(
         : null;
 
     out.push({
+      source: 'finkel',
+      fromCache: false,
       yiddishRomanized,
       yiddishHebrew,
       english,

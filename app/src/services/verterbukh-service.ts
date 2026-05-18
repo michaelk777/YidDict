@@ -197,5 +197,5 @@ function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
     }
   }
 
-  return { yiddishHebrew, yiddishRomanized, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish, isPhrase: false };
+  return { source: 'verterbukh', fromCache: false, yiddishHebrew, yiddishRomanized, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish, isPhrase: false };
 }

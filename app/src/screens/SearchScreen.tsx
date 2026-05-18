@@ -22,7 +22,7 @@ import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources } from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -101,80 +101,86 @@ export default function SearchScreen() {
 
       const thresholdPct = await getLowTokenThreshold();
       const threshold = thresholdPct / 100;
+      const cacheTtl = await getCacheTtlDays();
+      const useAllSources = await getUseAllSources();
 
       const order = await getSourceOrder();
       const creds = await getCredentials();
       const verterbukhhLoggedIn = creds !== null;
       const notes: string[] = [];
 
-      for (const slot of order) {
-        if (slot === 'none') continue;
-        if (slot === 'verterbukh' && !verterbukhhLoggedIn) {
-          console.log('[YidDict] SearchScreen: skipping Verterbukh — not logged in');
-          continue;
-        }
-
-        if (slot === 'verterbukh' && verterbukExhausted.current) {
-          searchesSinceExhaustion.current = 0;
-          console.log('[YidDict] SearchScreen: rechecking Verterbukh after exhaustion');
-        }
-
-        const source = slot as DictSource;
-
-        // Cache check — return immediately if a fresh cached result exists
-        const cached = await getCachedEntries(trimmed, source);
+      // Helper: look up a single source and return its entries (cache-first).
+      // Each returned entry has fromCache set on the entry itself.
+      const lookupSource = async (source: DictSource): Promise<DictEntry[]> => {
+        const cached = await getCachedEntries(trimmed, source, cacheTtl);
         if (cached && cached.length > 0) {
           console.log(`[YidDict] SearchScreen: serving ${source} results from cache`);
-          setEntries(cached);
-          setResultSource(source);
-          setFromCache(true);
-          if (notes.length > 0) setFallbackNote(notes.join(' · '));
-          return;
+          return cached; // rowToEntry already sets fromCache: true
         }
-
-        // Live lookup
         if (source === 'finkel') {
           const results = await lookupFinkel(trimmed, isHebrew);
           console.log(`[YidDict] SearchScreen: Finkel returned ${results.length} result(s)`);
-          if (results.length > 0) {
-            setEntries(results);
-            setResultSource('finkel');
-            if (notes.length > 0) setFallbackNote(notes.join(' · '));
-            await saveToCache(trimmed, results, 'finkel');
-            return;
-          }
-          notes.push(`No results from ${SOURCE_LABELS.finkel}`);
-        } else if (source === 'verterbukh') {
+          if (results.length > 0) await saveToCache(trimmed, results, 'finkel');
+          return results;
+        }
+        if (source === 'verterbukh') {
           const vResult = await lookupVerterbukh(trimmed);
-          console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies), choices=${vResult.choices?.length ?? 0}`);
+          console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies)`);
           processQuota(vResult.quota, threshold);
           if (vResult.entries.length > 0) {
-            setEntries(vResult.entries);
-            setResultSource('verterbukh');
-            if (vResult.choices && vResult.choices.length > 0) {
-              setOtherOptions(vResult.choices);
-            }
-            if (notes.length > 0) setFallbackNote(notes.join(' · '));
+            if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
             await saveToCache(trimmed, vResult.entries, 'verterbukh');
-            return;
           }
-          notes.push(`No results from ${SOURCE_LABELS.verterbukh}`);
-        } else if (source === 'google_translate') {
-          const gtResults = await lookupGoogleTranslate(trimmed, isHebrew);
-          console.log(`[YidDict] SearchScreen: Google Translate returned ${gtResults.length} result(s)`);
-          if (gtResults.length > 0) {
-            setEntries(gtResults);
-            setResultSource('google_translate');
-            if (notes.length > 0) setFallbackNote(notes.join(' · '));
-            await saveToCache(trimmed, gtResults, 'google_translate');
-            return;
-          }
-          notes.push(`No results from ${SOURCE_LABELS.google_translate}`);
+          return vResult.entries;
         }
-        // No results from this source — fall through to the next slot
-      }
+        if (source === 'google_translate') {
+          const results = await lookupGoogleTranslate(trimmed, isHebrew);
+          console.log(`[YidDict] SearchScreen: Google Translate returned ${results.length} result(s)`);
+          if (results.length > 0) await saveToCache(trimmed, results, 'google_translate');
+          return results;
+        }
+        return [];
+      };
 
-      console.log('[YidDict] SearchScreen: all sources exhausted — no results');
+      const eligibleSources = order
+        .filter(slot => slot !== 'none')
+        .filter(slot => slot !== 'verterbukh' || verterbukhhLoggedIn)
+        .map(slot => {
+          if (slot === 'verterbukh' && verterbukExhausted.current) {
+            searchesSinceExhaustion.current = 0;
+          }
+          return slot as DictSource;
+        });
+
+      if (useAllSources) {
+        // Query all eligible sources and combine results
+        const allEntries: DictEntry[] = [];
+        for (const source of eligibleSources) {
+          const results = await lookupSource(source);
+          allEntries.push(...results);
+          if (results.length === 0) notes.push(`No results from ${SOURCE_LABELS[source]}`);
+        }
+        if (allEntries.length > 0) {
+          setEntries(allEntries);
+          setResultSource(null);
+        }
+        if (notes.length > 0) setFallbackNote(notes.join(' · '));
+        console.log(`[YidDict] SearchScreen: use-all-sources returned ${allEntries.length} total entries`);
+      } else {
+        // Stop at the first source with results
+        for (const source of eligibleSources) {
+          const results = await lookupSource(source);
+          if (results.length > 0) {
+            setEntries(results);
+            setResultSource(source);
+            setFromCache(results[0].fromCache);
+            if (notes.length > 0) setFallbackNote(notes.join(' · '));
+            return;
+          }
+          notes.push(`No results from ${SOURCE_LABELS[source]}`);
+        }
+        console.log('[YidDict] SearchScreen: all sources exhausted — no results');
+      }
     } catch (err) {
       setError('Could not reach the dictionary. Check your connection and try again.');
       console.error('[YidDict] SearchScreen lookup error:', err);
@@ -224,17 +230,26 @@ export default function SearchScreen() {
   }, [query, savedKeySet, refreshSaved]);
 
   const handleSaveAll = useCallback(async () => {
-    if (!resultSource || entries.length === 0) return;
+    if (entries.length === 0) return;
     const isAllSaved = entries.every(e =>
-      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${resultSource}`)
+      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${e.source}`)
     );
-    if (isAllSaved) {
-      await deleteEntriesByKey(entries, resultSource);
-    } else {
-      await saveEntries(query.trim(), entries, resultSource);
+    // Group entries by their own source field
+    const bySource = new Map<DictSource, DictEntry[]>();
+    for (const e of entries) {
+      const src = e.source as DictSource;
+      if (!bySource.has(src)) bySource.set(src, []);
+      bySource.get(src)!.push(e);
+    }
+    for (const [src, srcEntries] of bySource) {
+      if (isAllSaved) {
+        await deleteEntriesByKey(srcEntries, src);
+      } else {
+        await saveEntries(query.trim(), srcEntries, src);
+      }
     }
     await refreshSaved();
-  }, [query, entries, resultSource, savedKeySet, refreshSaved]);
+  }, [query, entries, savedKeySet, refreshSaved]);
 
   const handleClear = useCallback(() => {
     setQuery('');
@@ -250,17 +265,12 @@ export default function SearchScreen() {
 
   const allSaved =
     entries.length > 0 &&
-    resultSource !== null &&
     entries.every(e =>
-      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${resultSource}`)
+      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${e.source}`)
     );
 
   const s = makeStyles(theme);
 
-  const sourceBadgeStyle =
-    resultSource === 'verterbukh' ? s.badgeVerterbukh
-    : resultSource === 'google_translate' ? s.badgeGoogle
-    : s.badgeFinkel;
 
   return (
     <KeyboardAvoidingView
@@ -304,22 +314,12 @@ export default function SearchScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Source + cache badges */}
-        {hasSearched && !isLoading && resultSource ? (
+        {/* Verterbukh quota badge */}
+        {hasSearched && !isLoading && resultSource === 'verterbukh' && verterbukQuota ? (
           <View style={s.badgeRow}>
-            <View style={[s.badge, sourceBadgeStyle]}>
-              <Text style={s.badgeText}>{SOURCE_LABELS[resultSource]}</Text>
+            <View style={[s.badge, s.badgeVerterbukh]} testID="quota-badge">
+              <Text style={s.badgeText}>{verterbukQuota.used}/{verterbukQuota.total} tokens</Text>
             </View>
-            {resultSource === 'verterbukh' && verterbukQuota ? (
-              <View style={[s.badge, s.badgeQuota]} testID="quota-badge">
-                <Text style={s.badgeText}>{verterbukQuota.used}/{verterbukQuota.total}</Text>
-              </View>
-            ) : null}
-            {fromCache ? (
-              <View style={[s.badge, s.badgeCached]}>
-                <Text style={s.badgeText}>Cached</Text>
-              </View>
-            ) : null}
           </View>
         ) : null}
 
@@ -352,18 +352,18 @@ export default function SearchScreen() {
             data={entries}
             keyExtractor={(_, i) => String(i)}
             renderItem={({ item }) => {
-              const key = `${item.yiddishHebrew ?? ''}|${item.english ?? ''}|${resultSource ?? ''}`;
+              const key = `${item.yiddishHebrew ?? ''}|${item.english ?? ''}|${item.source}`;
               return (
                 <EntryRow
                   entry={item}
                   theme={theme}
                   sourceColor={
-                    resultSource === 'verterbukh' ? theme.sourceVerterbukh
-                    : resultSource === 'google_translate' ? theme.sourceGoogle
+                    item.source === 'verterbukh' ? theme.sourceVerterbukh
+                    : item.source === 'google_translate' ? theme.sourceGoogle
                     : theme.sourceFinkel
                   }
                   isSaved={savedKeySet.has(key)}
-                  onSave={() => resultSource && handleSaveEntry(item, resultSource)}
+                  onSave={() => handleSaveEntry(item, item.source)}
                 />
               );
             }}
@@ -511,6 +511,16 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
           {entry.english}
         </Text>
       ) : null}
+
+      {/* Source + cache labels */}
+      <View style={s.entryMeta}>
+        <Text style={[s.entrySourceLabel, { color: sourceColor }]}>
+          {SOURCE_LABELS[entry.source]}
+        </Text>
+        {entry.fromCache ? (
+          <Text style={[s.entryCachedLabel, { color: theme.textSecondary }]}>Cached</Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -704,6 +714,20 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     definition: {
       fontSize: 15,
+    },
+    entryMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 6,
+    },
+    entrySourceLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    entryCachedLabel: {
+      fontSize: 11,
+      fontStyle: 'italic',
     },
   });
 }

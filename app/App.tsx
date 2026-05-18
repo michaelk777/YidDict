@@ -6,17 +6,20 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { SavedProvider } from './src/context/SavedContext';
 import { initDatabase } from './src/db/database';
+import { getThemePreference } from './src/db/settingsDb';
 import AppNavigator from './src/navigation/AppNavigator';
 
 function Root() {
   const [dbReady, setDbReady] = useState(false);
-  const { colorScheme, theme } = useTheme();
+  const { colorScheme, theme, setColorScheme } = useTheme();
 
   useEffect(() => {
     console.log('[YidDict] App: Root mounted, starting DB init');
     initDatabase()
-      .then(() => {
+      .then(async () => {
         console.log('[YidDict] App: DB init succeeded, rendering navigator');
+        const saved = await getThemePreference();
+        setColorScheme(saved);
         setDbReady(true);
       })
       .catch((err: unknown) => {

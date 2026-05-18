@@ -41,7 +41,7 @@ describe('ThemeContext', () => {
     renderWithTheme();
     expect(screen.getByTestId('override').props.children).toBe('system');
     expect(screen.getByTestId('colorScheme').props.children).toBe('light');
-    expect(screen.getByTestId('bg').props.children).toBe('#FFFFFF');
+    expect(screen.getByTestId('bg').props.children).toBe('#FDFAF3');
   });
 
   it('reflects dark scheme when device is dark and override is system', () => {
@@ -57,7 +57,7 @@ describe('ThemeContext', () => {
     act(() => screen.getByTestId('setLight').props.onPress());
     expect(screen.getByTestId('colorScheme').props.children).toBe('light');
     expect(screen.getByTestId('override').props.children).toBe('light');
-    expect(screen.getByTestId('bg').props.children).toBe('#FFFFFF');
+    expect(screen.getByTestId('bg').props.children).toBe('#FDFAF3');
   });
 
   it('setColorScheme("dark") forces dark regardless of system', () => {
@@ -139,12 +139,12 @@ describe('ThemeContext', () => {
       );
     }
     render(<ThemeProvider><FullConsumer /></ThemeProvider>);
-    expect(screen.getByTestId('t-background').props.children).toBe('#FFFFFF');
-    expect(screen.getByTestId('t-surface').props.children).toBe('#F5F5F5');
+    expect(screen.getByTestId('t-background').props.children).toBe('#FDFAF3');
+    expect(screen.getByTestId('t-surface').props.children).toBe('#F5F0E3');
     expect(screen.getByTestId('t-text').props.children).toBe('#1A1A1A');
     expect(screen.getByTestId('t-textSecondary').props.children).toBe('#6B6B6B');
     expect(screen.getByTestId('t-primary').props.children).toBe('#0D9488');
-    expect(screen.getByTestId('t-border').props.children).toBe('#E0E0E0');
+    expect(screen.getByTestId('t-border').props.children).toBe('#E8DFC8');
     expect(screen.getByTestId('t-sourceFinkel').props.children).toBe('#2563EB');
     expect(screen.getByTestId('t-sourceVerterbukh').props.children).toBe('#DC2626');
     expect(screen.getByTestId('t-sourceGoogle').props.children).toBe('#16A34A');

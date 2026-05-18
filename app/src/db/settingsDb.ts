@@ -72,6 +72,41 @@ export const getMaxSavedEntries = (): Promise<number> => getNumericSetting('max_
 export const setMaxSavedEntries = (v: number): Promise<void> => setNumericSetting('max_saved_entries', v);
 export const getLowTokenThreshold = (): Promise<number> => getNumericSetting('low_token_threshold', 90);
 export const setLowTokenThreshold = (v: number): Promise<void> => setNumericSetting('low_token_threshold', v);
+export const getCacheTtlDays = (): Promise<number> => getNumericSetting('cache_ttl_days', 90);
+export const setCacheTtlDays = (v: number): Promise<void> => setNumericSetting('cache_ttl_days', v);
+
+export async function getUseAllSources(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['use_all_sources']
+  );
+  return row?.value === '1';
+}
+
+export async function setUseAllSources(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['use_all_sources', v ? '1' : '0']
+  );
+}
+
+export async function getThemePreference(): Promise<'light' | 'dark' | 'system'> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['theme']
+  );
+  const v = row?.value;
+  return v === 'light' || v === 'dark' ? v : 'system';
+}
+
+export async function setThemePreference(v: 'light' | 'dark' | 'system'): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['theme', v]
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers (pure — usable in UI logic without hitting the DB)

@@ -36,6 +36,11 @@ jest.mock('../db/settingsDb', () => ({
   setMaxSavedEntries: jest.fn(),
   getLowTokenThreshold: jest.fn(),
   setLowTokenThreshold: jest.fn(),
+  getCacheTtlDays: jest.fn(),
+  setCacheTtlDays: jest.fn(),
+  setThemePreference: jest.fn(),
+  getUseAllSources: jest.fn(),
+  setUseAllSources: jest.fn(),
 }));
 
 import {
@@ -52,6 +57,11 @@ import {
   setMaxSavedEntries,
   getLowTokenThreshold,
   setLowTokenThreshold,
+  getCacheTtlDays,
+  setCacheTtlDays,
+  setThemePreference,
+  getUseAllSources,
+  setUseAllSources,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
@@ -64,6 +74,9 @@ const mockGetMaxSavedEntries = getMaxSavedEntries as jest.Mock;
 const mockSetMaxSavedEntries = setMaxSavedEntries as jest.Mock;
 const mockGetLowTokenThreshold = getLowTokenThreshold as jest.Mock;
 const mockSetLowTokenThreshold = setLowTokenThreshold as jest.Mock;
+const mockGetCacheTtlDays = getCacheTtlDays as jest.Mock;
+const mockSetCacheTtlDays = setCacheTtlDays as jest.Mock;
+const mockSetThemePreference = setThemePreference as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,6 +106,11 @@ beforeEach(() => {
   mockSetMaxSavedEntries.mockResolvedValue(undefined);
   mockGetLowTokenThreshold.mockResolvedValue(90);
   mockSetLowTokenThreshold.mockResolvedValue(undefined);
+  mockGetCacheTtlDays.mockResolvedValue(90);
+  mockSetCacheTtlDays.mockResolvedValue(undefined);
+  mockSetThemePreference.mockResolvedValue(undefined);
+  (getUseAllSources as jest.Mock).mockResolvedValue(false);
+  (setUseAllSources as jest.Mock).mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -112,11 +130,11 @@ describe('SettingsScreen — section headers', () => {
     });
   });
 
-  it('shows "Coming soon" on the three remaining placeholder rows', async () => {
+  it('shows "Coming soon" on the two remaining placeholder rows', async () => {
     renderScreen();
     await waitFor(() => {
       const comingSoon = screen.getAllByText(/Coming soon/);
-      expect(comingSoon.length).toBe(3);
+      expect(comingSoon.length).toBe(2);
     });
   });
 });
@@ -278,6 +296,35 @@ describe('SettingsScreen — numeric settings', () => {
     });
     expect(mockSetLowTokenThreshold).not.toHaveBeenCalled();
   });
+
+  it('shows the loaded cache TTL value', async () => {
+    mockGetCacheTtlDays.mockResolvedValue(30);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('cache-ttl-days-input').props.value).toBe('30');
+    });
+  });
+
+  it('saves cache TTL on blur with a valid value', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '180');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => {
+      expect(mockSetCacheTtlDays).toHaveBeenCalledWith(180);
+    });
+  });
+
+  it('reverts cache TTL on out-of-range input', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '366');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => {
+      expect(screen.getByTestId('cache-ttl-days-input').props.value).toBe('90');
+    });
+    expect(mockSetCacheTtlDays).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -420,6 +467,39 @@ describe('SettingsScreen — logout flow', () => {
       expect(mockDeleteCredentials).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('login-button')).toBeTruthy();
       expect(screen.queryByTestId('logout-button')).toBeNull();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Appearance — theme selector
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — appearance', () => {
+  it('renders all three theme options', async () => {
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('theme-option-system')).toBeTruthy();
+      expect(screen.getByTestId('theme-option-dark')).toBeTruthy();
+      expect(screen.getByTestId('theme-option-light')).toBeTruthy();
+    });
+  });
+
+  it('saves dark theme preference when dark option is pressed', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('theme-option-dark'));
+    fireEvent.press(screen.getByTestId('theme-option-dark'));
+    await waitFor(() => {
+      expect(mockSetThemePreference).toHaveBeenCalledWith('dark');
+    });
+  });
+
+  it('saves light theme preference when light option is pressed', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('theme-option-light'));
+    fireEvent.press(screen.getByTestId('theme-option-light'));
+    await waitFor(() => {
+      expect(mockSetThemePreference).toHaveBeenCalledWith('light');
     });
   });
 });

@@ -30,6 +30,8 @@ export async function lookupGoogleTranslate(
     const result = await fetchTranslation(query, 'yi', 'en');
     if (!result || !result.translatedText || result.translatedText === query) return [];
     return [{
+      source: 'google_translate',
+      fromCache: false,
       yiddishHebrew: query,
       yiddishRomanized: null,
       english: result.translatedText,
@@ -43,6 +45,8 @@ export async function lookupGoogleTranslate(
     const result = await fetchTranslation(query, 'en', 'yi');
     if (!result || !result.translatedText || result.translatedText === query) return [];
     return [{
+      source: 'google_translate',
+      fromCache: false,
       yiddishHebrew: result.translatedText,
       yiddishRomanized: null,
       english: query,

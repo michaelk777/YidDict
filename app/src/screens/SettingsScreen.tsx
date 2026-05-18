@@ -9,9 +9,11 @@ import {
   Modal,
   Pressable,
   Alert,
+  Switch,
   StyleSheet,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import {
   getCredentials,
   saveCredentials,
@@ -29,6 +31,11 @@ import {
   setMaxSavedEntries,
   getLowTokenThreshold,
   setLowTokenThreshold,
+  getCacheTtlDays,
+  setCacheTtlDays,
+  setThemePreference,
+  getUseAllSources,
+  setUseAllSources,
 } from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
@@ -42,7 +49,7 @@ type LoginStatus = 'idle' | 'loading' | 'success' | 'error';
 // ---------------------------------------------------------------------------
 
 export default function SettingsScreen() {
-  const { theme } = useTheme();
+  const { theme, schemeOverride, setColorScheme } = useTheme();
   const s = makeStyles(theme);
 
   // Verterbukh login state
@@ -55,10 +62,12 @@ export default function SettingsScreen() {
   // Source order state
   const [sourceOrder, setSourceOrder] = useState<SourceSlot[]>(['finkel', 'verterbukh', 'google_translate']);
   const [pickerSlot, setPickerSlot] = useState<SlotIndex | null>(null);
+  const [useAllSources, setUseAllSourcesState] = useState(false);
 
   // Numeric settings state
   const [maxSavedEntries, setMaxSavedEntriesState] = useState(500);
   const [lowTokenThreshold, setLowTokenThresholdState] = useState(90);
+  const [cacheTtlDays, setCacheTtlDaysState] = useState(90);
 
   // Load all settings on mount
   useEffect(() => {
@@ -70,6 +79,8 @@ export default function SettingsScreen() {
       .catch(() => { /* DB not ready — keep defaults */ });
     getMaxSavedEntries().then(setMaxSavedEntriesState).catch(() => {});
     getLowTokenThreshold().then(setLowTokenThresholdState).catch(() => {});
+    getCacheTtlDays().then(setCacheTtlDaysState).catch(() => {});
+    getUseAllSources().then(setUseAllSourcesState).catch(() => {});
   }, []);
 
   const handleLogin = useCallback(async () => {
@@ -114,6 +125,21 @@ export default function SettingsScreen() {
     await setLowTokenThreshold(value).catch(() => {});
   }, []);
 
+  const handleSaveCacheTtlDays = useCallback(async (value: number) => {
+    setCacheTtlDaysState(value);
+    await setCacheTtlDays(value).catch(() => {});
+  }, []);
+
+  const handleToggleUseAllSources = useCallback(async (value: boolean) => {
+    setUseAllSourcesState(value);
+    await setUseAllSources(value).catch(() => {});
+  }, []);
+
+  const handleSelectTheme = useCallback(async (value: 'system' | 'light' | 'dark') => {
+    setColorScheme(value);
+    await setThemePreference(value).catch(() => {});
+  }, [setColorScheme]);
+
   const handlePickerSelect = useCallback(async (value: SourceSlot) => {
     if (pickerSlot === null) return;
     const updated = [...sourceOrder] as SourceSlot[];
@@ -149,6 +175,16 @@ export default function SettingsScreen() {
             onPress={() => setPickerSlot(slot)}
           />
         ))}
+        <View style={[s.toggleRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+          <Text style={[s.toggleLabel, { color: theme.text }]}>Use all sources</Text>
+          <Switch
+            value={useAllSources}
+            onValueChange={handleToggleUseAllSources}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="use-all-sources-toggle"
+          />
+        </View>
       </View>
 
       {/* Option picker modal */}
@@ -218,6 +254,24 @@ export default function SettingsScreen() {
         />
       </View>
 
+      {/* Cache */}
+      <SectionHeader label="Cache" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <NumericSettingRow
+          label="Cache duration"
+          value={cacheTtlDays}
+          suffix="days"
+          min={1}
+          max={365}
+          inputWidth={48}
+          onSave={handleSaveCacheTtlDays}
+          theme={theme}
+          s={s}
+          testID="cache-ttl-days-input"
+          showDivider={false}
+        />
+      </View>
+
       {/* Verterbukh Settings */}
       <SectionHeader label="Verterbukh Settings" theme={theme} />
       <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -278,7 +332,7 @@ export default function SettingsScreen() {
           </Text>
         ) : null}
         <NumericSettingRow
-          label="Low-token alert"
+          label="Token usage alert"
           value={lowTokenThreshold}
           suffix="%"
           min={1}
@@ -291,9 +345,29 @@ export default function SettingsScreen() {
         />
       </View>
 
-      {/* Placeholder sections */}
+      {/* Appearance */}
       <SectionHeader label="Appearance" theme={theme} />
-      <PlaceholderRow label="Appearance" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {([
+          { value: 'system', label: 'System default' },
+          { value: 'dark',   label: 'Dark' },
+          { value: 'light',  label: 'Light' },
+        ] as { value: 'system' | 'light' | 'dark'; label: string }[]).map(({ value, label }, i) => (
+          <TouchableOpacity
+            key={value}
+            style={[s.themeRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}
+            onPress={() => handleSelectTheme(value)}
+            testID={`theme-option-${value}`}
+          >
+            <Text style={[s.themeRowLabel, { color: theme.text }]}>{label}</Text>
+            <Ionicons
+              name={schemeOverride === value ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={schemeOverride === value ? theme.primary : theme.textSecondary}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <SectionHeader label="Language" theme={theme} />
       <PlaceholderRow label="Language" theme={theme} />
@@ -340,7 +414,10 @@ function NumericSettingRow({ label, value, suffix, min, max, inputWidth, onSave,
 
   return (
     <View style={[s.numericRow, showDivider && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
-      <Text style={[s.numericLabel, { color: theme.text }]}>{label}</Text>
+      <View style={s.numericLabelWrap}>
+        <Text style={[s.numericLabel, { color: theme.text }]}>{label}</Text>
+        <Text style={[s.numericHint, { color: theme.textSecondary }]}>{min.toLocaleString()} – {max.toLocaleString()}</Text>
+      </View>
       <View style={s.numericRight}>
         <TextInput
           style={[s.numericInput, { color: theme.text, borderColor: theme.border }, inputWidth ? { width: inputWidth } : null]}
@@ -538,9 +615,15 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       justifyContent: 'space-between',
       paddingVertical: 10,
     },
+    numericLabelWrap: {
+      flex: 1,
+    },
     numericLabel: {
       fontSize: 15,
-      flex: 1,
+    },
+    numericHint: {
+      fontSize: 12,
+      marginTop: 2,
     },
     numericRight: {
       flexDirection: 'row',
@@ -561,6 +644,26 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       justifyContent: 'center',
     },
     numericSuffix: {
+      fontSize: 15,
+    },
+    // Toggle row (use all sources)
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+    },
+    toggleLabel: {
+      fontSize: 15,
+    },
+    // Theme selector
+    themeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 13,
+    },
+    themeRowLabel: {
       fontSize: 15,
     },
     // Modal

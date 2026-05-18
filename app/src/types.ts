@@ -11,6 +11,8 @@
  * they are available on live lookups only.
  */
 export interface DictEntry {
+  source: 'finkel' | 'verterbukh' | 'google_translate';
+  fromCache: boolean;
   yiddishHebrew: string | null;
   yiddishRomanized: string | null;
   english: string | null;

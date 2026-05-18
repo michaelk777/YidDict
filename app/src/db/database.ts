@@ -67,6 +67,7 @@ export async function initDatabase(): Promise<void> {
     ['theme', 'system'],
     ['cache_ttl_days', '90'],
     ['max_cache_entries', '1000'],
+    ['use_all_sources', '0'],
   ];
 
   console.log('[YidDict] database: seeding default settings');

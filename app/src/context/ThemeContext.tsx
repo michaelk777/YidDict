@@ -14,12 +14,12 @@ export interface Theme {
 }
 
 export const lightTheme: Theme = {
-  background: '#FFFFFF',
-  surface: '#F5F5F5',
+  background: '#FDFAF3',
+  surface: '#F5F0E3',
   text: '#1A1A1A',
   textSecondary: '#6B6B6B',
   primary: '#0D9488',
-  border: '#E0E0E0',
+  border: '#E8DFC8',
   sourceFinkel: '#2563EB',
   sourceVerterbukh: '#DC2626',
   sourceGoogle: '#16A34A',
@@ -49,9 +49,9 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children, initialScheme = 'system' }: { children: React.ReactNode; initialScheme?: ColorSchemeOverride }) {
   const systemScheme = useColorScheme() ?? 'light';
-  const [schemeOverride, setSchemeOverride] = useState<ColorSchemeOverride>('system');
+  const [schemeOverride, setSchemeOverride] = useState<ColorSchemeOverride>(initialScheme);
 
   const colorScheme: 'light' | 'dark' =
     schemeOverride === 'system' ? systemScheme : schemeOverride;

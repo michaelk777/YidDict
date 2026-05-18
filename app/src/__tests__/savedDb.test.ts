@@ -20,6 +20,8 @@ import { DictEntry } from '../types';
 const mockGetDatabase = getDatabase as jest.Mock;
 
 const sampleEntry: DictEntry = {
+  source: 'finkel',
+  fromCache: false,
   yiddishRomanized: 'sheyn',
   yiddishHebrew: 'שיין',
   english: 'pretty',

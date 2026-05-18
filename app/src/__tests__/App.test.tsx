@@ -30,6 +30,9 @@ jest.mock('expo-sqlite');
 jest.mock('../db/database', () => ({
   initDatabase: jest.fn(),
 }));
+jest.mock('../db/settingsDb', () => ({
+  getThemePreference: jest.fn().mockResolvedValue('system'),
+}));
 
 // SavedProvider is mounted after DB init — stub it so it doesn't call getSavedEntries
 jest.mock('../context/SavedContext', () => ({
@@ -52,7 +55,7 @@ describe('App', () => {
     expect(screen.UNSAFE_getAllByType(ActivityIndicator).length).toBeGreaterThan(0);
   });
 
-  it('loading view background uses theme.background (light = #FFFFFF)', () => {
+  it('loading view background uses theme.background (light = #FDFAF3)', () => {
     mockInitDatabase.mockReturnValue(new Promise(() => {}));
     const { View } = require('react-native');
     render(<App />);
@@ -62,7 +65,7 @@ describe('App', () => {
     const loadingView = spinner.parent;
     const styles: object[] = loadingView?.props?.style ?? [];
     const flat = Object.assign({}, ...styles);
-    expect(flat.backgroundColor).toBe('#FFFFFF');
+    expect(flat.backgroundColor).toBe('#FDFAF3');
   });
 
   it('loading spinner color uses theme.primary', () => {

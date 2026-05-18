@@ -103,6 +103,8 @@ async function trimCache(maxEntries: number): Promise<void> {
 
 function rowToEntry(row: CachedResultRow): DictEntry {
   return {
+    source: row.source as DictEntry['source'],
+    fromCache: true,
     yiddishRomanized: row.yiddish_romanized,
     yiddishHebrew: row.yiddish_hebrew,
     english: row.english,

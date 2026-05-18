@@ -57,6 +57,8 @@ jest.mock('../context/SavedContext', () => ({
 jest.mock('../db/settingsDb', () => ({
   getSourceOrder: jest.fn(),
   getLowTokenThreshold: jest.fn().mockResolvedValue(90),
+  getCacheTtlDays: jest.fn().mockResolvedValue(90),
+  getUseAllSources: jest.fn().mockResolvedValue(false),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 
@@ -93,6 +95,8 @@ function renderScreen() {
 
 const sampleEntries: DictEntry[] = [
   {
+    source: 'finkel',
+    fromCache: false,
     yiddishRomanized: 'sheyn',
     yiddishHebrew: 'שיין',
     english: 'pretty',
@@ -103,6 +107,8 @@ const sampleEntries: DictEntry[] = [
     exampleEnglish: null,
   },
   {
+    source: 'finkel',
+    fromCache: false,
     yiddishRomanized: 'sheynkayt',
     yiddishHebrew: null,
     english: 'beauty',
@@ -113,6 +119,8 @@ const sampleEntries: DictEntry[] = [
     exampleEnglish: null,
   },
 ];
+
+const cachedEntries: DictEntry[] = sampleEntries.map(e => ({ ...e, fromCache: true }));
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -329,7 +337,7 @@ describe('SearchScreen — results from network', () => {
 
 describe('SearchScreen — cache hit', () => {
   beforeEach(() => {
-    mockGetCached.mockResolvedValue(sampleEntries);
+    mockGetCached.mockResolvedValue(cachedEntries);
   });
 
   it('shows the cached badge when results come from cache', async () => {
@@ -338,7 +346,7 @@ describe('SearchScreen — cache hit', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Cached')).toBeTruthy();
+      expect(screen.getAllByText('Cached').length).toBeGreaterThan(0);
     });
   });
 
@@ -491,7 +499,7 @@ describe('SearchScreen — source order', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Finkel')).toBeTruthy();
+      expect(screen.getAllByText('Finkel').length).toBeGreaterThan(0);
     });
   });
 
@@ -509,7 +517,7 @@ describe('SearchScreen — source order', () => {
   });
 
   it('falls through to Verterbukh when Finkel returns nothing and user is logged in', async () => {
-    const verterbukSample = { entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
+    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValue([]);            // Finkel returns nothing
@@ -520,13 +528,13 @@ describe('SearchScreen — source order', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Verterbukh')).toBeTruthy();
+      expect(screen.getAllByText('Verterbukh').length).toBeGreaterThan(0);
       expect(screen.getAllByTestId('entry-card').length).toBe(1);
     });
   });
 
   it('shows Verterbukh badge when Verterbukh is the result source', async () => {
-    const verterbukSample = { entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
+    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookupVerterbukh.mockResolvedValue(verterbukSample);
@@ -536,14 +544,14 @@ describe('SearchScreen — source order', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Verterbukh')).toBeTruthy();
+      expect(screen.getAllByText('Verterbukh').length).toBeGreaterThan(0);
     });
   });
 });
 
 describe('SearchScreen — Verterbukh quota badge', () => {
   const sampleVerterbukEntry = {
-    entries: [{ yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }],
+    entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }],
     choices: null,
   };
 
@@ -561,7 +569,7 @@ describe('SearchScreen — Verterbukh quota badge', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('quota-badge')).toBeTruthy();
-      expect(screen.getByText('3/100')).toBeTruthy();
+      expect(screen.getByText('3/100 tokens')).toBeTruthy();
     });
   });
 
@@ -631,7 +639,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     { label: 'LOYFN', hebrewLemma: 'לױפֿן' },
     { label: 'LOYFER', hebrewLemma: 'לױפֿער' },
   ];
-  const sampleVerterbukEntry = { entries: [{ yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: sampleChoices };
+  const sampleVerterbukEntry = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: sampleChoices };
 
   beforeEach(() => {
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
@@ -879,12 +887,16 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
 
 describe('SearchScreen — Google Translate source', () => {
   const gtEntry = {
+    source: 'google_translate' as const,
+    fromCache: false,
     yiddishHebrew: 'שיין',
     yiddishRomanized: null,
     english: 'pretty',
     partOfSpeech: null,
     grammaticalInfo: null,
     isPhrase: false as const,
+    exampleYiddish: null,
+    exampleEnglish: null,
   };
 
   beforeEach(() => {
@@ -910,7 +922,7 @@ describe('SearchScreen — Google Translate source', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Google Translate')).toBeTruthy();
+      expect(screen.getAllByText('Google Translate').length).toBeGreaterThan(0);
     });
   });
 
@@ -937,7 +949,7 @@ describe('SearchScreen — Google Translate source', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('Google Translate')).toBeTruthy();
+      expect(screen.getAllByText('Google Translate').length).toBeGreaterThan(0);
       expect(screen.getByTestId('fallback-note')).toBeTruthy();
       expect(screen.getByText('No results from Finkel')).toBeTruthy();
     });

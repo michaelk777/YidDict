@@ -16,6 +16,7 @@ import {
   setNumericSetting,
   getMaxSavedEntries,
   getLowTokenThreshold,
+  getCacheTtlDays,
   SourceSlot,
 } from '../db/settingsDb';
 import { getDatabase } from '../db/database';
@@ -137,6 +138,13 @@ describe('getLowTokenThreshold()', () => {
   it('defaults to 90 when the key is absent', async () => {
     mockGetDatabase.mockReturnValue(makeMockDb());
     expect(await getLowTokenThreshold()).toBe(90);
+  });
+});
+
+describe('getCacheTtlDays()', () => {
+  it('defaults to 90 when the key is absent', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    expect(await getCacheTtlDays()).toBe(90);
   });
 });
 
