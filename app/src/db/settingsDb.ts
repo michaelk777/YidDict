@@ -91,6 +91,38 @@ export async function setUseAllSources(v: boolean): Promise<void> {
   );
 }
 
+export async function getYivoToHebrew(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['yivo_to_hebrew']
+  );
+  return row?.value === '1';
+}
+
+export async function setYivoToHebrew(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['yivo_to_hebrew', v ? '1' : '0']
+  );
+}
+
+export async function getYivoToHebrewWarned(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['yivo_to_hebrew_warned']
+  );
+  return row?.value === '1';
+}
+
+export async function setYivoToHebrewWarned(): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['yivo_to_hebrew_warned', '1']
+  );
+}
+
 export async function getThemePreference(): Promise<'light' | 'dark' | 'system'> {
   const db = getDatabase();
   const row = await db.getFirstAsync<{ value: string }>(

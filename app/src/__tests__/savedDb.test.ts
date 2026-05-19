@@ -30,6 +30,7 @@ const sampleEntry: DictEntry = {
   isPhrase: false,
   exampleYiddish: null,
   exampleEnglish: null,
+  hebrewIsGenerated: false,
 };
 
 const sampleRow = {
@@ -247,6 +248,7 @@ const savedEntry: SavedEntry = {
   source: 'finkel',
   savedAt: 1000000,
   isPhrase: false,
+  hebrewIsGenerated: false,
 };
 
 describe('generateCsv', () => {

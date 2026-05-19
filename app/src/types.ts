@@ -21,4 +21,5 @@ export interface DictEntry {
   isPhrase: boolean;
   exampleYiddish: string | null;
   exampleEnglish: string | null;
+  hebrewIsGenerated?: boolean;
 }

@@ -38,6 +38,7 @@ const sampleEntries: SavedEntry[] = [
     source: 'finkel',
     savedAt: 2000000,
     isPhrase: false,
+    hebrewIsGenerated: false,
   },
   {
     id: 2,
@@ -50,6 +51,7 @@ const sampleEntries: SavedEntry[] = [
     source: 'verterbukh',
     savedAt: 1000000,
     isPhrase: false,
+    hebrewIsGenerated: false,
   },
 ];
 

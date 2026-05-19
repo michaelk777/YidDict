@@ -195,7 +195,12 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
               <Text style={[s.romanized, { color: theme.text }]}>{entry.yiddishRomanized}</Text>
             ) : null}
             {entry.yiddishHebrew ? (
-              <Text style={[s.hebrew, { color: theme.text }]}>{entry.yiddishHebrew}</Text>
+              <>
+                <Text style={[s.hebrew, { color: theme.text }]}>{entry.yiddishHebrew}</Text>
+                {entry.hebrewIsGenerated ? (
+                  <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+                ) : null}
+              </>
             ) : null}
           </View>
           <TouchableOpacity
@@ -310,6 +315,10 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     hebrew: {
       fontSize: 17,
       writingDirection: 'rtl',
+    },
+    generatedMarker: {
+      fontSize: 12,
+      alignSelf: 'center',
     },
     english: {
       fontSize: 15,

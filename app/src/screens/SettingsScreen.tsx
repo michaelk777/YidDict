@@ -36,6 +36,10 @@ import {
   setThemePreference,
   getUseAllSources,
   setUseAllSources,
+  getYivoToHebrew,
+  setYivoToHebrew,
+  getYivoToHebrewWarned,
+  setYivoToHebrewWarned,
 } from '../db/settingsDb';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +73,9 @@ export default function SettingsScreen() {
   const [lowTokenThreshold, setLowTokenThresholdState] = useState(90);
   const [cacheTtlDays, setCacheTtlDaysState] = useState(90);
 
+  // Experimental settings state
+  const [yivoToHebrew, setYivoToHebrewState] = useState(false);
+
   // Load all settings on mount
   useEffect(() => {
     getCredentials().then(creds => {
@@ -81,6 +88,7 @@ export default function SettingsScreen() {
     getLowTokenThreshold().then(setLowTokenThresholdState).catch(() => {});
     getCacheTtlDays().then(setCacheTtlDaysState).catch(() => {});
     getUseAllSources().then(setUseAllSourcesState).catch(() => {});
+    getYivoToHebrew().then(setYivoToHebrewState).catch(() => {});
   }, []);
 
   const handleLogin = useCallback(async () => {
@@ -133,6 +141,21 @@ export default function SettingsScreen() {
   const handleToggleUseAllSources = useCallback(async (value: boolean) => {
     setUseAllSourcesState(value);
     await setUseAllSources(value).catch(() => {});
+  }, []);
+
+  const handleToggleYivoToHebrew = useCallback(async (value: boolean) => {
+    setYivoToHebrewState(value);
+    await setYivoToHebrew(value).catch(() => {});
+    if (value) {
+      const warned = await getYivoToHebrewWarned().catch(() => false);
+      if (!warned) {
+        Alert.alert(
+          'Experimental Feature',
+          'YIVO romanization → Hebrew script conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~.',
+        );
+        await setYivoToHebrewWarned().catch(() => {});
+      }
+    }
   }, []);
 
   const handleSelectTheme = useCallback(async (value: 'system' | 'light' | 'dark') => {
@@ -374,6 +397,28 @@ export default function SettingsScreen() {
 
       <SectionHeader label="Security" theme={theme} />
       <PlaceholderRow label="Security" theme={theme} />
+
+      {/* Experimental */}
+      <SectionHeader label="Experimental" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={s.toggleRow}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[s.toggleLabel, { color: theme.text }]}>
+              YIVO romanization → Hebrew script
+            </Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
+              Auto-generates Hebrew for entries that lack it. Results marked with ~.
+            </Text>
+          </View>
+          <Switch
+            value={yivoToHebrew}
+            onValueChange={handleToggleYivoToHebrew}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="yivo-to-hebrew-toggle"
+          />
+        </View>
+      </View>
     </ScrollView>
   );
 }

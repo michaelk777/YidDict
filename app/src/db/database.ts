@@ -48,6 +48,7 @@ export async function initDatabase(): Promise<void> {
   const migrations = [
     'ALTER TABLE cached_results ADD COLUMN query TEXT NOT NULL DEFAULT ""',
     'ALTER TABLE cached_results ADD COLUMN is_phrase INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE saved_entries ADD COLUMN hebrew_is_generated INTEGER NOT NULL DEFAULT 0',
   ];
   for (const sql of migrations) {
     try {
@@ -68,6 +69,8 @@ export async function initDatabase(): Promise<void> {
     ['cache_ttl_days', '90'],
     ['max_cache_entries', '1000'],
     ['use_all_sources', '0'],
+    ['yivo_to_hebrew', '0'],
+    ['yivo_to_hebrew_warned', '0'],
   ];
 
   console.log('[YidDict] database: seeding default settings');

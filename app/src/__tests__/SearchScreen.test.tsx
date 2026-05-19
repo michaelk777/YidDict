@@ -59,6 +59,7 @@ jest.mock('../db/settingsDb', () => ({
   getLowTokenThreshold: jest.fn().mockResolvedValue(90),
   getCacheTtlDays: jest.fn().mockResolvedValue(90),
   getUseAllSources: jest.fn().mockResolvedValue(false),
+  getYivoToHebrew: jest.fn().mockResolvedValue(false),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 

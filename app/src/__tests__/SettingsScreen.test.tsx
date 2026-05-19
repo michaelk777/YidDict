@@ -41,6 +41,10 @@ jest.mock('../db/settingsDb', () => ({
   setThemePreference: jest.fn(),
   getUseAllSources: jest.fn(),
   setUseAllSources: jest.fn(),
+  getYivoToHebrew: jest.fn(),
+  setYivoToHebrew: jest.fn(),
+  getYivoToHebrewWarned: jest.fn(),
+  setYivoToHebrewWarned: jest.fn(),
 }));
 
 import {
@@ -62,6 +66,10 @@ import {
   setThemePreference,
   getUseAllSources,
   setUseAllSources,
+  getYivoToHebrew,
+  setYivoToHebrew,
+  getYivoToHebrewWarned,
+  setYivoToHebrewWarned,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
@@ -111,6 +119,10 @@ beforeEach(() => {
   mockSetThemePreference.mockResolvedValue(undefined);
   (getUseAllSources as jest.Mock).mockResolvedValue(false);
   (setUseAllSources as jest.Mock).mockResolvedValue(undefined);
+  (getYivoToHebrew as jest.Mock).mockResolvedValue(false);
+  (setYivoToHebrew as jest.Mock).mockResolvedValue(undefined);
+  (getYivoToHebrewWarned as jest.Mock).mockResolvedValue(false);
+  (setYivoToHebrewWarned as jest.Mock).mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------

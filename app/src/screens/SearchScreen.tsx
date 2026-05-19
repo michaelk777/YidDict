@@ -22,7 +22,8 @@ import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew } from '../db/settingsDb';
+import { yivoToHebrew } from '../utils/yivoToHebrew';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -103,6 +104,17 @@ export default function SearchScreen() {
       const threshold = thresholdPct / 100;
       const cacheTtl = await getCacheTtlDays();
       const useAllSources = await getUseAllSources();
+      const yivoToHebrewEnabled = await getYivoToHebrew();
+
+      const applyConverter = (es: DictEntry[]): DictEntry[] => {
+        if (!yivoToHebrewEnabled) return es;
+        return es.map(e => {
+          if (e.yiddishHebrew || !e.yiddishRomanized) return e;
+          const generated = yivoToHebrew(e.yiddishRomanized);
+          if (!generated) return e;
+          return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
+        });
+      };
 
       const order = await getSourceOrder();
       const creds = await getCredentials();
@@ -161,7 +173,7 @@ export default function SearchScreen() {
           if (results.length === 0) notes.push(`No results from ${SOURCE_LABELS[source]}`);
         }
         if (allEntries.length > 0) {
-          setEntries(allEntries);
+          setEntries(applyConverter(allEntries));
           setResultSource(null);
         }
         if (notes.length > 0) setFallbackNote(notes.join(' · '));
@@ -171,7 +183,7 @@ export default function SearchScreen() {
         for (const source of eligibleSources) {
           const results = await lookupSource(source);
           if (results.length > 0) {
-            setEntries(results);
+            setEntries(applyConverter(results));
             setResultSource(source);
             setFromCache(results[0].fromCache);
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
@@ -478,9 +490,14 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
             </Text>
           ) : null}
           {entry.yiddishHebrew ? (
-            <Text style={[s.hebrew, { color: theme.text }]}>
-              {entry.yiddishHebrew}
-            </Text>
+            <>
+              <Text style={[s.hebrew, { color: theme.text }]}>
+                {entry.yiddishHebrew}
+              </Text>
+              {entry.hebrewIsGenerated ? (
+                <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+              ) : null}
+            </>
           ) : null}
         </View>
         <TouchableOpacity
@@ -706,6 +723,10 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       fontSize: 18,
       writingDirection: 'rtl',
       textAlign: 'right',
+    },
+    generatedMarker: {
+      fontSize: 13,
+      alignSelf: 'center',
     },
     grammar: {
       fontSize: 13,
