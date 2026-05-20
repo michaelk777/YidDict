@@ -151,7 +151,7 @@ export default function SettingsScreen() {
       if (!warned) {
         Alert.alert(
           'Experimental Feature',
-          'YIVO romanization → Hebrew script conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~.',
+          'YIVO romanization → Hebrew script conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
         );
         await setYivoToHebrewWarned().catch(() => {});
       }
@@ -407,7 +407,7 @@ export default function SettingsScreen() {
               YIVO romanization → Hebrew script
             </Text>
             <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
-              Auto-generates Hebrew for entries that lack it. Results marked with ~.
+              Auto-generates Hebrew for entries that lack it. Results marked with ~ (as in '~word~').
             </Text>
           </View>
           <Switch

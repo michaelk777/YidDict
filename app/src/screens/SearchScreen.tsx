@@ -481,24 +481,23 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
       ]}
       testID="entry-card"
     >
-      {/* Yiddish headword row: YIVO (LTR) + Hebrew script (RTL) + bookmark */}
+      {/* Row 1: YIVO left | Hebrew right | bookmark */}
       <View style={s.headwordRow}>
-        <View style={s.headwordText}>
-          {entry.yiddishRomanized ? (
-            <Text style={[s.romanized, { color: theme.text }]}>
-              {entry.yiddishRomanized}
+        <View style={s.headwordCols}>
+          <Text style={[s.romanized, { color: theme.text }]}>
+            {entry.yiddishRomanized ?? ''}
+          </Text>
+          <View style={s.hebrewWrapper}>
+            {entry.hebrewIsGenerated ? (
+              <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+            ) : null}
+            <Text style={[s.hebrew, { color: theme.text }]}>
+              {entry.yiddishHebrew ?? ''}
             </Text>
-          ) : null}
-          {entry.yiddishHebrew ? (
-            <>
-              <Text style={[s.hebrew, { color: theme.text }]}>
-                {entry.yiddishHebrew}
-              </Text>
-              {entry.hebrewIsGenerated ? (
-                <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
-              ) : null}
-            </>
-          ) : null}
+            {entry.hebrewIsGenerated ? (
+              <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+            ) : null}
+          </View>
         </View>
         <TouchableOpacity
           onPress={onSave}
@@ -514,22 +513,21 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
         </TouchableOpacity>
       </View>
 
-      {/* Part of speech */}
-      {entry.partOfSpeech ? (
-        <Text style={[s.grammar, { color: theme.textSecondary }]}>
-          {entry.partOfSpeech}
-          {entry.grammaticalInfo ? `  ${entry.grammaticalInfo}` : ''}
-        </Text>
-      ) : null}
-
-      {/* English definition */}
+      {/* Row 2: English definition */}
       {entry.english ? (
         <Text style={[s.definition, { color: theme.text }]}>
           {entry.english}
         </Text>
       ) : null}
 
-      {/* Source + cache labels */}
+      {/* Row 3: grammar */}
+      {(entry.partOfSpeech || entry.grammaticalInfo) ? (
+        <Text style={[s.grammar, { color: theme.textSecondary }]}>
+          {[entry.partOfSpeech, entry.grammaticalInfo].filter(Boolean).join('  ')}
+        </Text>
+      ) : null}
+
+      {/* Row 4: source + cache tags */}
       <View style={s.entryMeta}>
         <Text style={[s.entrySourceLabel, { color: sourceColor }]}>
           {SOURCE_LABELS[entry.source]}
@@ -695,11 +693,17 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignItems: 'center',
       marginBottom: 4,
     },
-    headwordText: {
+    headwordCols: {
       flex: 1,
       flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'baseline',
       gap: 8,
+    },
+    hebrewWrapper: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 4,
     },
     saveAllBtn: {
       flexDirection: 'row',
@@ -735,6 +739,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     definition: {
       fontSize: 15,
+      marginBottom: 2,
     },
     entryMeta: {
       flexDirection: 'row',

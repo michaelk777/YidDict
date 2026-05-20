@@ -189,19 +189,21 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
     >
       <View style={[s.sourceBar, { backgroundColor: sourceColor }]} />
       <View style={s.rowContent}>
+        {/* Row 1: YIVO left | Hebrew right | delete button */}
         <View style={s.rowTop}>
-          <View style={s.headwords}>
-            {entry.yiddishRomanized ? (
-              <Text style={[s.romanized, { color: theme.text }]}>{entry.yiddishRomanized}</Text>
-            ) : null}
-            {entry.yiddishHebrew ? (
-              <>
-                <Text style={[s.hebrew, { color: theme.text }]}>{entry.yiddishHebrew}</Text>
-                {entry.hebrewIsGenerated ? (
-                  <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
-                ) : null}
-              </>
-            ) : null}
+          <View style={s.headwordCols}>
+            <Text style={[s.romanized, { color: theme.text }]}>
+              {entry.yiddishRomanized ?? ''}
+            </Text>
+            <View style={s.hebrewWrapper}>
+              {entry.hebrewIsGenerated ? (
+                <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+              ) : null}
+              <Text style={[s.hebrew, { color: theme.text }]}>{entry.yiddishHebrew ?? ''}</Text>
+              {entry.hebrewIsGenerated ? (
+                <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+              ) : null}
+            </View>
           </View>
           <TouchableOpacity
             onPress={onDelete}
@@ -213,17 +215,20 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
           </TouchableOpacity>
         </View>
 
+        {/* Row 2: English */}
         {entry.english ? (
           <Text style={[s.english, { color: theme.text }]}>{entry.english}</Text>
         ) : null}
 
+        {/* Row 3: grammar */}
+        {(entry.partOfSpeech || entry.grammaticalInfo) ? (
+          <Text style={[s.grammar, { color: theme.textSecondary }]}>
+            {[entry.partOfSpeech, entry.grammaticalInfo].filter(Boolean).join('  ')}
+          </Text>
+        ) : null}
+
+        {/* Row 4: source tags */}
         <View style={s.rowMeta}>
-          {entry.partOfSpeech ? (
-            <Text style={[s.grammar, { color: theme.textSecondary }]}>
-              {entry.partOfSpeech}
-              {entry.grammaticalInfo ? `  ${entry.grammaticalInfo}` : ''}
-            </Text>
-          ) : null}
           <Text style={[s.sourceName, { color: sourceColor }]}>
             {SOURCE_LABELS[entry.source as DictSource]}
           </Text>
@@ -302,11 +307,17 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignItems: 'center',
       marginBottom: 4,
     },
-    headwords: {
+    headwordCols: {
       flex: 1,
       flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'baseline',
       gap: 8,
+    },
+    hebrewWrapper: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 4,
     },
     romanized: {
       fontSize: 16,
@@ -322,12 +333,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     english: {
       fontSize: 15,
-      marginBottom: 4,
+      marginBottom: 2,
     },
     rowMeta: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      marginTop: 4,
     },
     grammar: {
       fontSize: 12,
