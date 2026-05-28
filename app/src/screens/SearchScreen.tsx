@@ -25,6 +25,41 @@ import { Ionicons } from '@expo/vector-icons';
 import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 
+/**
+ * Convert an enriched YIVO romanized headword to Hebrew script, preserving
+ * the enrichment format the parser appended.
+ *
+ * The Finkel parser may enrich yiddishRomanized with:
+ *   "word (stem)"   — adjective stem, e.g. "sheyn (shen)"
+ *   "word, suffix"  — plural suffix or participle, e.g. "sheynkayt, -n"
+ *
+ * Running yivoToHebrew on the whole string would strip parentheses and commas
+ * (unknown chars). This helper converts each part independently and reassembles
+ * with the correct punctuation, then falls back to plain conversion if neither
+ * pattern matches.
+ */
+function yivoHeadwordToHebrew(yivo: string): string | null {
+  // "word (stem)" — adjective stem enrichment
+  const parenMatch = yivo.match(/^(.+?)\s+\((.+)\)$/);
+  if (parenMatch) {
+    const baseHeb = yivoToHebrew(parenMatch[1].trim());
+    if (!baseHeb) return null;
+    const stemHeb = yivoToHebrew(parenMatch[2].trim());
+    return stemHeb ? `${baseHeb} (${stemHeb})` : baseHeb;
+  }
+
+  // "word, suffix" — plural suffix or participle enrichment
+  const commaMatch = yivo.match(/^(.+),\s+(.+)$/);
+  if (commaMatch) {
+    const baseHeb = yivoToHebrew(commaMatch[1].trim());
+    if (!baseHeb) return null;
+    const suffixHeb = yivoToHebrew(commaMatch[2].trim());
+    return suffixHeb ? `${baseHeb}, ${suffixHeb}` : baseHeb;
+  }
+
+  return yivoToHebrew(yivo);
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -110,7 +145,7 @@ export default function SearchScreen() {
         if (!yivoToHebrewEnabled) return es;
         return es.map(e => {
           if (e.yiddishHebrew || !e.yiddishRomanized) return e;
-          const generated = yivoToHebrew(e.yiddishRomanized);
+          const generated = yivoHeadwordToHebrew(e.yiddishRomanized);
           if (!generated) return e;
           return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
         });
@@ -517,15 +552,16 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
 
       {/* Row 3: YIVO transliteration */}
       {entry.yiddishRomanized ? (
-        <Text style={[s.romanized, { color: theme.textSecondary }]}>
+        <Text style={[s.romanized, { color: theme.text }]}>
           {entry.yiddishRomanized}
         </Text>
       ) : null}
 
-      {/* Row 4: grammar */}
+      {/* Row 4: grammar — grammaticalInfo already contains all lines including the first;
+          fall back to partOfSpeech for older cached / non-Finkel entries */}
       {(entry.partOfSpeech || entry.grammaticalInfo) ? (
         <Text style={[s.grammar, { color: theme.textSecondary }]}>
-          {[entry.partOfSpeech, entry.grammaticalInfo].filter(Boolean).join('  ')}
+          {entry.grammaticalInfo ?? entry.partOfSpeech}
         </Text>
       ) : null}
 
@@ -716,7 +752,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       fontSize: 12,
     },
     romanized: {
-      fontSize: 13,
+      fontSize: 16,
     },
     hebrew: {
       fontSize: 16,

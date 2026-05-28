@@ -217,13 +217,13 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
 
         {/* Row 3: YIVO transliteration */}
         {entry.yiddishRomanized ? (
-          <Text style={[s.romanized, { color: theme.textSecondary }]}>{entry.yiddishRomanized}</Text>
+          <Text style={[s.romanized, { color: theme.text }]}>{entry.yiddishRomanized}</Text>
         ) : null}
 
         {/* Row 4: grammar */}
         {(entry.partOfSpeech || entry.grammaticalInfo) ? (
           <Text style={[s.grammar, { color: theme.textSecondary }]}>
-            {[entry.partOfSpeech, entry.grammaticalInfo].filter(Boolean).join('  ')}
+            {entry.grammaticalInfo ?? entry.partOfSpeech}
           </Text>
         ) : null}
 
@@ -314,7 +314,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       gap: 4,
     },
     romanized: {
-      fontSize: 13,
+      fontSize: 16,
     },
     hebrew: {
       fontSize: 16,

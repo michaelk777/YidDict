@@ -88,18 +88,18 @@ describe('parseFinkelHtml', () => {
       expect(kapore!.partOfSpeech).toMatch(/plural/i);
     });
 
-    it('extracts sheyn as a main entry (not a phrase)', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+    it('extracts sheyn as a main entry (not a phrase), headword enriched with stem', () => {
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
       expect(sheyn).toBeDefined();
     });
 
     it('extracts sheyn definition as "pretty"', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
       expect(sheyn!.english).toBe('pretty');
     });
 
     it('extracts sheyn part of speech', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
       expect(sheyn!.partOfSpeech).toMatch(/adjective/i);
     });
 
@@ -134,7 +134,120 @@ describe('parseFinkelHtml', () => {
       expect(sheyndl!.english).toBeNull();
     });
 
+    it('enriches sheynkayt headword with plural suffix', () => {
+      const sheynkayt = entries.find(e => e.yiddishRomanized?.includes('sheynkayt'));
+      expect(sheynkayt!.yiddishRomanized).toBe('sheynkayt, -n');
+    });
 
+    it('includes source span text in grammaticalInfo (shney_ indeclinable)', () => {
+      const shney = entries.find(e => e.yiddishRomanized?.includes('shney'));
+      expect(shney!.grammaticalInfo).toContain('indeclinable');
+    });
+
+    it('builds grammaticalInfo as newline-separated lines (sheyn)', () => {
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
+      expect(sheyn!.grammaticalInfo).toContain('\n');
+      expect(sheyn!.grammaticalInfo).toContain('adjectival form with -ink');
+    });
+
+  });
+
+  // ---------------------------------------------------------------------------
+  // Headword enrichment fixtures
+  // ---------------------------------------------------------------------------
+
+  const SKELET_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>skelet </span><span class="grammar">noun, plural in</span> -n, <span class="grammar">gender m,</span> <span class="grammar">adjectional form with '-ish',</span><span class='definition'>skeletal</span><span class='definition'>skeleton</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  const LOYF_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>loyf </span><span class="grammar">verb,</span> <span class="grammar">participle</span> gelofn, <span class='definition'>run</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  const SHEYNKAYT_SHEYNHAYT_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>sheynkayt </span><span class="grammar">noun, plural in</span> -n, <span class="grammar">gender f,</span> <span class='definition'>beauty</span> sheynhayt <span class="grammar">noun, plural in</span> -n, <span class="grammar">gender f,</span> <span class='definition'>beautiful person or thing</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  describe('skelet — noun with secondary definition and plural suffix', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(SKELET_HTML); });
+
+    it('enriches yiddishRomanized with plural suffix', () => {
+      expect(entry.yiddishRomanized).toBe('skelet, -n');
+    });
+
+    it('english is the main definition, not the secondary one', () => {
+      expect(entry.english).toBe('skeleton');
+    });
+
+    it('secondary definition appended to its grammar line', () => {
+      expect(entry.grammaticalInfo).toContain("adjectional form with '-ish', skeletal");
+    });
+
+    it('grammaticalInfo contains all three grammar lines', () => {
+      expect(entry.grammaticalInfo).toBe(
+        "noun, plural in -n\ngender m\nadjectional form with '-ish', skeletal"
+      );
+    });
+
+    it('partOfSpeech is the first grammar line', () => {
+      expect(entry.partOfSpeech).toBe('noun, plural in -n');
+    });
+  });
+
+  describe('loyf — verb with participle enrichment', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(LOYF_HTML); });
+
+    it('enriches yiddishRomanized with participle form', () => {
+      expect(entry.yiddishRomanized).toBe('loyf, gelofn');
+    });
+
+    it('english is correct', () => {
+      expect(entry.english).toBe('run');
+    });
+
+    it('grammaticalInfo contains both grammar lines', () => {
+      expect(entry.grammaticalInfo).toBe('verb\nparticiple gelofn');
+    });
+
+    it('partOfSpeech is the first grammar line', () => {
+      expect(entry.partOfSpeech).toBe('verb');
+    });
+  });
+
+  describe('sheynkayt/sheynhayt — multi-entry <li> split', () => {
+    let entries: ReturnType<typeof parseFinkelHtml>;
+    beforeAll(() => { entries = parseFinkelHtml(SHEYNKAYT_SHEYNHAYT_HTML); });
+
+    it('produces two entries from one <li>', () => {
+      expect(entries).toHaveLength(2);
+    });
+
+    it('first entry is sheynkayt with plural enrichment', () => {
+      expect(entries[0].yiddishRomanized).toBe('sheynkayt, -n');
+      expect(entries[0].english).toBe('beauty');
+    });
+
+    it('second entry is sheynhayt with plural enrichment', () => {
+      expect(entries[1].yiddishRomanized).toBe('sheynhayt, -n');
+      expect(entries[1].english).toBe('beautiful person or thing');
+    });
   });
 });
 
