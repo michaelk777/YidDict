@@ -93,18 +93,22 @@ function convertToken(token: string): string {
       }
     }
     if (!matched) {
-      const heb = CHARS[lower[i]];
-      if (heb) phonemes.push(heb);
-      // Unknown character (punctuation, digit, etc.) — skip
+      // Unknown character (ellipsis, apostrophe, digit, etc.) — pass through
+      // so that abbreviation patterns like "ge...t" survive conversion intact.
+      phonemes.push(CHARS[lower[i]] ?? lower[i]);
       i++;
     }
   }
 
-  if (phonemes.length === 0) return token;
+  // Return original token if no Hebrew characters were produced.
+  if (!phonemes.some(p => /[א-ת]/.test(p))) return token;
 
-  // Apply sofit to the last phoneme if it has a final form.
-  const last = phonemes[phonemes.length - 1];
-  if (SOFIT[last]) phonemes[phonemes.length - 1] = SOFIT[last];
+  // Apply sofit to the last Hebrew phoneme, scanning backwards past any
+  // trailing pass-through characters (e.g. the dots in "גע...ט").
+  for (let j = phonemes.length - 1; j >= 0; j--) {
+    if (SOFIT[phonemes[j]]) { phonemes[j] = SOFIT[phonemes[j]]; break; }
+    if (/[א-ת]/.test(phonemes[j])) break; // Hebrew but no sofit form — stop
+  }
 
   return phonemes.join('');
 }

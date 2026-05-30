@@ -205,4 +205,17 @@ describe('yivoToHebrew()', () => {
     // All digits — no Hebrew chars produced
     expect(yivoToHebrew('123')).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // Ellipsis / pass-through characters (Finkel abbreviation patterns)
+  // ---------------------------------------------------------------------------
+
+  it('preserves ellipsis in abbreviated participle forms like "ge...t"', () => {
+    expect(yivoToHebrew('ge...t')).toBe('גע...ט');
+  });
+
+  it('applies sofit correctly past trailing pass-through characters', () => {
+    // If a form ended with "...n", the final nun should still be sofit
+    expect(yivoToHebrew('ge...n')).toBe('גע...ן');
+  });
 });

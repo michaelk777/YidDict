@@ -101,6 +101,26 @@ function directChildByClass(
   return null;
 }
 
+/**
+ * Returns the base Hebrew form for a headword — the first <span class="hebrew">
+ * that appears before any grammar span. Hebrew spans that appear after a grammar
+ * span are inflected forms (e.g. plural), not the base form; those are captured
+ * via the 'hebrew' event in collectEvents instead.
+ *
+ * Returns null when no Hebrew span precedes the first grammar span (e.g. entries
+ * that exist only in plural form, like hoyries, where the sole Hebrew span is the
+ * plural form inside the "plural" grammar context).
+ */
+function baseHebrewOf(li: HTMLElement): string | null {
+  for (const child of li.childNodes) {
+    const el = child as HTMLElement;
+    if (!el.tagName) continue;
+    if (el.classList?.contains('grammar')) break;
+    if (el.classList?.contains('hebrew')) return el.text.trim() || null;
+  }
+  return null;
+}
+
 function collectEntries(
   lis: HTMLElement[],
   isPhrase: boolean,
@@ -118,8 +138,9 @@ function collectEntries(
 
     // Base romanized: strip trailing '(' that Finkel appends before a Hebrew span.
     const baseRomanized = lexemeSpan.text.replace(/\($/, '').trim() || null;
-    // First .hebrew sibling = base Hebrew form (later ones are inflected forms).
-    const baseHebrew = directChildByClass(li, 'hebrew')?.text.trim() || null;
+    // Base Hebrew: only the span that precedes the first grammar span.
+    // Spans appearing after a grammar span are inflected forms captured via events.
+    const baseHebrew = baseHebrewOf(li);
 
     out.push(...parseEntryChildren(li.childNodes, baseRomanized, baseHebrew, isPhrase));
 
@@ -140,6 +161,7 @@ type Ev =
   | { kind: 'def';    text: string }
   | { kind: 'source'; text: string }
   | { kind: 'bare';   text: string }
+  | { kind: 'hebrew'; text: string }
   | { kind: 'skip' };
 
 /** Tag every direct child node of an <li> into a flat event list. */
@@ -152,7 +174,7 @@ function collectEvents(nodes: Node[]): Ev[] {
         events.push({ kind: 'skip' });
       } else {
         const cls = el.classList;
-        if (!cls || cls.contains('lexeme') || cls.contains('hebrew')) {
+        if (!cls || cls.contains('lexeme')) {
           events.push({ kind: 'skip' });
         } else if (cls.contains('grammar')) {
           events.push({ kind: 'grammar', text: el.text.trim() });
@@ -160,6 +182,14 @@ function collectEvents(nodes: Node[]): Ev[] {
           events.push({ kind: 'def', text: el.text.trim() });
         } else if (cls.contains('source')) {
           events.push({ kind: 'source', text: el.text.trim() });
+        } else if (cls.contains('hebrew')) {
+          // Hebrew spans outside the lexeme carry inflected forms (e.g. plural).
+          // Captured here so the grammar-context plural span can enrich yiddishHebrew.
+          events.push({ kind: 'hebrew', text: el.text.trim() });
+        } else if (cls.contains('weakmatch') || cls.contains('goodmatch')) {
+          // Highlighting spans — their text is real content (e.g. the root portion
+          // of a plural form like "<weakmatch>kapore</weakmatch>s").
+          events.push({ kind: 'bare', text: el.text });
         } else {
           events.push({ kind: 'skip' });
         }
@@ -225,14 +255,15 @@ function findSplitIndices(events: Ev[]): number[] {
  * def "skeletal" (secondary) → def "skeleton" (main English).
  */
 function processSegmentEvents(slice: Ev[]): {
-  grammarLines: Array<{ span: string; bare: string }>;
+  grammarLines: Array<{ span: string; bare: string; hebrew: string }>;
   english: string | null;
   sources: string[];
 } {
   const lastDefIdx = slice.reduce((last, ev, i) => (ev.kind === 'def' ? i : last), -1);
-  const grammarLines: Array<{ span: string; bare: string }> = [];
+  const grammarLines: Array<{ span: string; bare: string; hebrew: string }> = [];
   let pendingSpan: string | null = null;
   let pendingBare = '';
+  let pendingHebrew = '';
   let english: string | null = null;
   const sources: string[] = [];
 
@@ -240,9 +271,10 @@ function processSegmentEvents(slice: Ev[]): {
     const ev = slice[i];
     switch (ev.kind) {
       case 'grammar':
-        if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare });
+        if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
         pendingSpan = ev.text;
         pendingBare = '';
+        pendingHebrew = '';
         break;
 
       case 'def':
@@ -251,9 +283,10 @@ function processSegmentEvents(slice: Ev[]): {
           pendingBare += ev.text;
         } else {
           if (pendingSpan !== null) {
-            grammarLines.push({ span: pendingSpan, bare: pendingBare });
+            grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
             pendingSpan = null;
             pendingBare = '';
+            pendingHebrew = '';
           }
           if (english === null) english = ev.text || null;
         }
@@ -261,6 +294,10 @@ function processSegmentEvents(slice: Ev[]): {
 
       case 'bare':
         if (pendingSpan !== null) pendingBare += ev.text;
+        break;
+
+      case 'hebrew':
+        if (pendingSpan === 'plural') pendingHebrew += ev.text;
         break;
 
       case 'source':
@@ -271,7 +308,7 @@ function processSegmentEvents(slice: Ev[]): {
         break;
     }
   }
-  if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare });
+  if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
 
   return { grammarLines, english, sources };
 }
@@ -336,11 +373,20 @@ function buildEntryFromSegment(
   const { grammarLines, english, sources } = processSegmentEvents(slice);
 
   // Headword enrichment: find the first grammar line that matches a trigger.
-  // Only the first match is applied.
+  // Only the first match is applied. Track the index and the replacement text
+  // so the matched line can be simplified in the grammar display — the form
+  // value is already captured in the headword.
+  //
+  //   plural in  → strip to base POS ("noun, plural in" → "noun")
+  //   participle → drop entirely (null)
+  //   with stem  → keep span as-is, strip only the bare stem value
   let yiddishRomanized = lexeme;
   let yiddishHebrew = hebrew;
+  let enrichedLineIndex = -1;
+  let enrichedLineReplacement: string | null = null;
 
-  for (const { span, bare } of grammarLines) {
+  for (let i = 0; i < grammarLines.length; i++) {
+    const { span, bare, hebrew } = grammarLines[i];
     const b = cleanBare(bare);
 
     if (span.includes('plural in') && b.startsWith('-')) {
@@ -349,6 +395,8 @@ function buildEntryFromSegment(
         const h = yivoToHebrew(b);
         if (h) yiddishHebrew = `${yiddishHebrew}, ${h}`;
       }
+      enrichedLineIndex = i;
+      enrichedLineReplacement = span.split(',')[0].trim();
       break;
     }
 
@@ -358,6 +406,8 @@ function buildEntryFromSegment(
         const h = yivoToHebrew(b);
         if (h) yiddishHebrew = `${yiddishHebrew}, ${h}`;
       }
+      enrichedLineIndex = i;
+      enrichedLineReplacement = null;
       break;
     }
 
@@ -367,21 +417,45 @@ function buildEntryFromSegment(
         const h = yivoToHebrew(b);
         if (h) yiddishHebrew = `${yiddishHebrew} (${h})`;
       }
+      enrichedLineIndex = i;
+      enrichedLineReplacement = span;
       break;
+    }
+
+    if (span === 'plural') {
+      // Full plural form (e.g. "hirher → hirhurem", "kapore → kapores").
+      // Empty "()" appear where Hebrew spans were skipped — strip them.
+      // weakmatch/goodmatch spans are now bare events, so the full YIVO
+      // plural is already assembled in `b` (e.g. "kapore" + "s" = "kapores").
+      const plural = b.replace(/\(\)/g, '').trim();
+      if (plural && /[a-zA-Z]/.test(plural)) {
+        if (yiddishRomanized) yiddishRomanized = `${yiddishRomanized}, ${plural}`;
+        // Use the Hebrew span text captured alongside this grammar line directly —
+        // no conversion needed and avoids incorrect yivoToHebrew output for
+        // loshn-koydesh words like כּפּרות.
+        // When yiddishHebrew is null (plural-only entries like hoyries), set it
+        // to the plural Hebrew form rather than appending.
+        if (hebrew) {
+          yiddishHebrew = yiddishHebrew ? `${yiddishHebrew}, ${hebrew}` : hebrew;
+        }
+        enrichedLineIndex = i;
+        enrichedLineReplacement = null;
+        break;
+      }
     }
   }
 
-  // grammaticalInfo: all grammar lines + source labels, \n-separated.
-  const lines = [
-    ...grammarLines.map(({ span, bare }) => formatGrammarLine(span, bare)),
-    ...sources,
-  ].filter(Boolean);
+  // Format grammar lines. The enriched line is replaced by enrichedLineReplacement
+  // (null = drop, string = use as the formatted line).
+  const formattedLines = grammarLines
+    .map(({ span, bare }, i) =>
+      i !== enrichedLineIndex ? formatGrammarLine(span, bare) : enrichedLineReplacement
+    )
+    .filter((l): l is string => l !== null && l !== '');
 
+  const lines = [...formattedLines, ...sources].filter(Boolean);
   const grammaticalInfo = lines.length > 0 ? lines.join('\n') : null;
-  const partOfSpeech =
-    grammarLines.length > 0
-      ? formatGrammarLine(grammarLines[0].span, grammarLines[0].bare)
-      : null;
+  const partOfSpeech = formattedLines.length > 0 ? formattedLines[0] : null;
 
   return {
     source: 'finkel',

@@ -72,10 +72,10 @@ describe('parseFinkelHtml', () => {
       expect(entries.length).toBeGreaterThanOrEqual(5);
     });
 
-    it('extracts Hebrew form for kapore', () => {
+    it('extracts Hebrew form for kapore including plural enrichment', () => {
       const kapore = entries.find(e => e.yiddishRomanized?.includes('kapore') && !e.isPhrase);
       expect(kapore).toBeDefined();
-      expect(kapore!.yiddishHebrew).toBe('כּפּרה');
+      expect(kapore!.yiddishHebrew).toBe('כּפּרה, כּפּרות');
     });
 
     it('extracts English definition for kapore', () => {
@@ -83,9 +83,9 @@ describe('parseFinkelHtml', () => {
       expect(kapore!.english).toBe('atonement');
     });
 
-    it('extracts part of speech for kapore (first grammar span)', () => {
+    it('extracts part of speech for kapore (gender after plural line dropped)', () => {
       const kapore = entries.find(e => e.yiddishRomanized?.includes('kapore') && !e.isPhrase);
-      expect(kapore!.partOfSpeech).toMatch(/plural/i);
+      expect(kapore!.partOfSpeech).toBe('gender f');
     });
 
     it('extracts sheyn as a main entry (not a phrase), headword enriched with stem', () => {
@@ -201,12 +201,12 @@ describe('parseFinkelHtml', () => {
 
     it('grammaticalInfo contains all three grammar lines', () => {
       expect(entry.grammaticalInfo).toBe(
-        "noun, plural in -n\ngender m\nadjectional form with '-ish', skeletal"
+        "noun\ngender m\nadjectional form with '-ish', skeletal"
       );
     });
 
     it('partOfSpeech is the first grammar line', () => {
-      expect(entry.partOfSpeech).toBe('noun, plural in -n');
+      expect(entry.partOfSpeech).toBe('noun');
     });
   });
 
@@ -222,12 +222,105 @@ describe('parseFinkelHtml', () => {
       expect(entry.english).toBe('run');
     });
 
-    it('grammaticalInfo contains both grammar lines', () => {
-      expect(entry.grammaticalInfo).toBe('verb\nparticiple gelofn');
+    it('grammaticalInfo contains only the verb line (participle line dropped after enrichment)', () => {
+      expect(entry.grammaticalInfo).toBe('verb');
     });
 
     it('partOfSpeech is the first grammar line', () => {
       expect(entry.partOfSpeech).toBe('verb');
+    });
+  });
+
+  // Plain plural form ("plural [word]") with Hebrew span and weakmatch in plural
+  const HIRHER_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'><span class="goodmatch">hirher</span>(</span><span class='hebrew'>הירהור</span>) <span class="grammar">plural </span> hirhurem(<span class='hebrew'>הירהורים</span>),  <span class="grammar">gender m,</span> <span class='definition'>(transient) thought; doubt; sexual thought</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Same pattern but plural form split across weakmatch + text (like kapore in real responses)
+  const KAPORE_WEAKMATCH_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'><span class="goodmatch">kapore</span>(</span><span class='hebrew'>כּפּרה</span>) <span class="grammar">plural </span> <span class="weakmatch">kapore</span>s(<span class='hebrew'>כּפּרות</span>),  <span class="grammar">gender f,</span> <span class='definition'>atonement</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  describe('hirher — plain plural form with Hebrew span', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(HIRHER_HTML); });
+
+    it('enriches yiddishRomanized with full plural form', () => {
+      expect(entry.yiddishRomanized).toBe('hirher, hirhurem');
+    });
+
+    it('enriches yiddishHebrew with plural Hebrew span', () => {
+      expect(entry.yiddishHebrew).toBe('הירהור, הירהורים');
+    });
+
+    it('english is correct', () => {
+      expect(entry.english).toBe('(transient) thought; doubt; sexual thought');
+    });
+
+    it('drops plural line, leaving gender in grammaticalInfo', () => {
+      expect(entry.grammaticalInfo).toBe('gender m');
+    });
+
+    it('partOfSpeech is gender after plural line dropped', () => {
+      expect(entry.partOfSpeech).toBe('gender m');
+    });
+  });
+
+  describe('kapore with weakmatch — plural split across weakmatch span + text node', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(KAPORE_WEAKMATCH_HTML); });
+
+    it('assembles full YIVO plural from weakmatch + text', () => {
+      expect(entry.yiddishRomanized).toBe('kapore, kapores');
+    });
+
+    it('enriches yiddishHebrew with plural Hebrew span', () => {
+      expect(entry.yiddishHebrew).toBe('כּפּרה, כּפּרות');
+    });
+
+    it('partOfSpeech is gender after plural line dropped', () => {
+      expect(entry.partOfSpeech).toBe('gender f');
+    });
+  });
+
+  // Plural-only entry: lexeme is "-", no Hebrew before grammar span
+  const HOYRIES_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><ul><li>    <span class='lexeme'>- </span><span class="grammar">plural </span> hoyries(<span class='hebrew'>הוריות</span>), <span class='definition'>dreams, daydreams; tractate of Talmud</span></li></ul></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  describe('hoyries — plural-only entry, Hebrew span is the plural form', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(HOYRIES_HTML); });
+
+    it('yiddishRomanized shows dash headword with plural', () => {
+      expect(entry.yiddishRomanized).toBe('-, hoyries');
+    });
+
+    it('yiddishHebrew is the plural Hebrew form (no singular)', () => {
+      expect(entry.yiddishHebrew).toBe('הוריות');
+    });
+
+    it('english is correct', () => {
+      expect(entry.english).toBe('dreams, daydreams; tractate of Talmud');
+    });
+
+    it('grammaticalInfo is null (plural line dropped, no other grammar)', () => {
+      expect(entry.grammaticalInfo).toBeNull();
     });
   });
 
