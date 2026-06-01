@@ -553,7 +553,7 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
       {/* Row 3: YIVO transliteration */}
       {entry.yiddishRomanized ? (
         <Text style={[s.romanized, { color: theme.text }]}>
-          {entry.yiddishRomanized}
+          {`"${entry.yiddishRomanized}"`}
         </Text>
       ) : null}
 
@@ -753,6 +753,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     romanized: {
       fontSize: 16,
+      fontStyle: 'italic',
     },
     hebrew: {
       fontSize: 16,

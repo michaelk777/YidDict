@@ -10,7 +10,7 @@ jest.mock('../db/database');
 
 import { getDatabase } from '../db/database';
 import { __mockDb } from '../../__mocks__/expo-sqlite';
-import { getCachedEntries, saveToCache } from '../db/cacheDb';
+import { getCachedEntries, saveToCache, clearCache } from '../db/cacheDb';
 import { DictEntry } from '../types';
 
 const mockGetDatabase = getDatabase as jest.Mock;
@@ -172,6 +172,22 @@ describe('saveToCache', () => {
     const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
       .filter(([sql]) => (sql as string).includes('DELETE'));
     expect(deleteCalls.length).toBe(0);
+  });
+});
+
+describe('clearCache', () => {
+  it('issues a DELETE FROM cached_results with no conditions', async () => {
+    await clearCache();
+    const [sql] = __mockDb.runAsync.mock.calls[0];
+    expect(sql).toMatch(/DELETE FROM cached_results/i);
+    expect((sql as string).trim().toUpperCase()).toBe('DELETE FROM CACHED_RESULTS');
+  });
+
+  it('does not touch any other table', async () => {
+    await clearCache();
+    expect(__mockDb.runAsync).toHaveBeenCalledTimes(1);
+    const [sql] = __mockDb.runAsync.mock.calls[0];
+    expect((sql as string).toLowerCase()).not.toContain('saved_entries');
   });
 });
 

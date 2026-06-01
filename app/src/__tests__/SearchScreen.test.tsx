@@ -213,7 +213,7 @@ describe('SearchScreen — results from network', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('sheyn')).toBeTruthy();
+      expect(screen.getByText('"sheyn"')).toBeTruthy();
     });
   });
 

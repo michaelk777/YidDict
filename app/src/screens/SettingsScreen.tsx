@@ -41,6 +41,7 @@ import {
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
 } from '../db/settingsDb';
+import { clearCache } from '../db/cacheDb';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,6 +137,23 @@ export default function SettingsScreen() {
   const handleSaveCacheTtlDays = useCallback(async (value: number) => {
     setCacheTtlDaysState(value);
     await setCacheTtlDays(value).catch(() => {});
+  }, []);
+
+  const handleClearCache = useCallback(() => {
+    Alert.alert(
+      'Clear Cache',
+      'This will remove all cached search results. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: async () => {
+            await clearCache().catch(() => {});
+          },
+        },
+      ]
+    );
   }, []);
 
   const handleToggleUseAllSources = useCallback(async (value: boolean) => {
@@ -293,6 +311,19 @@ export default function SettingsScreen() {
           testID="cache-ttl-days-input"
           showDivider={false}
         />
+        <View style={[s.actionRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+          <View style={s.numericLabelWrap}>
+            <Text style={[s.numericLabel, { color: theme.text }]}>Clear cache</Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary }]}>Remove all cached search results</Text>
+          </View>
+          <TouchableOpacity
+            style={[s.destructiveButton, { backgroundColor: theme.sourceVerterbukh }]}
+            onPress={handleClearCache}
+            testID="clear-cache-button"
+          >
+            <Text style={[s.destructiveButtonText, { color: theme.background }]}>Clear</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Verterbukh Settings */}
@@ -690,6 +721,22 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     numericSuffix: {
       fontSize: 15,
+    },
+    // Action row (e.g., clear cache)
+    actionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+    },
+    destructiveButton: {
+      borderRadius: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+    },
+    destructiveButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
     },
     // Toggle row (use all sources)
     toggleRow: {

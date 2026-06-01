@@ -7,6 +7,7 @@
  */
 
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../context/ThemeContext';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -18,6 +19,10 @@ import SettingsScreen from '../screens/SettingsScreen';
 const mockUseColorScheme = jest.fn(() => 'light' as 'light' | 'dark');
 jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
   default: () => mockUseColorScheme(),
+}));
+
+jest.mock('../db/cacheDb', () => ({
+  clearCache: jest.fn(),
 }));
 
 jest.mock('../services/verterbukh-auth', () => ({
@@ -46,6 +51,8 @@ jest.mock('../db/settingsDb', () => ({
   getYivoToHebrewWarned: jest.fn(),
   setYivoToHebrewWarned: jest.fn(),
 }));
+
+import { clearCache } from '../db/cacheDb';
 
 import {
   getCredentials,
@@ -123,6 +130,7 @@ beforeEach(() => {
   (setYivoToHebrew as jest.Mock).mockResolvedValue(undefined);
   (getYivoToHebrewWarned as jest.Mock).mockResolvedValue(false);
   (setYivoToHebrewWarned as jest.Mock).mockResolvedValue(undefined);
+  (clearCache as jest.Mock).mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -513,5 +521,54 @@ describe('SettingsScreen — appearance', () => {
     await waitFor(() => {
       expect(mockSetThemePreference).toHaveBeenCalledWith('light');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Clear cache
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — clear cache', () => {
+  it('renders the Clear Cache button in the Cache section', async () => {
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('clear-cache-button')).toBeTruthy();
+      expect(screen.getByText('Clear cache')).toBeTruthy();
+    });
+  });
+
+  it('shows a confirmation alert when the button is pressed', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    renderScreen();
+    await waitFor(() => screen.getByTestId('clear-cache-button'));
+    fireEvent.press(screen.getByTestId('clear-cache-button'));
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Clear Cache',
+      expect.stringContaining('cannot be undone'),
+      expect.any(Array)
+    );
+  });
+
+  it('calls clearCache when the Continue button is pressed in the alert', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    renderScreen();
+    await waitFor(() => screen.getByTestId('clear-cache-button'));
+    fireEvent.press(screen.getByTestId('clear-cache-button'));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const continueBtn = buttons.find(b => b.text === 'Continue');
+    await continueBtn!.onPress!();
+    expect(clearCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call clearCache when Cancel is chosen', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    renderScreen();
+    await waitFor(() => screen.getByTestId('clear-cache-button'));
+    fireEvent.press(screen.getByTestId('clear-cache-button'));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; style?: string; onPress?: () => void }[];
+    const cancelBtn = buttons.find(b => b.text === 'Cancel');
+    // Cancel has no onPress — verifying clearCache was never invoked
+    expect(cancelBtn?.onPress).toBeUndefined();
+    expect(clearCache).not.toHaveBeenCalled();
   });
 });

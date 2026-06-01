@@ -217,7 +217,7 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
 
         {/* Row 3: YIVO transliteration */}
         {entry.yiddishRomanized ? (
-          <Text style={[s.romanized, { color: theme.text }]}>{entry.yiddishRomanized}</Text>
+          <Text style={[s.romanized, { color: theme.text }]}>{`"${entry.yiddishRomanized}"`}</Text>
         ) : null}
 
         {/* Row 4: grammar */}
@@ -315,6 +315,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     romanized: {
       fontSize: 16,
+      fontStyle: 'italic',
     },
     hebrew: {
       fontSize: 16,

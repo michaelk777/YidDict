@@ -81,6 +81,17 @@ export async function saveToCache(
   await trimCache(maxCacheEntries);
 }
 
+/**
+ * Deletes all rows from cached_results. Does not affect saved_entries.
+ * After clearing, any new lookups will be fetched fresh and re-cached from day 1.
+ */
+export async function clearCache(): Promise<void> {
+  console.log('[YidDict] cacheDb: clearCache — deleting all cached_results rows');
+  const db = getDatabase();
+  await db.runAsync('DELETE FROM cached_results');
+  console.log('[YidDict] cacheDb: cache cleared');
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

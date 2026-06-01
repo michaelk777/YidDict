@@ -119,7 +119,7 @@ describe('SavedScreen — entries', () => {
 
   it('shows the YIVO romanization', async () => {
     renderScreen();
-    await waitFor(() => expect(screen.getByText('sheyn')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('"sheyn"')).toBeTruthy());
   });
 
   it('shows the English definition', async () => {
