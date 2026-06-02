@@ -88,18 +88,18 @@ describe('parseFinkelHtml', () => {
       expect(kapore!.partOfSpeech).toBe('gender f');
     });
 
-    it('extracts sheyn as a main entry (not a phrase), headword enriched with stem', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
+    it('extracts sheyn as a main entry (not a phrase), headword unchanged', () => {
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
       expect(sheyn).toBeDefined();
     });
 
     it('extracts sheyn definition as "pretty"', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
       expect(sheyn!.english).toBe('pretty');
     });
 
     it('extracts sheyn part of speech', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
       expect(sheyn!.partOfSpeech).toMatch(/adjective/i);
     });
 
@@ -145,9 +145,10 @@ describe('parseFinkelHtml', () => {
     });
 
     it('builds grammaticalInfo as newline-separated lines (sheyn)', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn (shen)' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
       expect(sheyn!.grammaticalInfo).toContain('\n');
-      expect(sheyn!.grammaticalInfo).toContain('adjectival form with -ink');
+      expect(sheyn!.grammaticalInfo).toContain('gradable adjective with stem "shen"');
+      expect(sheyn!.grammaticalInfo).toContain('adjectival form with "-ink"');
     });
 
   });
@@ -196,12 +197,12 @@ describe('parseFinkelHtml', () => {
     });
 
     it('secondary definition appended to its grammar line', () => {
-      expect(entry.grammaticalInfo).toContain("adjectional form with '-ish', skeletal");
+      expect(entry.grammaticalInfo).toContain(`adjectional form with '-ish', "skeletal"`);
     });
 
     it('grammaticalInfo contains all three grammar lines', () => {
       expect(entry.grammaticalInfo).toBe(
-        "noun\ngender m\nadjectional form with '-ish', skeletal"
+        `noun\ngender m\nadjectional form with '-ish', "skeletal"`
       );
     });
 

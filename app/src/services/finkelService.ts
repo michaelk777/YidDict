@@ -323,7 +323,7 @@ function processSegmentEvents(slice: Ev[]): {
  */
 function formatGrammarLine(span: string, bare: string): string {
   const cleaned = bare.trim().replace(/,\s*$/, '').trim();
-  if (cleaned) return `${span} ${cleaned}`;
+  if (cleaned) return `${span} "${cleaned}"`;
   return span.replace(/,\s*$/, '').trim();
 }
 
@@ -408,17 +408,6 @@ function buildEntryFromSegment(
       }
       enrichedLineIndex = i;
       enrichedLineReplacement = null;
-      break;
-    }
-
-    if (span.endsWith('with stem') && b) {
-      if (yiddishRomanized) yiddishRomanized = `${yiddishRomanized} (${b})`;
-      if (yiddishHebrew) {
-        const h = yivoToHebrew(b);
-        if (h) yiddishHebrew = `${yiddishHebrew} (${h})`;
-      }
-      enrichedLineIndex = i;
-      enrichedLineReplacement = span;
       break;
     }
 
