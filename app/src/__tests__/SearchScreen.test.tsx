@@ -60,6 +60,7 @@ jest.mock('../db/settingsDb', () => ({
   getCacheTtlDays: jest.fn().mockResolvedValue(90),
   getUseAllSources: jest.fn().mockResolvedValue(false),
   getYivoToHebrew: jest.fn().mockResolvedValue(false),
+  saveVerterbukhQuota: jest.fn().mockResolvedValue(undefined),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 
@@ -69,7 +70,7 @@ import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { deleteEntriesByKey } from '../db/savedDb';
-import { getSourceOrder } from '../db/settingsDb';
+import { getSourceOrder, getUseAllSources } from '../db/settingsDb';
 import { useSaved } from '../context/SavedContext';
 
 const mockLookup = lookupFinkel as jest.Mock;
@@ -80,6 +81,7 @@ const mockGetCached = getCachedEntries as jest.Mock;
 const mockSaveCache = saveToCache as jest.Mock;
 const mockDeleteEntriesByKey = deleteEntriesByKey as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
+const mockGetUseAllSources = getUseAllSources as jest.Mock;
 const mockUseSaved = useSaved as jest.Mock;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,7 @@ beforeEach(() => {
   mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null });
   mockLookupGoogleTranslate.mockResolvedValue([]);
   mockSaveCache.mockResolvedValue(undefined);
+  mockGetUseAllSources.mockResolvedValue(false);
   mockUseSaved.mockReturnValue({
     savedKeySet: new Set(),
     savedEntries: [],
@@ -585,6 +588,21 @@ describe('SearchScreen — Verterbukh quota badge', () => {
     expect(screen.queryByTestId('quota-badge')).toBeNull();
   });
 
+  it('does not show quota badge when Verterbukh returns quota but no entries (fallback to next source)', async () => {
+    // Verterbukh is slot 1 but returns nothing; Finkel is slot 2 and returns results.
+    // verterbukhQuota gets set but no Verterbukh entries are in the results list.
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'finkel', 'none']);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null, quota: { used: 3, total: 100 } });
+    mockLookup.mockResolvedValue(sampleEntries);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+    expect(screen.queryByTestId('quota-badge')).toBeNull();
+  });
+
   it('clears quota badge when clear button is pressed', async () => {
     mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 3, total: 100 } });
 
@@ -689,6 +707,46 @@ describe('SearchScreen — Verterbukh other options', () => {
       expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf', 'לױפֿער');
       expect(screen.getByText('runner')).toBeTruthy();
       expect(screen.queryByTestId('other-options-view')).toBeNull();
+    });
+  });
+
+  it('other options panel appears above results (before FlatList), not below', async () => {
+    mockLookupVerterbukh.mockResolvedValue(sampleVerterbukEntry);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('other-options-view'));
+    // The panel should be present and the entry card should also be visible
+    expect(screen.getByTestId('other-options-view')).toBeTruthy();
+    expect(screen.getAllByTestId('entry-card').length).toBeGreaterThan(0);
+  });
+
+  it('queries all active sources with choice label when use-all-sources is on', async () => {
+    mockGetUseAllSources.mockResolvedValue(true);
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'finkel', 'none']);
+    const chosenEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run (verb)', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
+    const finkelLoyfnEntry = { source: 'finkel' as const, fromCache: false, yiddishHebrew: null, yiddishRomanized: 'loyfn', english: 'to run, jog', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false, exampleYiddish: null, exampleEnglish: null };
+    mockLookupVerterbukh
+      .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
+      .mockResolvedValueOnce({ entries: [chosenEntry], choices: null, quota: null }); // disambiguation lookup
+    mockLookup.mockResolvedValue([finkelLoyfnEntry]); // Finkel lookup for 'loyfn'
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('other-options-view'));
+    fireEvent.press(screen.getByTestId('other-option-לױפֿן'));
+
+    await waitFor(() => {
+      // Verterbukh called with lemma, Finkel called with lowercased label
+      expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf', 'לױפֿן');
+      expect(mockLookup).toHaveBeenCalledWith('loyfn', expect.any(Boolean));
+      // Results from both sources should be visible
+      expect(screen.getByText('run (verb)')).toBeTruthy();   // Verterbukh entry
+      expect(screen.getByText('to run, jog')).toBeTruthy();  // Finkel entry
     });
   });
 });

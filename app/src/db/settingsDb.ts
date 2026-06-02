@@ -123,6 +123,18 @@ export async function setYivoToHebrewWarned(): Promise<void> {
   );
 }
 
+export async function getVerterbukhQuota(): Promise<{ used: number; total: number } | null> {
+  const used = await getNumericSetting('verterbukh_quota_used', -1);
+  const total = await getNumericSetting('verterbukh_quota_total', -1);
+  if (used < 0 || total < 0) return null;
+  return { used, total };
+}
+
+export async function saveVerterbukhQuota(used: number, total: number): Promise<void> {
+  await setNumericSetting('verterbukh_quota_used', used);
+  await setNumericSetting('verterbukh_quota_total', total);
+}
+
 export async function getThemePreference(): Promise<'light' | 'dark' | 'system'> {
   const db = getDatabase();
   const row = await db.getFirstAsync<{ value: string }>(

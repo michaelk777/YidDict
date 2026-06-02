@@ -21,6 +21,10 @@ jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
   default: () => mockUseColorScheme(),
 }));
 
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (cb: () => void) => { cb(); },
+}));
+
 jest.mock('../db/cacheDb', () => ({
   clearCache: jest.fn(),
 }));
@@ -50,6 +54,7 @@ jest.mock('../db/settingsDb', () => ({
   setYivoToHebrew: jest.fn(),
   getYivoToHebrewWarned: jest.fn(),
   setYivoToHebrewWarned: jest.fn(),
+  getVerterbukhQuota: jest.fn(),
 }));
 
 import { clearCache } from '../db/cacheDb';
@@ -77,6 +82,7 @@ import {
   setYivoToHebrew,
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
+  getVerterbukhQuota,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
@@ -131,6 +137,7 @@ beforeEach(() => {
   (getYivoToHebrewWarned as jest.Mock).mockResolvedValue(false);
   (setYivoToHebrewWarned as jest.Mock).mockResolvedValue(undefined);
   (clearCache as jest.Mock).mockResolvedValue(undefined);
+  (getVerterbukhQuota as jest.Mock).mockResolvedValue(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -176,11 +183,11 @@ describe('SettingsScreen — Search Preferences', () => {
     expect(screen.getByText('Google Translate')).toBeTruthy();
   });
 
-  it('shows "pay per result" only on the Verterbukh row', async () => {
+  it('shows "Log in to access" only on the Verterbukh row when not logged in', async () => {
     renderScreen();
     await waitFor(() => screen.getByTestId('source-order-row-2'));
-    const payLabels = screen.getAllByText(/pay per result/);
-    expect(payLabels.length).toBe(1);
+    const loginLabels = screen.getAllByText(/Log in to access/);
+    expect(loginLabels.length).toBe(1);
   });
 
   it('opens picker modal when a row is tapped', async () => {
@@ -232,24 +239,36 @@ describe('SettingsScreen — Search Preferences', () => {
     });
   });
 
-  it('shows "pay per result" on Verterbukh option in the picker modal when logged in', async () => {
+  it('shows no sub-label on Verterbukh option in the picker modal when logged in and no quota loaded', async () => {
     mockGetCredentials.mockResolvedValue({ username: 'testuser', password: 'testpass' });
     mockGetSourceOrder.mockResolvedValue(['finkel', 'none', 'none']);
     renderScreen();
     await waitFor(() => screen.getByTestId('source-order-row-2'));
     fireEvent.press(screen.getByTestId('source-order-row-2'));
     await waitFor(() => screen.getByTestId('picker-option-verterbukh'));
-    expect(screen.getByText('pay per result')).toBeTruthy();
+    expect(screen.queryByText('pay per result')).toBeNull();
+    expect(screen.queryByText('Log in to access')).toBeNull();
   });
 
-  it('shows "login required" on Verterbukh option when not logged in', async () => {
+  it('shows quota in picker modal when logged in and quota is available', async () => {
+    mockGetCredentials.mockResolvedValue({ username: 'testuser', password: 'testpass' });
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'none', 'none']);
+    (getVerterbukhQuota as jest.Mock).mockResolvedValue({ used: 5, total: 100 });
+    renderScreen();
+    await waitFor(() => screen.getByTestId('source-order-row-2'));
+    fireEvent.press(screen.getByTestId('source-order-row-2'));
+    await waitFor(() => screen.getByTestId('picker-option-verterbukh'));
+    expect(screen.getByText('pay per result · 5/100 tokens')).toBeTruthy();
+  });
+
+  it('shows "Log in to access" on Verterbukh option when not logged in', async () => {
     // Default: mockGetCredentials returns null (not logged in)
     mockGetSourceOrder.mockResolvedValue(['finkel', 'none', 'none']);
     renderScreen();
     await waitFor(() => screen.getByTestId('source-order-row-2'));
     fireEvent.press(screen.getByTestId('source-order-row-2'));
     await waitFor(() => screen.getByTestId('picker-option-verterbukh'));
-    expect(screen.getByText('login required')).toBeTruthy();
+    expect(screen.getByText('Log in to access')).toBeTruthy();
     expect(screen.queryByText('pay per result')).toBeNull();
   });
 });

@@ -22,7 +22,7 @@ import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, saveVerterbukhQuota } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 
 /**
@@ -76,7 +76,7 @@ export default function SearchScreen() {
   // Verterbukh "other options" — alternatives to the auto-selected result.
   // These can coexist with entries (server returns both in the same response).
   const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
-  const [verterbukQuota, setVerterbukQuota] = useState<VerterbukQuota | null>(null);
+  const [verterbukhQuota, setVerterbukhQuota] = useState<VerterbukQuota | null>(null);
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
   const { savedKeySet, refreshSaved } = useSaved();
 
@@ -93,7 +93,8 @@ export default function SearchScreen() {
    */
   const processQuota = useCallback((quota: VerterbukQuota | null, threshold: number) => {
     if (!quota) return;
-    setVerterbukQuota(quota);
+    setVerterbukhQuota(quota);
+    saveVerterbukhQuota(quota.used, quota.total).catch(() => {});
     if (quota.used === quota.total) {
       if (!verterbukExhausted.current) {
         Alert.alert(
@@ -249,22 +250,70 @@ export default function SearchScreen() {
 
     setIsLoading(true);
     setOtherOptions(null);
+    setFallbackNote(null);
     try {
       console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
       const thresholdPct = await getLowTokenThreshold();
+      const cacheTtl = await getCacheTtlDays();
+      const useAllSourcesEnabled = await getUseAllSources();
+      const yivoToHebrewEnabled = await getYivoToHebrew();
+
+      const applyConverter = (es: DictEntry[]): DictEntry[] => {
+        if (!yivoToHebrewEnabled) return es;
+        return es.map(e => {
+          if (e.yiddishHebrew || !e.yiddishRomanized) return e;
+          const generated = yivoHeadwordToHebrew(e.yiddishRomanized);
+          if (!generated) return e;
+          return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
+        });
+      };
+
+      // Always look up Verterbukh with the specific disambiguation lemma
       const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma);
-      setEntries(vResult.entries);
-      setResultSource('verterbukh');
       processQuota(vResult.quota, thresholdPct / 100);
       if (vResult.entries.length > 0) {
         await saveToCache(trimmed, vResult.entries, 'verterbukh');
+      }
+
+      if (useAllSourcesEnabled) {
+        // Also query other active sources using the YIVO label as the query
+        const order = await getSourceOrder();
+        const creds = await getCredentials();
+        const altQuery = choice.label.toLowerCase();
+        const isHebrew = detectInputScript(altQuery) === 'hebrew';
+        const allEntries: DictEntry[] = [...vResult.entries];
+
+        for (const slot of order) {
+          if (slot === 'none' || slot === 'verterbukh') continue;
+          if (!creds && slot === 'verterbukh') continue;
+
+          const cached = await getCachedEntries(altQuery, slot, cacheTtl);
+          if (cached && cached.length > 0) {
+            allEntries.push(...cached);
+            continue;
+          }
+          if (slot === 'finkel') {
+            const results = await lookupFinkel(altQuery, isHebrew);
+            if (results.length > 0) await saveToCache(altQuery, results, 'finkel');
+            allEntries.push(...results);
+          } else if (slot === 'google_translate') {
+            const results = await lookupGoogleTranslate(altQuery, isHebrew);
+            if (results.length > 0) await saveToCache(altQuery, results, 'google_translate');
+            allEntries.push(...results);
+          }
+        }
+        setEntries(applyConverter(allEntries));
+        setResultSource(null);
+      } else {
+        setEntries(applyConverter(vResult.entries));
+        setResultSource('verterbukh');
       }
     } catch {
       setError('Could not retrieve that entry. Try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [query]);
+  }, [query, processQuota]);
 
   const handleSaveEntry = useCallback(async (entry: DictEntry, source: DictSource) => {
     const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
@@ -306,7 +355,7 @@ export default function SearchScreen() {
     setHasSearched(false);
     setResultSource(null);
     setOtherOptions(null);
-    setVerterbukQuota(null);
+    setVerterbukhQuota(null);
     setFallbackNote(null);
   }, []);
 
@@ -361,11 +410,11 @@ export default function SearchScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Verterbukh quota badge */}
-        {hasSearched && !isLoading && resultSource === 'verterbukh' && verterbukQuota ? (
+        {/* Verterbukh quota badge — only when Verterbukh results are visible */}
+        {hasSearched && !isLoading && verterbukhQuota && entries.some(e => e.source === 'verterbukh') ? (
           <View style={s.badgeRow}>
             <View style={[s.badge, s.badgeVerterbukh]} testID="quota-badge">
-              <Text style={s.badgeText}>{verterbukQuota.used}/{verterbukQuota.total} tokens</Text>
+              <Text style={s.badgeText}>{verterbukhQuota.used}/{verterbukhQuota.total} tokens</Text>
             </View>
           </View>
         ) : null}
@@ -416,21 +465,33 @@ export default function SearchScreen() {
             }}
             contentContainerStyle={s.listContent}
             ListHeaderComponent={
-              entries.length > 0 ? (
-                <TouchableOpacity
-                  style={[s.saveAllBtn, { borderColor: allSaved ? theme.primary : theme.border }]}
-                  onPress={handleSaveAll}
-                  testID="save-all-button"
-                >
-                  <Ionicons
-                    name={allSaved ? 'bookmark' : 'bookmark-outline'}
-                    size={14}
-                    color={allSaved ? theme.primary : theme.textSecondary}
-                  />
-                  <Text style={[s.saveAllText, { color: allSaved ? theme.primary : theme.textSecondary }]}>
-                    {allSaved ? 'Unsave all' : 'Save all'}
-                  </Text>
-                </TouchableOpacity>
+              (otherOptions || entries.length > 0) ? (
+                <View>
+                  {otherOptions ? (
+                    <OtherOptionsView
+                      choices={otherOptions}
+                      onSelect={handleOtherOption}
+                      theme={theme}
+                      s={s}
+                    />
+                  ) : null}
+                  {entries.length > 0 ? (
+                    <TouchableOpacity
+                      style={[s.saveAllBtn, { borderColor: allSaved ? theme.primary : theme.border }]}
+                      onPress={handleSaveAll}
+                      testID="save-all-button"
+                    >
+                      <Ionicons
+                        name={allSaved ? 'bookmark' : 'bookmark-outline'}
+                        size={14}
+                        color={allSaved ? theme.primary : theme.textSecondary}
+                      />
+                      <Text style={[s.saveAllText, { color: allSaved ? theme.primary : theme.textSecondary }]}>
+                        {allSaved ? 'Unsave all' : 'Save all'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               ) : null
             }
             ListEmptyComponent={
@@ -442,16 +503,7 @@ export default function SearchScreen() {
                 </View>
               ) : null
             }
-            ListFooterComponent={
-              otherOptions && !isLoading ? (
-                <OtherOptionsView
-                  choices={otherOptions}
-                  onSelect={handleOtherOption}
-                  theme={theme}
-                  s={s}
-                />
-              ) : null
-            }
+            ListFooterComponent={null}
           />
         ) : null}
 
@@ -477,17 +529,22 @@ function OtherOptionsView({ choices, onSelect, theme, s }: OtherOptionsViewProps
       <Text style={[s.otherOptionsTitle, { color: theme.textSecondary }]}>
         Other options
       </Text>
-      {choices.map(choice => (
-        <TouchableOpacity
-          key={choice.hebrewLemma}
-          style={[s.otherOption, { borderColor: theme.border, backgroundColor: theme.surface }]}
-          onPress={() => onSelect(choice)}
-          testID={`other-option-${choice.hebrewLemma}`}
-        >
-          <Text style={[s.otherOptionLabel, { color: theme.text }]}>{choice.label}</Text>
-          <Text style={[s.otherOptionHebrew, { color: theme.textSecondary }]}>{choice.hebrewLemma}</Text>
-        </TouchableOpacity>
-      ))}
+      <View style={[s.otherOptionsCard, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+        {choices.map((choice, index) => (
+          <TouchableOpacity
+            key={choice.hebrewLemma}
+            style={[
+              s.otherOption,
+              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+            ]}
+            onPress={() => onSelect(choice)}
+            testID={`other-option-${choice.hebrewLemma}`}
+          >
+            <Text style={[s.otherOptionLabel, { color: theme.text }]}>{choice.label}</Text>
+            <Text style={[s.otherOptionHebrew, { color: theme.textSecondary }]}>{choice.hebrewLemma}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
@@ -681,20 +738,22 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     // Other options (Verterbukh alternatives)
     otherOptionsWrap: {
-      marginTop: 24,
-      paddingHorizontal: 0,
+      marginBottom: 8,
     },
     otherOptionsTitle: {
-      fontSize: 11,
+      fontSize: 14,
       fontWeight: '600',
       letterSpacing: 0.8,
-      marginBottom: 8,
+      marginBottom: 6,
+    },
+    otherOptionsCard: {
+      borderRadius: 8,
+      borderWidth: 1,
+      paddingHorizontal: 16,
+      paddingVertical: 4,
     },
     otherOption: {
-      borderWidth: 1,
-      borderRadius: 8,
-      padding: 12,
-      marginBottom: 8,
+      paddingVertical: 12,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',

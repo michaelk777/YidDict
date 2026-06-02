@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -40,6 +41,7 @@ import {
   setYivoToHebrew,
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
+  getVerterbukhQuota,
 } from '../db/settingsDb';
 import { clearCache } from '../db/cacheDb';
 
@@ -77,6 +79,9 @@ export default function SettingsScreen() {
   // Experimental settings state
   const [yivoToHebrew, setYivoToHebrewState] = useState(false);
 
+  // Last-known Verterbukh quota (persisted after each search)
+  const [verterbukhQuota, setVerterbukhQuotaState] = useState<{ used: number; total: number } | null>(null);
+
   // Load all settings on mount
   useEffect(() => {
     getCredentials().then(creds => {
@@ -90,7 +95,16 @@ export default function SettingsScreen() {
     getCacheTtlDays().then(setCacheTtlDaysState).catch(() => {});
     getUseAllSources().then(setUseAllSourcesState).catch(() => {});
     getYivoToHebrew().then(setYivoToHebrewState).catch(() => {});
+    getVerterbukhQuota().then(setVerterbukhQuotaState).catch(() => {});
   }, []);
+
+  // Re-read quota whenever the Settings tab comes into focus so the sub-label
+  // reflects the most recent Verterbukh result without needing an app restart.
+  useFocusEffect(
+    useCallback(() => {
+      getVerterbukhQuota().then(setVerterbukhQuotaState).catch(() => {});
+    }, [])
+  );
 
   const handleLogin = useCallback(async () => {
     const trimmedUser = username.trim();
@@ -212,6 +226,8 @@ export default function SettingsScreen() {
             key={slot}
             slot={slot}
             value={sourceOrder[slot - 1] ?? 'none'}
+            isLoggedIn={isLoggedIn}
+            quota={verterbukhQuota}
             theme={theme}
             onPress={() => setPickerSlot(slot)}
           />
@@ -266,9 +282,9 @@ export default function SettingsScreen() {
                   <Text style={[s.modalOptionText, { color: theme.text }]}>
                     {SOURCE_LABELS[option]}
                   </Text>
-                  {option === 'verterbukh' ? (
+                  {option === 'verterbukh' && (locked || verterbukhQuota) ? (
                     <Text style={[s.modalOptionSub, { color: theme.textSecondary }]}>
-                      {locked ? 'login required' : 'pay per result'}
+                      {locked ? 'Log in to access' : `pay per result · ${verterbukhQuota!.used}/${verterbukhQuota!.total} tokens`}
                     </Text>
                   ) : null}
                 </TouchableOpacity>
@@ -277,54 +293,6 @@ export default function SettingsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-
-      {/* Saved Entries */}
-      <SectionHeader label="Saved Entries" theme={theme} />
-      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <NumericSettingRow
-          label="Max saved entries"
-          value={maxSavedEntries}
-          min={10}
-          max={10000}
-          inputWidth={64}
-          onSave={handleSaveMaxEntries}
-          theme={theme}
-          s={s}
-          testID="max-saved-entries-input"
-          showDivider={false}
-        />
-      </View>
-
-      {/* Cache */}
-      <SectionHeader label="Cache" theme={theme} />
-      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <NumericSettingRow
-          label="Cache duration"
-          value={cacheTtlDays}
-          suffix="days"
-          min={1}
-          max={365}
-          inputWidth={48}
-          onSave={handleSaveCacheTtlDays}
-          theme={theme}
-          s={s}
-          testID="cache-ttl-days-input"
-          showDivider={false}
-        />
-        <View style={[s.actionRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
-          <View style={s.numericLabelWrap}>
-            <Text style={[s.numericLabel, { color: theme.text }]}>Clear cache</Text>
-            <Text style={[s.numericHint, { color: theme.textSecondary }]}>Remove all cached search results</Text>
-          </View>
-          <TouchableOpacity
-            style={[s.destructiveButton, { backgroundColor: theme.sourceVerterbukh }]}
-            onPress={handleClearCache}
-            testID="clear-cache-button"
-          >
-            <Text style={[s.destructiveButtonText, { color: theme.background }]}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
       {/* Verterbukh Settings */}
       <SectionHeader label="Verterbukh Settings" theme={theme} />
@@ -397,6 +365,54 @@ export default function SettingsScreen() {
           s={s}
           testID="low-token-threshold-input"
         />
+      </View>
+
+      {/* Saved Entries */}
+      <SectionHeader label="Saved Entries" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <NumericSettingRow
+          label="Max saved entries"
+          value={maxSavedEntries}
+          min={10}
+          max={10000}
+          inputWidth={64}
+          onSave={handleSaveMaxEntries}
+          theme={theme}
+          s={s}
+          testID="max-saved-entries-input"
+          showDivider={false}
+        />
+      </View>
+
+      {/* Cache */}
+      <SectionHeader label="Cache" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <NumericSettingRow
+          label="Cache duration"
+          value={cacheTtlDays}
+          suffix="days"
+          min={1}
+          max={365}
+          inputWidth={48}
+          onSave={handleSaveCacheTtlDays}
+          theme={theme}
+          s={s}
+          testID="cache-ttl-days-input"
+          showDivider={false}
+        />
+        <View style={[s.actionRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+          <View style={s.numericLabelWrap}>
+            <Text style={[s.numericLabel, { color: theme.text }]}>Clear cache</Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary }]}>Remove all cached search results</Text>
+          </View>
+          <TouchableOpacity
+            style={[s.destructiveButton, { backgroundColor: theme.sourceVerterbukh }]}
+            onPress={handleClearCache}
+            testID="clear-cache-button"
+          >
+            <Text style={[s.destructiveButtonText, { color: theme.background }]}>Clear</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Appearance */}
@@ -523,11 +539,19 @@ function NumericSettingRow({ label, value, suffix, min, max, inputWidth, onSave,
 interface SourceOrderRowProps {
   slot: SlotIndex;
   value: SourceSlot;
+  isLoggedIn: boolean;
+  quota: { used: number; total: number } | null;
   theme: ReturnType<typeof useTheme>['theme'];
   onPress: () => void;
 }
 
-function SourceOrderRow({ slot, value, theme, onPress }: SourceOrderRowProps) {
+function SourceOrderRow({ slot, value, isLoggedIn, quota, theme, onPress }: SourceOrderRowProps) {
+  const verterbukhSub = value === 'verterbukh'
+    ? (isLoggedIn
+        ? (quota ? `pay per result · ${quota.used}/${quota.total} tokens` : null)
+        : 'Log in to access')
+    : null;
+
   return (
     <TouchableOpacity
       style={[sourceRowStyle, { borderBottomColor: theme.border }]}
@@ -540,9 +564,9 @@ function SourceOrderRow({ slot, value, theme, onPress }: SourceOrderRowProps) {
           <Text style={[sourceRowName, { color: theme.text }]}>
             {SOURCE_LABELS[value]}
           </Text>
-          {value === 'verterbukh' ? (
+          {verterbukhSub ? (
             <Text style={[sourceRowSub, { color: theme.textSecondary }]}>
-              pay per result
+              {verterbukhSub}
             </Text>
           ) : null}
         </View>
