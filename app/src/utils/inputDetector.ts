@@ -9,10 +9,9 @@ const HEBREW_RE = /[\u0590-\u05FF\uFB1D-\uFB4F]/;
  * input in a single field and auto-detect the script server-side, so no
  * finer distinction is needed right now.
  *
- * NOTE: Verterbukh is Yiddish→English only. If we later need to distinguish
- * YIVO romanization from English input (e.g. to block English queries to
- * Verterbukh), extend this type to 'hebrew' | 'yivo' | 'english' and add
- * a YIVO heuristic (look for zh, tsh, dzh, etc.).
+ * NOTE: Verterbukh is bidirectional. For Latin input it auto-detects direction
+ * internally: tries dir=from (Yiddish→English) first; if empty, retries with
+ * dir=to (English→Yiddish). No finer 'yivo' | 'english' distinction needed here.
  */
 export type QueryScript = 'hebrew' | 'latin';
 

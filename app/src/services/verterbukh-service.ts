@@ -6,8 +6,9 @@ import { DictEntry } from '../types';
 const BASE_URL = 'https://verterbukh.org/vb';
 
 export interface VerterbukChoice {
-  label: string;        // YIVO label shown to user, e.g. "LOYFN"
-  hebrewLemma: string;  // ln= parameter value, e.g. "לױפֿן"
+  label: string;        // YIVO label (Yiddish→English) or Hebrew text (English→Yiddish)
+  hebrewLemma: string;  // Hebrew lemma — ln= parameter value, e.g. "לױפֿן"
+  dir: 'from' | 'to';  // Direction to use for the follow-up ln-pinned request
 }
 
 export interface VerterbukQuota {
@@ -30,42 +31,65 @@ export interface VerterbukResult {
  * Handles session expiry: if the response shows a logged-out page,
  * re-authenticates once and retries.
  *
- * @param query  YIVO romanization or Hebrew script
- * @param ln     Optional Hebrew lemma — pins to a specific entry after the
- *               user has chosen from disambiguation choices. Consumes a token.
+ * Direction is normally auto-detected: Latin input tries dir=from (Yiddish→English)
+ * first; if that returns nothing, retries with dir=to (English→Yiddish). Hebrew
+ * input always uses dir=from. Pass forcedDir to skip auto-detection (e.g. when
+ * following up a disambiguation choice that already has a known direction).
+ *
+ * @param query      YIVO romanization, Hebrew script, or English
+ * @param ln         Optional Hebrew lemma — pins to a specific entry after the
+ *                   user has chosen from disambiguation choices. Consumes a token.
+ * @param forcedDir  Override the auto-detected direction.
  */
 export async function lookupVerterbukh(
   query: string,
   ln?: string,
+  forcedDir?: 'from' | 'to',
 ): Promise<VerterbukResult> {
-  const html = await fetchSearch(query, ln);
+  const primaryDir = forcedDir ?? 'from';
+  const html = await fetchSearch(query, primaryDir, ln);
 
   if (isLoggedOut(html)) {
     // Session missing or expired — re-auth using stored credentials and retry once.
     // ensureSession throws if no credentials are saved (user must visit Settings).
     console.log('[YidDict] VerterbukService: not logged in — authenticating');
     await ensureSession(html);
-    const retryHtml = await fetchSearch(query, ln);
+    const retryHtml = await fetchSearch(query, primaryDir, ln);
     if (isLoggedOut(retryHtml)) {
       throw new Error('Verterbukh authentication failed — check credentials in Settings');
     }
     return parseVerterbukhhHtml(retryHtml);
   }
 
-  return parseVerterbukhhHtml(html);
+  const result = parseVerterbukhhHtml(html);
+
+  // Auto-fallback: if Latin input returned nothing on dir=from, retry as English (dir=to).
+  // Hebrew input is always Yiddish so no fallback needed. forcedDir skips fallback.
+  if (!forcedDir && result.entries.length === 0 && result.choices === null) {
+    const isHebrew = /[֐-׿יִ-ﭏ]/.test(query);
+    if (!isHebrew) {
+      console.log(`[YidDict] VerterbukService: no results dir=from — retrying dir=to for "${query}"`);
+      const fallbackHtml = await fetchSearch(query, 'to', ln);
+      if (!isLoggedOut(fallbackHtml)) {
+        return parseVerterbukhhHtml(fallbackHtml);
+      }
+    }
+  }
+
+  return result;
 }
 
-async function fetchSearch(query: string, ln?: string): Promise<string> {
+async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Promise<string> {
   const params: Record<string, string> = {
     yq: query,
-    dir: 'from',
+    dir,
     tsu: 'en',
     trns: 't',  // request YIVO romanization alongside Hebrew headwords
   };
   if (ln) params.ln = ln;
 
   const response = await axios.get(BASE_URL, { params });
-  console.log(`[YidDict] VerterbukService: fetched results for "${query}"${ln ? ` (ln=${ln})` : ''}`);
+  console.log(`[YidDict] VerterbukService: fetched results for "${query}" dir=${dir}${ln ? ` (ln=${ln})` : ''}`);
   return response.data as string;
 }
 
@@ -82,19 +106,34 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
 
   const entries: DictEntry[] = root.querySelectorAll('.def').map(parseDef);
 
-  const choiceNodes = root.querySelectorAll('.choice_box .option:not(.extend)');
-  const choices: VerterbukChoice[] | null =
-    choiceNodes.length > 0
-      ? choiceNodes.map(node => {
-          const anchor = node.querySelector('a');
-          const href = anchor?.getAttribute('href') ?? '';
-          const lnMatch = href.match(/[?&]ln=([^&]+)/);
-          return {
-            label: anchor?.text.trim() ?? '',
-            hebrewLemma: lnMatch ? decodeURIComponent(lnMatch[1]) : '',
-          };
-        }).filter(c => c.label && c.hebrewLemma)
-      : null;
+  // Choices — two HTML structures depending on search direction:
+  //   dir=from (Yiddish→English): .choice_box .option a[href*="ln="] with YIVO labels
+  //   dir=to   (English→Yiddish): <select class="rev-choices"> with Hebrew <option> text
+  let choices: VerterbukChoice[] | null = null;
+
+  const choiceBoxNodes = root.querySelectorAll('.choice_box .option:not(.extend)');
+  if (choiceBoxNodes.length > 0) {
+    const parsed = choiceBoxNodes.map(node => {
+      const anchor = node.querySelector('a');
+      const href = anchor?.getAttribute('href') ?? '';
+      const lnMatch = href.match(/[?&]ln=([^&]+)/);
+      return {
+        label: anchor?.text.trim() ?? '',
+        hebrewLemma: lnMatch ? decodeURIComponent(lnMatch[1]) : '',
+        dir: 'from' as const,
+      };
+    }).filter(c => c.label && c.hebrewLemma);
+    if (parsed.length > 0) choices = parsed;
+  } else {
+    const selectNode = root.querySelector('select.rev-choices');
+    if (selectNode) {
+      const parsed = selectNode.querySelectorAll('option').map(opt => {
+        const text = opt.text.trim().replace(/ /g, '');
+        return { label: text, hebrewLemma: text, dir: 'to' as const };
+      }).filter(c => c.hebrewLemma.length > 0);
+      if (parsed.length > 0) choices = parsed;
+    }
+  }
 
   // Quota — parse "used X/Y" from .quota-box (present when logged in)
   let quota: VerterbukQuota | null = null;

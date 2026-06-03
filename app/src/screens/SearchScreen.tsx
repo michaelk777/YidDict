@@ -175,10 +175,8 @@ export default function SearchScreen() {
           const vResult = await lookupVerterbukh(trimmed);
           console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies)`);
           processQuota(vResult.quota, threshold);
-          if (vResult.entries.length > 0) {
-            if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
-            await saveToCache(trimmed, vResult.entries, 'verterbukh');
-          }
+          if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
+          if (vResult.entries.length > 0) await saveToCache(trimmed, vResult.entries, 'verterbukh');
           return vResult.entries;
         }
         if (source === 'google_translate') {
@@ -268,18 +266,21 @@ export default function SearchScreen() {
         });
       };
 
-      // Always look up Verterbukh with the specific disambiguation lemma
-      const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma);
+      // Always look up Verterbukh with the specific disambiguation lemma, using the
+      // direction that produced the choice (from=Yiddish→English, to=English→Yiddish).
+      const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma, choice.dir);
       processQuota(vResult.quota, thresholdPct / 100);
       if (vResult.entries.length > 0) {
         await saveToCache(trimmed, vResult.entries, 'verterbukh');
       }
 
       if (useAllSourcesEnabled) {
-        // Also query other active sources using the YIVO label as the query
+        // Query other active sources. For Yiddish→English choices the YIVO label
+        // (e.g. "LOYFN") is the best query; for English→Yiddish choices (label ===
+        // hebrewLemma, Hebrew only) the original query (e.g. "run") works better.
         const order = await getSourceOrder();
         const creds = await getCredentials();
-        const altQuery = choice.label.toLowerCase();
+        const altQuery = choice.label !== choice.hebrewLemma ? choice.label.toLowerCase() : trimmed;
         const isHebrew = detectInputScript(altQuery) === 'hebrew';
         const allEntries: DictEntry[] = [...vResult.entries];
 
@@ -540,8 +541,16 @@ function OtherOptionsView({ choices, onSelect, theme, s }: OtherOptionsViewProps
             onPress={() => onSelect(choice)}
             testID={`other-option-${choice.hebrewLemma}`}
           >
-            <Text style={[s.otherOptionLabel, { color: theme.text }]}>{choice.label}</Text>
-            <Text style={[s.otherOptionHebrew, { color: theme.textSecondary }]}>{choice.hebrewLemma}</Text>
+            {choice.label !== choice.hebrewLemma ? (
+              // Yiddish→English: YIVO label on left, Hebrew on right
+              <>
+                <Text style={[s.otherOptionLabel, { color: theme.text }]}>{choice.label}</Text>
+                <Text style={[s.otherOptionHebrew, { color: theme.textSecondary }]}>{choice.hebrewLemma}</Text>
+              </>
+            ) : (
+              // English→Yiddish: Hebrew only (no YIVO available)
+              <Text style={[s.otherOptionHebrew, { color: theme.text }]}>{choice.hebrewLemma}</Text>
+            )}
           </TouchableOpacity>
         ))}
       </View>

@@ -655,8 +655,8 @@ describe('SearchScreen — Verterbukh quota badge', () => {
 
 describe('SearchScreen — Verterbukh other options', () => {
   const sampleChoices = [
-    { label: 'LOYFN', hebrewLemma: 'לױפֿן' },
-    { label: 'LOYFER', hebrewLemma: 'לױפֿער' },
+    { label: 'LOYFN', hebrewLemma: 'לױפֿן', dir: 'from' as const },
+    { label: 'LOYFER', hebrewLemma: 'לױפֿער', dir: 'from' as const },
   ];
   const sampleVerterbukEntry = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: sampleChoices };
 
@@ -704,7 +704,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     fireEvent.press(screen.getByTestId('other-option-לױפֿער'));
 
     await waitFor(() => {
-      expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf', 'לױפֿער');
+      expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf', 'לױפֿער', 'from');
       expect(screen.getByText('runner')).toBeTruthy();
       expect(screen.queryByTestId('other-options-view')).toBeNull();
     });
@@ -742,7 +742,7 @@ describe('SearchScreen — Verterbukh other options', () => {
 
     await waitFor(() => {
       // Verterbukh called with lemma, Finkel called with lowercased label
-      expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf', 'לױפֿן');
+      expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf', 'לױפֿן', 'from');
       expect(mockLookup).toHaveBeenCalledWith('loyfn', expect.any(Boolean));
       // Results from both sources should be visible
       expect(screen.getByText('run (verb)')).toBeTruthy();   // Verterbukh entry
@@ -924,7 +924,7 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
   });
 
   it('shows alert and does not call lookupVerterbukh when other option tapped while exhausted', async () => {
-    const choices = [{ label: 'LOYFN', hebrewLemma: 'לױפֿן' }];
+    const choices = [{ label: 'LOYFN', hebrewLemma: 'לױפֿן', dir: 'from' as const }];
     // Search returns entries + choices, and uses the last token
     mockLookupVerterbukh.mockResolvedValueOnce({
       entries: [vEntry],

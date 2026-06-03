@@ -108,6 +108,28 @@ const DISAMBIGUATION_HTML = `
 </div>
 `;
 
+// English→Yiddish disambiguation: <select class="rev-choices"> with Hebrew options.
+// Captured from live response for query "run" with dir=to (2026-06-02).
+const ENGLISH_DISAMBIGUATION_HTML = `
+<div class="quota-box float-end">
+<a href="?page=qrpt">used 36/5005 Eng.</a>
+</div>
+<div>
+<div class="alternatives">Choices</div>
+<form action="vb">
+<input type="hidden" name="dir" value="to">
+<input type="hidden" name="yq" value="run">
+<select name="ln" class="rev-choices">
+<option>&nbsp;</option>
+<option>אַדמיניסטרירן</option>
+<option>קאַנדידירן</option>
+<option>לױפֿן</option>
+<option>רינען</option>
+</select>
+</form>
+</div>
+`;
+
 const NO_RESULTS_HTML = `<div id="definition"></div>`;
 
 const LOGGED_OUT_HTML = `
@@ -258,7 +280,7 @@ describe('parseVerterbukhhHtml — noun entry (variant B: .gram wraps .glossed)'
 // Parser — disambiguation
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — disambiguation', () => {
+describe('parseVerterbukhhHtml — Yiddish→English disambiguation (.choice_box)', () => {
   it('returns choices when .choice_container is present', () => {
     const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
     expect(choices).not.toBeNull();
@@ -275,10 +297,49 @@ describe('parseVerterbukhhHtml — disambiguation', () => {
     expect(choices!.map(c => c.hebrewLemma)).toEqual(['לױף', 'לױפֿן', 'אַװעקלױפֿן']);
   });
 
+  it('sets dir=from on each choice', () => {
+    const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
+    expect(choices!.map(c => c.dir)).toEqual(['from', 'from', 'from']);
+  });
+
   it('still returns the current entry alongside choices', () => {
     const { entries } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
     expect(entries.length).toBe(1);
     expect(entries[0].yiddishHebrew).toBe('לױפֿן');
+  });
+});
+
+describe('parseVerterbukhhHtml — English→Yiddish disambiguation (select.rev-choices)', () => {
+  it('returns choices from rev-choices select', () => {
+    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    expect(choices).not.toBeNull();
+    expect(choices!.length).toBe(4);
+  });
+
+  it('uses Hebrew option text as both label and hebrewLemma', () => {
+    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    expect(choices!.map(c => c.label)).toEqual(['אַדמיניסטרירן', 'קאַנדידירן', 'לױפֿן', 'רינען']);
+    expect(choices!.map(c => c.hebrewLemma)).toEqual(['אַדמיניסטרירן', 'קאַנדידירן', 'לױפֿן', 'רינען']);
+  });
+
+  it('sets dir=to on each choice', () => {
+    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    expect(choices!.map(c => c.dir)).toEqual(['to', 'to', 'to', 'to']);
+  });
+
+  it('skips the blank placeholder option', () => {
+    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    expect(choices!.every(c => c.hebrewLemma.length > 0)).toBe(true);
+  });
+
+  it('returns empty entries for a choices-only response', () => {
+    const { entries } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    expect(entries).toHaveLength(0);
+  });
+
+  it('parses quota from choices-only response', () => {
+    const { quota } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    expect(quota).toEqual({ used: 36, total: 5005 });
   });
 });
 
@@ -324,6 +385,50 @@ describe('lookupVerterbukh — happy path', () => {
     const result = await lookupVerterbukh('pasirl');
     expect(result.entries.length).toBe(1);
     expect(result.entries[0].english).toBe('pass, permit');
+  });
+
+  it('uses forcedDir when provided', async () => {
+    mockGet.mockResolvedValue({ data: NOUN_HTML });
+    await lookupVerterbukh('loyfn', 'לױפֿן', 'to');
+    expect(mockGet).toHaveBeenCalledWith('https://verterbukh.org/vb', {
+      params: { yq: 'loyfn', dir: 'to', tsu: 'en', trns: 't', ln: 'לױפֿן' },
+    });
+  });
+});
+
+describe('lookupVerterbukh — English auto-fallback', () => {
+  it('retries with dir=to when Latin input returns nothing on dir=from', async () => {
+    mockGet
+      .mockResolvedValueOnce({ data: NO_RESULTS_HTML })
+      .mockResolvedValueOnce({ data: ENGLISH_DISAMBIGUATION_HTML });
+    const result = await lookupVerterbukh('run');
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenNthCalledWith(1, 'https://verterbukh.org/vb', {
+      params: { yq: 'run', dir: 'from', tsu: 'en', trns: 't' },
+    });
+    expect(mockGet).toHaveBeenNthCalledWith(2, 'https://verterbukh.org/vb', {
+      params: { yq: 'run', dir: 'to', tsu: 'en', trns: 't' },
+    });
+    expect(result.choices).not.toBeNull();
+    expect(result.choices![0].dir).toBe('to');
+  });
+
+  it('does not retry when dir=from returns choices (Yiddish disambiguation)', async () => {
+    mockGet.mockResolvedValue({ data: DISAMBIGUATION_HTML });
+    await lookupVerterbukh('loyf');
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry for Hebrew input with no results', async () => {
+    mockGet.mockResolvedValue({ data: NO_RESULTS_HTML });
+    await lookupVerterbukh('לױפֿן');
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry when forcedDir is set', async () => {
+    mockGet.mockResolvedValue({ data: NO_RESULTS_HTML });
+    await lookupVerterbukh('run', undefined, 'from');
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 });
 
