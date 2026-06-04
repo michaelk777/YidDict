@@ -284,7 +284,7 @@ describe('parseVerterbukhhHtml — Yiddish→English disambiguation (.choice_box
   it('returns choices when .choice_container is present', () => {
     const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
     expect(choices).not.toBeNull();
-    expect(choices!.length).toBe(3); // excludes .extend
+    expect(choices!.length).toBe(3); // "More..." node excluded by empty-hebrewLemma filter
   });
 
   it('extracts YIVO label for each choice', () => {
@@ -368,7 +368,7 @@ describe('lookupVerterbukh — happy path', () => {
     mockGet.mockResolvedValue({ data: NOUN_HTML });
     await lookupVerterbukh('pasirl');
     expect(mockGet).toHaveBeenCalledWith('https://verterbukh.org/vb', {
-      params: { yq: 'pasirl', dir: 'from', tsu: 'en', trns: 't' },
+      params: { yq: 'pasirl', dir: 'from', tsu: 'en', trns: 't', extend: '1' },
     });
   });
 
@@ -376,7 +376,7 @@ describe('lookupVerterbukh — happy path', () => {
     mockGet.mockResolvedValue({ data: NOUN_HTML });
     await lookupVerterbukh('loyf', 'לױפֿן');
     expect(mockGet).toHaveBeenCalledWith('https://verterbukh.org/vb', {
-      params: { yq: 'loyf', dir: 'from', tsu: 'en', trns: 't', ln: 'לױפֿן' },
+      params: { yq: 'loyf', dir: 'from', tsu: 'en', trns: 't', extend: '1', ln: 'לױפֿן' },
     });
   });
 
@@ -391,46 +391,11 @@ describe('lookupVerterbukh — happy path', () => {
     mockGet.mockResolvedValue({ data: NOUN_HTML });
     await lookupVerterbukh('loyfn', 'לױפֿן', 'to');
     expect(mockGet).toHaveBeenCalledWith('https://verterbukh.org/vb', {
-      params: { yq: 'loyfn', dir: 'to', tsu: 'en', trns: 't', ln: 'לױפֿן' },
+      params: { yq: 'loyfn', dir: 'to', tsu: 'en', trns: 't', extend: '1', ln: 'לױפֿן' },
     });
   });
 });
 
-describe('lookupVerterbukh — English auto-fallback', () => {
-  it('retries with dir=to when Latin input returns nothing on dir=from', async () => {
-    mockGet
-      .mockResolvedValueOnce({ data: NO_RESULTS_HTML })
-      .mockResolvedValueOnce({ data: ENGLISH_DISAMBIGUATION_HTML });
-    const result = await lookupVerterbukh('run');
-    expect(mockGet).toHaveBeenCalledTimes(2);
-    expect(mockGet).toHaveBeenNthCalledWith(1, 'https://verterbukh.org/vb', {
-      params: { yq: 'run', dir: 'from', tsu: 'en', trns: 't' },
-    });
-    expect(mockGet).toHaveBeenNthCalledWith(2, 'https://verterbukh.org/vb', {
-      params: { yq: 'run', dir: 'to', tsu: 'en', trns: 't' },
-    });
-    expect(result.choices).not.toBeNull();
-    expect(result.choices![0].dir).toBe('to');
-  });
-
-  it('does not retry when dir=from returns choices (Yiddish disambiguation)', async () => {
-    mockGet.mockResolvedValue({ data: DISAMBIGUATION_HTML });
-    await lookupVerterbukh('loyf');
-    expect(mockGet).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not retry for Hebrew input with no results', async () => {
-    mockGet.mockResolvedValue({ data: NO_RESULTS_HTML });
-    await lookupVerterbukh('לױפֿן');
-    expect(mockGet).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not retry when forcedDir is set', async () => {
-    mockGet.mockResolvedValue({ data: NO_RESULTS_HTML });
-    await lookupVerterbukh('run', undefined, 'from');
-    expect(mockGet).toHaveBeenCalledTimes(1);
-  });
-});
 
 describe('lookupVerterbukh — session handling', () => {
   it('re-authenticates and retries when first response is logged out', async () => {

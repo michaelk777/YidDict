@@ -6,9 +6,10 @@ import { DictEntry } from '../types';
 const BASE_URL = 'https://verterbukh.org/vb';
 
 export interface VerterbukChoice {
-  label: string;        // YIVO label (Yiddish→English) or Hebrew text (English→Yiddish)
-  hebrewLemma: string;  // Hebrew lemma — ln= parameter value, e.g. "לױפֿן"
-  dir: 'from' | 'to';  // Direction to use for the follow-up ln-pinned request
+  label: string;           // YIVO label (Yiddish→English) or Hebrew text (English→Yiddish)
+  superscript?: string;    // Homograph number from <span class='sup'>, e.g. "1", "2"
+  hebrewLemma: string;     // Hebrew lemma — ln= parameter value, e.g. "לױפֿן"
+  dir: 'from' | 'to';     // Direction to use for the follow-up ln-pinned request
 }
 
 export interface VerterbukQuota {
@@ -61,22 +62,7 @@ export async function lookupVerterbukh(
     return parseVerterbukhhHtml(retryHtml);
   }
 
-  const result = parseVerterbukhhHtml(html);
-
-  // Auto-fallback: if Latin input returned nothing on dir=from, retry as English (dir=to).
-  // Hebrew input is always Yiddish so no fallback needed. forcedDir skips fallback.
-  if (!forcedDir && result.entries.length === 0 && result.choices === null) {
-    const isHebrew = /[֐-׿יִ-ﭏ]/.test(query);
-    if (!isHebrew) {
-      console.log(`[YidDict] VerterbukService: no results dir=from — retrying dir=to for "${query}"`);
-      const fallbackHtml = await fetchSearch(query, 'to', ln);
-      if (!isLoggedOut(fallbackHtml)) {
-        return parseVerterbukhhHtml(fallbackHtml);
-      }
-    }
-  }
-
-  return result;
+  return parseVerterbukhhHtml(html);
 }
 
 async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Promise<string> {
@@ -84,7 +70,8 @@ async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Prom
     yq: query,
     dir,
     tsu: 'en',
-    trns: 't',  // request YIVO romanization alongside Hebrew headwords
+    trns: 't',    // request YIVO romanization alongside Hebrew headwords
+    extend: '1',  // return all disambiguation choices without a "more" button
   };
   if (ln) params.ln = ln;
 
@@ -111,14 +98,20 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
   //   dir=to   (English→Yiddish): <select class="rev-choices"> with Hebrew <option> text
   let choices: VerterbukChoice[] | null = null;
 
-  const choiceBoxNodes = root.querySelectorAll('.choice_box .option:not(.extend)');
+  const choiceBoxNodes = root.querySelectorAll('.choice_box .option');
   if (choiceBoxNodes.length > 0) {
     const parsed = choiceBoxNodes.map(node => {
       const anchor = node.querySelector('a');
       const href = anchor?.getAttribute('href') ?? '';
       const lnMatch = href.match(/[?&]ln=([^&]+)/);
+      const supNode = anchor?.querySelector('.sup');
+      const superscript = supNode?.text.trim() || undefined;
+      const label = anchor
+        ? anchor.text.replace(supNode?.text ?? '', '').trim()
+        : '';
       return {
-        label: anchor?.text.trim() ?? '',
+        label,
+        superscript,
         hebrewLemma: lnMatch ? decodeURIComponent(lnMatch[1]) : '',
         dir: 'from' as const,
       };

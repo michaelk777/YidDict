@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   FlatList,
   ActivityIndicator,
   Alert,
@@ -76,6 +77,7 @@ export default function SearchScreen() {
   // Verterbukh "other options" — alternatives to the auto-selected result.
   // These can coexist with entries (server returns both in the same response).
   const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
+  const [showTryEnglish, setShowTryEnglish] = useState(false);
   const [verterbukhQuota, setVerterbukhQuota] = useState<VerterbukQuota | null>(null);
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
   const { savedKeySet, refreshSaved } = useSaved();
@@ -129,6 +131,7 @@ export default function SearchScreen() {
     setEntries([]);
     setResultSource(null);
     setOtherOptions(null);
+    setShowTryEnglish(false);
     setFallbackNote(null);
 
     try {
@@ -156,6 +159,7 @@ export default function SearchScreen() {
       const creds = await getCredentials();
       const verterbukhhLoggedIn = creds !== null;
       const notes: string[] = [];
+      let verterbukHasChoices = false;
 
       // Helper: look up a single source and return its entries (cache-first).
       // Each returned entry has fromCache set on the entry itself.
@@ -175,7 +179,11 @@ export default function SearchScreen() {
           const vResult = await lookupVerterbukh(trimmed);
           console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies)`);
           processQuota(vResult.quota, threshold);
-          if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
+          if (vResult.choices && vResult.choices.length > 0) {
+            setOtherOptions(vResult.choices);
+            verterbukHasChoices = true;
+            if (!isHebrew) setShowTryEnglish(true);
+          }
           if (vResult.entries.length > 0) await saveToCache(trimmed, vResult.entries, 'verterbukh');
           return vResult.entries;
         }
@@ -204,7 +212,9 @@ export default function SearchScreen() {
         for (const source of eligibleSources) {
           const results = await lookupSource(source);
           allEntries.push(...results);
-          if (results.length === 0) notes.push(`No results from ${SOURCE_LABELS[source]}`);
+          if (results.length === 0 && !(source === 'verterbukh' && verterbukHasChoices)) {
+            notes.push(`No results from ${SOURCE_LABELS[source]}`);
+          }
         }
         if (allEntries.length > 0) {
           setEntries(applyConverter(allEntries));
@@ -223,7 +233,9 @@ export default function SearchScreen() {
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
             return;
           }
-          notes.push(`No results from ${SOURCE_LABELS[source]}`);
+          if (!(source === 'verterbukh' && verterbukHasChoices)) {
+            notes.push(`No results from ${SOURCE_LABELS[source]}`);
+          }
         }
         console.log('[YidDict] SearchScreen: all sources exhausted — no results');
       }
@@ -248,6 +260,7 @@ export default function SearchScreen() {
 
     setIsLoading(true);
     setOtherOptions(null);
+    setShowTryEnglish(false);
     setFallbackNote(null);
     try {
       console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
@@ -316,6 +329,64 @@ export default function SearchScreen() {
     }
   }, [query, processQuota]);
 
+  const handleTryEnglish = useCallback(async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setShowTryEnglish(false);
+    setOtherOptions(null);
+    setIsLoading(true);
+    setFallbackNote(null);
+    try {
+      const thresholdPct = await getLowTokenThreshold();
+      const cacheTtl = await getCacheTtlDays();
+      const useAllSourcesEnabled = await getUseAllSources();
+      const yivoToHebrewEnabled = await getYivoToHebrew();
+
+      const applyConverter = (es: DictEntry[]): DictEntry[] => {
+        if (!yivoToHebrewEnabled) return es;
+        return es.map(e => {
+          if (e.yiddishHebrew || !e.yiddishRomanized) return e;
+          const generated = yivoHeadwordToHebrew(e.yiddishRomanized);
+          if (!generated) return e;
+          return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
+        });
+      };
+
+      const vResult = await lookupVerterbukh(trimmed, undefined, 'to');
+      processQuota(vResult.quota, thresholdPct / 100);
+      if (vResult.entries.length > 0) await saveToCache(trimmed, vResult.entries, 'verterbukh');
+      if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
+
+      if (useAllSourcesEnabled) {
+        const order = await getSourceOrder();
+        const allEntries: DictEntry[] = [...vResult.entries];
+        for (const slot of order) {
+          if (slot === 'none' || slot === 'verterbukh') continue;
+          const cached = await getCachedEntries(trimmed, slot, cacheTtl);
+          if (cached && cached.length > 0) { allEntries.push(...cached); continue; }
+          if (slot === 'finkel') {
+            const results = await lookupFinkel(trimmed, false);
+            if (results.length > 0) await saveToCache(trimmed, results, 'finkel');
+            allEntries.push(...results);
+          } else if (slot === 'google_translate') {
+            const results = await lookupGoogleTranslate(trimmed, false);
+            if (results.length > 0) await saveToCache(trimmed, results, 'google_translate');
+            allEntries.push(...results);
+          }
+        }
+        setEntries(applyConverter(allEntries));
+        setResultSource(null);
+      } else {
+        setEntries(applyConverter(vResult.entries));
+        setResultSource('verterbukh');
+      }
+    } catch {
+      setError('Could not retrieve that entry. Try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [query, processQuota]);
+
   const handleSaveEntry = useCallback(async (entry: DictEntry, source: DictSource) => {
     const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
     if (savedKeySet.has(key)) {
@@ -356,6 +427,7 @@ export default function SearchScreen() {
     setHasSearched(false);
     setResultSource(null);
     setOtherOptions(null);
+    setShowTryEnglish(false);
     setVerterbukhQuota(null);
     setFallbackNote(null);
   }, []);
@@ -466,7 +538,7 @@ export default function SearchScreen() {
             }}
             contentContainerStyle={s.listContent}
             ListHeaderComponent={
-              (otherOptions || entries.length > 0) ? (
+              (otherOptions || showTryEnglish || entries.length > 0) ? (
                 <View>
                   {otherOptions ? (
                     <OtherOptionsView
@@ -475,6 +547,17 @@ export default function SearchScreen() {
                       theme={theme}
                       s={s}
                     />
+                  ) : null}
+                  {showTryEnglish ? (
+                    <TouchableOpacity
+                      style={[s.tryEnglishBtn, { borderColor: theme.sourceVerterbukh, backgroundColor: theme.sourceVerterbukh + '18' }]}
+                      onPress={handleTryEnglish}
+                      testID="try-english-button"
+                    >
+                      <Text style={[s.tryEnglishText, { color: theme.text }]}>
+                        Try searching "{query.trim()}" in English
+                      </Text>
+                    </TouchableOpacity>
                   ) : null}
                   {entries.length > 0 ? (
                     <TouchableOpacity
@@ -524,19 +607,42 @@ interface OtherOptionsViewProps {
   s: ReturnType<typeof makeStyles>;
 }
 
+const SUPERSCRIPT_DIGITS: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+};
+function toSuperscript(s: string): string {
+  return s.split('').map(c => SUPERSCRIPT_DIGITS[c] ?? c).join('');
+}
+
+function splitHebrewLemma(lemma: string): { text: string; sup?: string } {
+  const slash = lemma.lastIndexOf('/');
+  if (slash === -1) return { text: lemma };
+  const after = lemma.slice(slash + 1);
+  if (/^\d+$/.test(after)) return { text: lemma.slice(0, slash), sup: after };
+  return { text: lemma };
+}
+
 function OtherOptionsView({ choices, onSelect, theme, s }: OtherOptionsViewProps) {
+  const amberBorder = theme.sourceVerterbukh + '50';
+  const amberPress  = theme.sourceVerterbukh + '25';
   return (
     <View testID="other-options-view" style={s.otherOptionsWrap}>
-      <Text style={[s.otherOptionsTitle, { color: theme.textSecondary }]}>
-        Other options
+      <Text style={[s.otherOptionsTitle, { color: theme.sourceVerterbukh }]}>
+        Other search options
       </Text>
-      <View style={[s.otherOptionsCard, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-        {choices.map((choice, index) => (
-          <TouchableOpacity
+      <View style={[s.otherOptionsCard, { borderColor: amberBorder, backgroundColor: theme.surface }]}>
+        {choices.map((choice, index) => {
+          const hebrew = splitHebrewLemma(choice.hebrewLemma);
+          const hebrewText = hebrew.text + (hebrew.sup ? toSuperscript(hebrew.sup) : '');
+          const yivoText = `"${choice.label}"` + (choice.superscript ? toSuperscript(choice.superscript) : '');
+          return (
+          <Pressable
             key={choice.hebrewLemma}
-            style={[
+            style={({ pressed }) => [
               s.otherOption,
-              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border },
+              index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: amberBorder },
+              pressed && { backgroundColor: amberPress },
             ]}
             onPress={() => onSelect(choice)}
             testID={`other-option-${choice.hebrewLemma}`}
@@ -544,15 +650,16 @@ function OtherOptionsView({ choices, onSelect, theme, s }: OtherOptionsViewProps
             {choice.label !== choice.hebrewLemma ? (
               // Yiddish→English: YIVO label on left, Hebrew on right
               <>
-                <Text style={[s.otherOptionLabel, { color: theme.text }]}>{choice.label}</Text>
-                <Text style={[s.otherOptionHebrew, { color: theme.textSecondary }]}>{choice.hebrewLemma}</Text>
+                <Text style={[s.otherOptionLabel, { color: theme.text }]}>{yivoText}</Text>
+                <Text style={[s.otherOptionHebrew, { color: theme.text }]}>{hebrewText}</Text>
               </>
             ) : (
-              // English→Yiddish: Hebrew only (no YIVO available)
-              <Text style={[s.otherOptionHebrew, { color: theme.text }]}>{choice.hebrewLemma}</Text>
+              // English→Yiddish: Hebrew only (no YIVO available) — right-aligned for consistency
+              <Text style={[s.otherOptionHebrew, { color: theme.text, flex: 1, textAlign: 'right' }]}>{hebrewText}</Text>
             )}
-          </TouchableOpacity>
-        ))}
+          </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -758,18 +865,30 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     otherOptionsCard: {
       borderRadius: 8,
       borderWidth: 1,
-      paddingHorizontal: 16,
-      paddingVertical: 4,
+      overflow: 'hidden',
     },
     otherOption: {
       paddingVertical: 12,
+      paddingHorizontal: 16,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
     },
+    tryEnglishBtn: {
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+    },
+    tryEnglishText: {
+      fontSize: 14,
+      fontWeight: '500',
+      textAlign: 'center',
+    },
     otherOptionLabel: {
       fontSize: 15,
       fontWeight: '600',
+      fontStyle: 'italic',
     },
     otherOptionHebrew: {
       fontSize: 15,

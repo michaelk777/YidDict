@@ -675,8 +675,8 @@ describe('SearchScreen — Verterbukh other options', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('entry-card').length).toBe(1);
       expect(screen.getByTestId('other-options-view')).toBeTruthy();
-      expect(screen.getByText('LOYFN')).toBeTruthy();
-      expect(screen.getByText('LOYFER')).toBeTruthy();
+      expect(screen.getByText('"LOYFN"')).toBeTruthy();
+      expect(screen.getByText('"LOYFER"')).toBeTruthy();
     });
   });
 
