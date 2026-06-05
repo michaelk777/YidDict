@@ -159,7 +159,7 @@ describe('saveToCache', () => {
 
   it('trims to max entries after saving', async () => {
     __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 1005 });
-    await saveToCache('sheyn', [sampleEntry], 'finkel', 1000);
+    await saveToCache('sheyn', [sampleEntry], 'finkel', { maxCacheEntries: 1000 });
     const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
       .filter(([sql]) => (sql as string).includes('DELETE'));
     expect(deleteCalls.length).toBe(1);
@@ -168,11 +168,12 @@ describe('saveToCache', () => {
 
   it('does not trim when under max entries', async () => {
     __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 500 });
-    await saveToCache('sheyn', [sampleEntry], 'finkel', 1000);
+    await saveToCache('sheyn', [sampleEntry], 'finkel', { maxCacheEntries: 1000 });
     const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
       .filter(([sql]) => (sql as string).includes('DELETE'));
     expect(deleteCalls.length).toBe(0);
   });
+
 });
 
 describe('clearCache', () => {

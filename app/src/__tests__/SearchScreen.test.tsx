@@ -675,9 +675,10 @@ describe('SearchScreen — Verterbukh other options', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('entry-card').length).toBe(1);
       expect(screen.getByTestId('other-options-view')).toBeTruthy();
-      expect(screen.getByText('"LOYFN"')).toBeTruthy();
-      expect(screen.getByText('"LOYFER"')).toBeTruthy();
     });
+    fireEvent.press(screen.getByTestId('other-options-toggle'));
+    expect(screen.getByText('"LOYFN"')).toBeTruthy();
+    expect(screen.getByText('"LOYFER"')).toBeTruthy();
   });
 
   it('does not show "Other options" panel when no choices are returned', async () => {
@@ -691,6 +692,34 @@ describe('SearchScreen — Verterbukh other options', () => {
     expect(screen.queryByTestId('other-options-view')).toBeNull();
   });
 
+  it('auto-retries with dir=to when dir=from returns no entries and no choices (Latin input)', async () => {
+    const englishEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
+    mockLookupVerterbukh
+      .mockResolvedValueOnce({ entries: [], choices: null, quota: null })           // dir=from → nothing
+      .mockResolvedValueOnce({ entries: [englishEntry], choices: null, quota: null }); // dir=to → result
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'run');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+    expect(mockLookupVerterbukh).toHaveBeenNthCalledWith(1, 'run');
+    expect(mockLookupVerterbukh).toHaveBeenNthCalledWith(2, 'run', undefined, 'to');
+    expect(screen.getByText('run')).toBeTruthy();
+  });
+
+  it('does not auto-retry with dir=to when dir=from returns choices (manual Try in English available)', async () => {
+    mockLookupVerterbukh.mockResolvedValueOnce({ entries: [], choices: sampleChoices, quota: null });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('other-options-view'));
+    expect(mockLookupVerterbukh).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('other-options-view')).toBeTruthy();
+  });
+
   it('fetches the selected other option and replaces results', async () => {
     mockLookupVerterbukh
       .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
@@ -701,6 +730,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => screen.getByTestId('other-options-view'));
+    fireEvent.press(screen.getByTestId('other-options-toggle'));
     fireEvent.press(screen.getByTestId('other-option-לױפֿער'));
 
     await waitFor(() => {
@@ -708,6 +738,23 @@ describe('SearchScreen — Verterbukh other options', () => {
       expect(screen.getByText('runner')).toBeTruthy();
       expect(screen.queryByTestId('other-options-view')).toBeNull();
     });
+  });
+
+  it('fetches choices live on a Verterbukh cache hit so the panel reappears on re-search', async () => {
+    const cachedVEntry = [{ ...sampleVerterbukEntry.entries[0], fromCache: true }];
+    mockGetCached.mockResolvedValue(cachedVEntry);
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    // Live call returns choices but no new entries (user sees cached result + fresh choices panel)
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: sampleChoices, quota: null });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('other-options-view'));
+    expect(mockLookupVerterbukh).toHaveBeenCalledWith('loyf');
+    expect(screen.getAllByTestId('entry-card').length).toBeGreaterThan(0); // cached entries shown
   });
 
   it('other options panel appears above results (before FlatList), not below', async () => {
@@ -738,6 +785,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => screen.getByTestId('other-options-view'));
+    fireEvent.press(screen.getByTestId('other-options-toggle'));
     fireEvent.press(screen.getByTestId('other-option-לױפֿן'));
 
     await waitFor(() => {
@@ -936,7 +984,7 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
     fireEvent.press(screen.getByTestId('search-button'));
     await waitFor(() => screen.getByTestId('other-options-view'));
-
+    fireEvent.press(screen.getByTestId('other-options-toggle'));
     fireEvent.press(screen.getByTestId('other-option-לױפֿן'));
 
     expect(mockAlert).toHaveBeenCalledWith('No Verterbukh Tokens', expect.any(String));

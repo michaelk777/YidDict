@@ -52,7 +52,7 @@ export async function saveToCache(
   query: string,
   entries: DictEntry[],
   source: DictSource,
-  maxCacheEntries = 1000
+  { maxCacheEntries = 1000 }: { maxCacheEntries?: number } = {}
 ): Promise<void> {
   console.log(`[YidDict] cacheDb: saveToCache query="${query}" source="${source}" entries=${entries.length}`);
   const db = getDatabase();

@@ -32,15 +32,12 @@ export interface VerterbukResult {
  * Handles session expiry: if the response shows a logged-out page,
  * re-authenticates once and retries.
  *
- * Direction is normally auto-detected: Latin input tries dir=from (Yiddish→English)
- * first; if that returns nothing, retries with dir=to (English→Yiddish). Hebrew
- * input always uses dir=from. Pass forcedDir to skip auto-detection (e.g. when
- * following up a disambiguation choice that already has a known direction).
- *
  * @param query      YIVO romanization, Hebrew script, or English
  * @param ln         Optional Hebrew lemma — pins to a specific entry after the
  *                   user has chosen from disambiguation choices. Consumes a token.
- * @param forcedDir  Override the auto-detected direction.
+ * @param forcedDir  Search direction. Defaults to 'from' (Yiddish→English). Pass
+ *                   'to' for English→Yiddish. The caller is responsible for
+ *                   retrying with 'to' when 'from' returns nothing and no choices.
  */
 export async function lookupVerterbukh(
   query: string,
