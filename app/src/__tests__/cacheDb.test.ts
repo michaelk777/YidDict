@@ -134,7 +134,7 @@ describe('saveToCache', () => {
   it('inserts with correct query and source', async () => {
     await saveToCache('sheyn', [sampleEntry], 'finkel');
     const [sql, params] = __mockDb.runAsync.mock.calls[0];
-    expect(sql).toMatch(/INSERT INTO cached_results/i);
+    expect(sql).toMatch(/INSERT OR IGNORE INTO cached_results/i);
     expect(params).toContain('sheyn');
     expect(params).toContain('finkel');
   });

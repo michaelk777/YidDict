@@ -59,7 +59,7 @@ export async function saveToCache(
   const now = Date.now();
   for (const entry of entries) {
     await db.runAsync(
-      `INSERT INTO cached_results
+      `INSERT OR IGNORE INTO cached_results
          (query, yiddish_hebrew, yiddish_romanized, english,
           part_of_speech, conjugation_info, source,
           fetched_at, is_phrase)

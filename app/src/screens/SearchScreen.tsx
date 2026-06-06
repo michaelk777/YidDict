@@ -23,6 +23,7 @@ import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
+import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
 import { Ionicons } from '@expo/vector-icons';
 import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, saveVerterbukhQuota } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
@@ -327,26 +328,28 @@ export default function SearchScreen() {
       const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma, choice.dir);
       processQuota(vResult.quota, thresholdPct / 100);
       if (vResult.entries.length > 0) {
-        const alreadyCached = await getCachedEntries(trimmed, 'verterbukh', cacheTtl);
-        if (!alreadyCached || alreadyCached.length === 0) {
-          await saveToCache(trimmed, vResult.entries, 'verterbukh');
-        }
-        setCachedChoiceLemmas(prev => new Set([...prev, choice.hebrewLemma]));
+        // Always store choice.hebrewLemma (including any /N homograph suffix) so each
+        // homograph has a distinct cache key and existingLemmas greys correctly on re-search.
+        const entriesToSave = vResult.entries.map(e => ({
+          ...e,
+          yiddishHebrew: choice.hebrewLemma,
+        }));
+        await saveToCache(trimmed, entriesToSave, 'verterbukh');
       }
 
       if (useAllSourcesEnabled) {
-        // Query other active sources. For Yiddish→English choices the YIVO label
-        // (e.g. "LOYFN") is the best query; for English→Yiddish choices (label ===
-        // hebrewLemma, Hebrew only) the original query (e.g. "run") works better.
+        // Query other active sources using the Yiddish word the user actually chose.
+        // dir=from (Yiddish→English): search the YIVO label (e.g. "loyfn")
+        // dir=to   (English→Yiddish): search the Hebrew lemma (e.g. "לױפֿן"), stripping any /N suffix
         const order = await getSourceOrder();
-        const creds = await getCredentials();
-        const altQuery = choice.label !== choice.hebrewLemma ? choice.label.toLowerCase() : trimmed;
-        const isHebrew = detectInputScript(altQuery) === 'hebrew';
+        const altQuery = choice.dir === 'to'
+          ? splitHebrewLemma(choice.hebrewLemma).text
+          : choice.label.toLowerCase();
+        const isHebrew = choice.dir === 'to';
         const allEntries: DictEntry[] = [...vResult.entries];
 
         for (const slot of order) {
           if (slot === 'none' || slot === 'verterbukh') continue;
-          if (!creds && slot === 'verterbukh') continue;
 
           const cached = await getCachedEntries(altQuery, slot, cacheTtl);
           if (cached && cached.length > 0) {
@@ -402,16 +405,17 @@ export default function SearchScreen() {
       const vResult = await lookupVerterbukh(trimmed, undefined, 'to');
       processQuota(vResult.quota, thresholdPct / 100);
       if (vResult.entries.length > 0) {
-        const alreadyCached = await getCachedEntries(trimmed, 'verterbukh', cacheTtl);
-        if (!alreadyCached || alreadyCached.length === 0) {
-          await saveToCache(trimmed, vResult.entries, 'verterbukh');
-        }
+        await saveToCache(trimmed, vResult.entries, 'verterbukh');
       }
       if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
 
+      // Re-fetch all cached Verterbukh entries so previously-selected "Other options"
+      // entries (from dir=from) remain visible alongside any new dir=to results.
+      const allVerterbukh = await getCachedEntries(trimmed, 'verterbukh', cacheTtl) ?? vResult.entries;
+
       if (useAllSourcesEnabled) {
         const order = await getSourceOrder();
-        const allEntries: DictEntry[] = [...vResult.entries];
+        const allEntries: DictEntry[] = [...allVerterbukh];
         for (const slot of order) {
           if (slot === 'none' || slot === 'verterbukh') continue;
           const cached = await getCachedEntries(trimmed, slot, cacheTtl);
@@ -429,7 +433,7 @@ export default function SearchScreen() {
         setEntries(applyConverter(allEntries));
         setResultSource(null);
       } else {
-        setEntries(applyConverter(vResult.entries));
+        setEntries(applyConverter(allVerterbukh));
         setResultSource('verterbukh');
       }
     } catch {
@@ -661,21 +665,6 @@ interface OtherOptionsViewProps {
   s: ReturnType<typeof makeStyles>;
 }
 
-const SUPERSCRIPT_DIGITS: Record<string, string> = {
-  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
-};
-function toSuperscript(s: string): string {
-  return s.split('').map(c => SUPERSCRIPT_DIGITS[c] ?? c).join('');
-}
-
-function splitHebrewLemma(lemma: string): { text: string; sup?: string } {
-  const slash = lemma.lastIndexOf('/');
-  if (slash === -1) return { text: lemma };
-  const after = lemma.slice(slash + 1);
-  if (/^\d+$/.test(after)) return { text: lemma.slice(0, slash), sup: after };
-  return { text: lemma };
-}
 
 function OtherOptionsView({ choices, cachedLemmas, onSelect, theme, s }: OtherOptionsViewProps) {
   const amberBorder = theme.sourceVerterbukh + '50';
@@ -728,7 +717,7 @@ function OtherOptionsView({ choices, cachedLemmas, onSelect, theme, s }: OtherOp
                 pressed && { backgroundColor: amberPress },
                 isCached && { opacity: 0.35 },
               ]}
-              onPress={() => onSelect(choice)}
+              onPress={() => { if (!isCached) onSelect(choice); }}
               testID={`other-option-${choice.hebrewLemma}`}
             >
               {choice.label !== choice.hebrewLemma ? (
@@ -781,7 +770,7 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
             <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
           ) : null}
           <Text style={[s.hebrew, { color: theme.text }]}>
-            {entry.yiddishHebrew ?? ''}
+            {formatHebrewLemma(entry.yiddishHebrew)}
           </Text>
           {entry.hebrewIsGenerated ? (
             <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
@@ -811,7 +800,10 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
       {/* Row 3: YIVO transliteration */}
       {entry.yiddishRomanized ? (
         <Text style={[s.romanized, { color: theme.text }]}>
-          {`"${entry.yiddishRomanized}"`}
+          {(() => {
+            const sup = splitHebrewLemma(entry.yiddishHebrew ?? '').sup;
+            return `"${entry.yiddishRomanized}"${sup ? toSuperscript(sup) : ''}`;
+          })()}
         </Text>
       ) : null}
 

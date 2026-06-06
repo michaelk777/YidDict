@@ -31,9 +31,9 @@ export async function initDatabase(): Promise<void> {
       part_of_speech TEXT,
       conjugation_info TEXT,
       source TEXT NOT NULL CHECK(source IN ('finkel', 'verterbukh', 'google_translate')),
-      raw_html TEXT,
       fetched_at INTEGER NOT NULL,
-      is_phrase INTEGER NOT NULL DEFAULT 0
+      is_phrase INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(query, yiddish_hebrew, source)
     );
 
     CREATE TABLE IF NOT EXISTS user_settings (
@@ -42,21 +42,13 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // Migrations: add columns introduced after the initial schema.
-  // ALTER TABLE ADD COLUMN has no IF NOT EXISTS; we catch and ignore the
-  // "duplicate column" error so this is safe to run on every startup.
-  const migrations = [
-    'ALTER TABLE cached_results ADD COLUMN query TEXT NOT NULL DEFAULT ""',
-    'ALTER TABLE cached_results ADD COLUMN is_phrase INTEGER NOT NULL DEFAULT 0',
-    'ALTER TABLE saved_entries ADD COLUMN hebrew_is_generated INTEGER NOT NULL DEFAULT 0',
-  ];
-  for (const sql of migrations) {
-    try {
-      await db.execAsync(sql);
-    } catch {
-      // Column already exists — safe to ignore.
-    }
+  // Column migration for saved_entries.
+  try {
+    await db.execAsync('ALTER TABLE saved_entries ADD COLUMN hebrew_is_generated INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    // Column already exists — safe to ignore.
   }
+
   console.log('[YidDict] database: tables created');
 
   const defaults: [string, string][] = [

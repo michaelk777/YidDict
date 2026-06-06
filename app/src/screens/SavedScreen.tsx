@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useSaved } from '../context/SavedContext';
 import { DictSource, SOURCE_LABELS } from '../db/settingsDb';
+import { formatHebrewLemma, splitHebrewLemma, toSuperscript } from '../utils/hebrewDisplay';
 import {
   SavedEntry,
   deleteEntry,
@@ -195,7 +196,7 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
             {entry.hebrewIsGenerated ? (
               <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
             ) : null}
-            <Text style={[s.hebrew, { color: theme.text }]}>{entry.yiddishHebrew ?? ''}</Text>
+            <Text style={[s.hebrew, { color: theme.text }]}>{formatHebrewLemma(entry.yiddishHebrew)}</Text>
             {entry.hebrewIsGenerated ? (
               <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
             ) : null}
@@ -217,7 +218,10 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
 
         {/* Row 3: YIVO transliteration */}
         {entry.yiddishRomanized ? (
-          <Text style={[s.romanized, { color: theme.text }]}>{`"${entry.yiddishRomanized}"`}</Text>
+          <Text style={[s.romanized, { color: theme.text }]}>{(() => {
+            const sup = splitHebrewLemma(entry.yiddishHebrew ?? '').sup;
+            return `"${entry.yiddishRomanized}"${sup ? toSuperscript(sup) : ''}`;
+          })()}</Text>
         ) : null}
 
         {/* Row 4: grammar */}
