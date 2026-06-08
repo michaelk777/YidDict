@@ -139,92 +139,273 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
   return { entries, choices, quota };
 }
 
-/** Walk up the ancestor chain checking for an element with a given class. */
-function isInsideClass(node: ReturnType<typeof parse>, className: string): boolean {
-  let parent = node.parentNode as ReturnType<typeof parse> | null;
-  while (parent) {
-    if (parent.classList?.contains(className)) return true;
-    parent = parent.parentNode as ReturnType<typeof parse> | null;
+// ---------------------------------------------------------------------------
+// Definition parsing — segment-based state machine
+//
+// A `.def` block is a flat sequence of child divs: lemma, [headword translit],
+// then repeating groups of either
+//   (grammar .rtl, grammar .translit, .gloss)  — a "definition" (POS + meaning), or
+//   (.rtl.sep, .translit, .gloss)              — a phrase (usage example, set
+//                                                 expression, variation, etc. —
+//                                                 anything under a .sep wrapper)
+// The first definition supplies english/partOfSpeech and headword enrichment
+// (past participle, plural suffix); everything else folds into grammaticalInfo
+// as additional lines, mirroring how Finkel collapses secondary definitions
+// into one block.
+// ---------------------------------------------------------------------------
+
+interface DefinitionSegment {
+  kind: 'definition';
+  grammarYiddish: ReturnType<typeof parse> | null;
+  grammarRomanized: ReturnType<typeof parse> | null;
+  gloss: string;
+}
+
+interface PhraseSegment {
+  kind: 'phrase';
+  yiddishPhrase: string;
+  romanizedPhrase: string | null;
+  englishPhrase: string;
+}
+
+type DefSegment = DefinitionSegment | PhraseSegment;
+
+/** Concatenate a node's text, skipping nested `.help` spans (tooltip text baked into the DOM). */
+function textExcludingHelp(node: ReturnType<typeof parse>): string {
+  let result = '';
+  for (const child of node.childNodes) {
+    if (!('classList' in child)) {
+      result += (child as unknown as { text: string }).text;
+      continue;
+    }
+    const el = child as ReturnType<typeof parse>;
+    if (el.classList?.contains('help')) continue;
+    result += el.childNodes.length > 0 ? textExcludingHelp(el) : el.text;
   }
-  return false;
+  return result;
+}
+
+/** Strip surrounding whitespace/parentheses left from a `.glossed` span's wrapper, e.g. "(ן)" -> "ן". */
+function unwrapForm(text: string): string {
+  return text.replace(/^[\s()]+|[\s()]+$/g, '').trim();
+}
+
+/** Find the first `.glossed` span whose `.help` label matches, returning its cleaned form text. */
+function formByLabel(node: ReturnType<typeof parse> | null, targetLabel: string): string | null {
+  if (!node) return null;
+  for (const glossed of node.querySelectorAll('.glossed')) {
+    const helpNode = glossed.querySelector('.help');
+    if (helpNode?.text.trim() === targetLabel) {
+      const form = unwrapForm(textExcludingHelp(glossed));
+      if (form) return form;
+    }
+  }
+  return null;
+}
+
+/**
+ * Render a grammar block's terse summary straight from Verterbukh's own romanized
+ * text — preserves its abbreviations and "/" alternatives ("n. masc./neut.",
+ * "adj./adv. comp. ShENER") without us inventing any abbreviation scheme. Spans
+ * whose `.help` label is in `skipLabels` are omitted — used to remove forms that
+ * have been folded into the headword instead (e.g. plural suffix, participle).
+ */
+function grammarSummaryLine(node: ReturnType<typeof parse> | null, skipLabels: Set<string>): string | null {
+  if (!node) return null;
+  let result = '';
+  for (const child of node.childNodes) {
+    if (!('classList' in child)) {
+      result += (child as unknown as { text: string }).text;
+      continue;
+    }
+    const el = child as ReturnType<typeof parse>;
+    if (el.classList?.contains('help')) continue;
+    if (el.classList?.contains('glossed')) {
+      const helpNode = el.querySelector('.help');
+      const label = helpNode?.text.trim() ?? '';
+      if (skipLabels.has(label)) continue;
+      result += textExcludingHelp(el);
+    } else {
+      result += el.text;
+    }
+  }
+  const cleaned = result.replace(/\(\s*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || null;
+}
+
+/**
+ * Render a phrase node's text, setting off any inline grammar annotation Verterbukh
+ * bakes directly into the phrase itself (e.g. a `.gram` span reading "DAT"/"דאַט" for
+ * a dative usage) in parentheses — "שײַנען (דאַט)" / "ShAYNEN (DAT)" — so it reads as
+ * a grammar tag rather than blending into the phrase's own wording.
+ */
+function formatPhraseText(node: ReturnType<typeof parse>): string {
+  const full = textExcludingHelp(node).trim();
+  const gram = node.querySelector('.gram');
+  if (!gram) return full;
+
+  const annotation = textExcludingHelp(gram).trim();
+  if (!annotation || !full.endsWith(annotation)) return full;
+
+  const base = full.slice(0, full.length - annotation.length).trim();
+  return base ? `${base} (${annotation})` : `(${annotation})`;
+}
+
+/** Group a `.def` block's child divs into headword info + ordered definition/phrase segments. */
+function collectDefSegments(defNode: ReturnType<typeof parse>): {
+  baseHebrew: string | null;
+  baseRomanized: string | null;
+  segments: DefSegment[];
+} {
+  const children = defNode.childNodes.filter(
+    (n): n is ReturnType<typeof parse> => 'classList' in n
+  );
+
+  let baseHebrew: string | null = null;
+  let baseRomanized: string | null = null;
+  const segments: DefSegment[] = [];
+  let i = 0;
+
+  if (i < children.length) {
+    const lemmaNode = children[i].querySelector('.lemma');
+    if (lemmaNode) {
+      baseHebrew = lemmaNode.text.replace(/\|/g, '').trim() || null;
+      i++;
+    }
+  }
+  if (i < children.length && children[i].classList?.contains('translit') && !children[i].querySelector('.glossed')) {
+    baseRomanized = children[i].text.replace(/\|/g, '').trim() || null;
+    i++;
+  }
+
+  while (i < children.length) {
+    const node = children[i];
+
+    if (node.classList?.contains('sep')) {
+      // formatPhraseText (not .text) — phrases sometimes bake an inline grammar
+      // annotation into their own Hebrew/romanized spans (e.g. "שײַנען דאַט" /
+      // "ShAYNEN DAT" for a dative usage); it both excludes the hidden .help
+      // tooltip text ("dative") and sets the annotation off in parentheses.
+      const yiddishPhrase = formatPhraseText(node);
+      i++;
+      let romanizedPhrase: string | null = null;
+      if (i < children.length && children[i].classList?.contains('translit')) {
+        romanizedPhrase = formatPhraseText(children[i]) || null;
+        i++;
+      }
+      let englishPhrase = '';
+      if (i < children.length && children[i].classList?.contains('gloss')) {
+        englishPhrase = children[i].text.trim();
+        i++;
+      }
+      segments.push({ kind: 'phrase', yiddishPhrase, romanizedPhrase, englishPhrase });
+      continue;
+    }
+
+    if (node.classList?.contains('rtl') && node.querySelector('.glossed')) {
+      const grammarYiddish = node;
+      i++;
+      let grammarRomanized: ReturnType<typeof parse> | null = null;
+      if (i < children.length && children[i].classList?.contains('translit')) {
+        grammarRomanized = children[i];
+        i++;
+      }
+      let gloss = '';
+      if (i < children.length && children[i].classList?.contains('gloss')) {
+        gloss = children[i].text.trim();
+        i++;
+      }
+      segments.push({ kind: 'definition', grammarYiddish, grammarRomanized, gloss });
+      continue;
+    }
+
+    if (node.classList?.contains('gloss')) {
+      segments.push({ kind: 'definition', grammarYiddish: null, grammarRomanized: null, gloss: node.text.trim() });
+      i++;
+      continue;
+    }
+
+    i++; // skip anything unrecognized (e.g. stray whitespace-only nodes)
+  }
+
+  return { baseHebrew, baseRomanized, segments };
 }
 
 function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
-  // Headword — strip the | stem separator
-  const lemmaNode = defNode.querySelector('.lemma');
-  const yiddishHebrew = lemmaNode ? lemmaNode.text.replace(/\|/g, '').trim() : null;
+  const { baseHebrew, baseRomanized, segments } = collectDefSegments(defNode);
 
-  // YIVO romanization — the first .translit div contains only the headword romanization.
-  // A second .translit div (if present) contains romanized grammar info; we skip it.
-  const translitNodes = defNode.querySelectorAll('.translit');
-  const yiddishRomanized = translitNodes.length > 0
-    ? translitNodes[0].text.trim() || null
-    : null;
-
-  // Grammar block — .glossed spans appear in two variants in the wild:
-  //   (A) <span class="gram glossed"> — both classes on the same element
-  //   (B) <span class="gram"><span class="glossed"> — .gram wraps .glossed
-  // .glossed also appears inside .translit divs (romanized grammar — skip those).
-  const glossedNodes = defNode.querySelectorAll('.glossed');
+  let yiddishHebrew = baseHebrew;
+  let yiddishRomanized = baseRomanized;
   let partOfSpeech: string | null = null;
-  const grammaticalParts: string[] = [];
-
-  for (const glossed of glossedNodes) {
-    // Skip romanized grammar inside .translit divs
-    if (isInsideClass(glossed, 'translit')) continue;
-
-    const helpNode = glossed.querySelector('.help');
-    const englishLabel = helpNode?.text.trim() ?? null;
-    if (!englishLabel) continue;
-
-    // Strip the English label text and surrounding parentheses to get the Yiddish particle
-    const yiddishParticle = helpNode
-      ? glossed.text.replace(helpNode.text, '').replace(/^[\s()]+|[\s()]+$/g, '')
-      : glossed.text.replace(/^[\s()]+|[\s()]+$/g, '');
-
-    // Primary POS: variant A (.gram on same element) or variant B (.gram is immediate parent)
-    const isPrimary =
-      glossed.classList.contains('gram') ||
-      (glossed.parentNode as ReturnType<typeof parse> | null)?.classList?.contains('gram') === true;
-
-    if (isPrimary && !partOfSpeech) {
-      partOfSpeech = englishLabel;
-    } else if (!isPrimary && !isInsideClass(glossed, 'gram')) {
-      // Secondary grammar: "plural: עך", "past participle: איז געלאָפֿן", etc.
-      const part = yiddishParticle
-        ? `${englishLabel}: ${yiddishParticle}`
-        : englishLabel;
-      grammaticalParts.push(part);
-    }
-  }
-
-  const grammaticalInfo = grammaticalParts.length > 0 ? grammaticalParts.join('; ') : null;
-
-  // Definitions and example phrases — .gloss and .sep alternate
-  // First .gloss = main definition; .sep + following .gloss = example pair
-  const allNodes = defNode.childNodes;
   let english: string | null = null;
-  let exampleYiddish: string | null = null;
-  let exampleEnglish: string | null = null;
-  let lastWasSep = false;
+  const grammarLines: string[] = [];
 
-  for (const node of allNodes) {
-    if (!('classList' in node)) continue;
-    const el = node as ReturnType<typeof parse>;
+  for (const seg of segments) {
+    if (seg.kind === 'definition') {
+      const skipLabels = new Set<string>();
 
-    if (el.classList?.contains('gloss')) {
-      const text = el.text.trim();
-      if (!english) {
-        english = text;
-      } else if (lastWasSep) {
-        exampleEnglish = text;
+      // Headword enrichment — verb past participle (with auxiliary) folds in as
+      // "word, participle"; noun plural suffix folds in as "word, -suffix",
+      // matching Finkel's "word, gelofn" / "word, -n" conventions. Adjective
+      // comparatives/stems are deliberately NOT folded in — they stay below.
+      const participleHebrew = formByLabel(seg.grammarYiddish, 'past participle');
+      const participleRom = formByLabel(seg.grammarRomanized, 'past participle');
+      if (participleHebrew) {
+        yiddishHebrew = yiddishHebrew ? `${yiddishHebrew}, ${participleHebrew}` : participleHebrew;
+        if (participleRom) {
+          yiddishRomanized = yiddishRomanized ? `${yiddishRomanized}, ${participleRom}` : participleRom;
+        }
+        skipLabels.add('past participle');
       }
-      lastWasSep = false;
-    } else if (el.classList?.contains('sep')) {
-      exampleYiddish = el.text.trim();
-      lastWasSep = true;
+
+      const pluralHebrew = formByLabel(seg.grammarYiddish, 'plural');
+      const pluralRom = formByLabel(seg.grammarRomanized, 'plural');
+      if (pluralHebrew) {
+        yiddishHebrew = yiddishHebrew ? `${yiddishHebrew}, -${pluralHebrew}` : `-${pluralHebrew}`;
+        if (pluralRom) {
+          yiddishRomanized = yiddishRomanized ? `${yiddishRomanized}, -${pluralRom}` : `-${pluralRom}`;
+        }
+        skipLabels.add('plural');
+      }
+
+      const summary = grammarSummaryLine(seg.grammarRomanized, skipLabels);
+
+      if (english === null) {
+        english = seg.gloss || null;
+        partOfSpeech = summary;
+        if (summary) grammarLines.push(summary);
+      } else if (seg.gloss) {
+        // Secondary definition — same headword, different POS/meaning — folds
+        // into the grammar block as "{POS} - {gloss}" rather than a child entry
+        // (which would create a duplicate cache row / bookmark for one headword),
+        // mirroring how Finkel folds secondary definitions into a grammar line.
+        grammarLines.push(summary ? `${summary} - ${seg.gloss}` : seg.gloss);
+      }
+    } else {
+      // Phrase (usage example, set expression, variation, etc.) — rendered as
+      // exactly what Verterbukh writes for it, with no POS label borrowed from
+      // a prior definition (a phrase's part of speech isn't necessarily the
+      // same as the definition it follows), e.g.
+      // "אַװעקלױפֿן צו - AVEKLOYFN TSU - run/hurry to"
+      const parts = [seg.yiddishPhrase, seg.romanizedPhrase, seg.englishPhrase].filter(
+        (p): p is string => !!p
+      );
+      if (parts.length > 0) grammarLines.push(parts.join(' - '));
     }
   }
 
-  return { source: 'verterbukh', fromCache: false, yiddishHebrew, yiddishRomanized, partOfSpeech, grammaticalInfo, english, exampleYiddish, exampleEnglish, isPhrase: false };
+  const grammaticalInfo = grammarLines.length > 0 ? grammarLines.join('\n') : null;
+
+  return {
+    source: 'verterbukh',
+    fromCache: false,
+    yiddishHebrew,
+    yiddishRomanized,
+    partOfSpeech,
+    grammaticalInfo,
+    english,
+    exampleYiddish: null,
+    exampleEnglish: null,
+    isPhrase: false,
+  };
 }

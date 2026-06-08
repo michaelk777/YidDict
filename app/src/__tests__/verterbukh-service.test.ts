@@ -43,29 +43,55 @@ const NOUN_HTML = `
       <span class="gram glossed">דאָס <span class="help">neuter noun</span></span>
       <span class="glossed">(עך <span class="help">plural</span>)</span>
     </div>
-    <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">N<span class="help">plural</span></span>)</div>
+    <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">EKh<span class="help">plural</span></span>)</div>
     <div lang="en" class="gloss">pass, permit</div>
   </div>
 </div>
 `;
 
-const VERB_HTML = `
+// Verb with past-participle headword folding + a usage phrase.
+// Captured from the live response for query "loyfn" -> ln="אַװעקלױפֿן" (2026-06-06).
+const AVEKLOYFN_HTML = `
 <div id="definition">
   <div class="def">
     <div dir="rtl" lang="yi" class="rtl">
-      <span class="lemma">לױפֿ|ן</span>
+      <span class="lemma">אַװע'ק|לױפֿ|ן</span>
     </div>
-    <div lang="en" class="translit">LOYFN</div>
-    <div dir="rtl" lang="yi" class="rtl">
-      <span class="gram glossed">װ <span class="help">verb</span></span>
-      <span class="glossed">(איז געלאָפֿן <span class="help">past participle</span>)</span>
-    </div>
-    <div lang="en" class="translit">v. (past part. ...)</div>
-    <div lang="en" class="gloss">run; <span class="field">(water, fluids)</span> flow; <span class="field">(time)</span> fly</div>
+    <div lang="en" class="translit">AVE'K|LOYF|N</div>
+    <div dir="rtl" lang="yi" class="rtl"><span class="gram glossed">װ <span class="help">verb</span></span> <span class="glossed">(איז אַװע'קגעלאָפֿן<span class="help">past participle</span>)</span></div>
+    <div lang="en" class="translit">v.  (<span class="glossed">IZ AVE'KGELOFN<span class="help">past participle</span></span>)</div>
+    <div lang="en" class="gloss">leave hastily; run away, flee</div>
     <div dir="rtl" lang="yi" class="rtl sep">
-      <span>זאָל ער/זי לױפֿן און בעטן</span>
+      <span>אַװעקלױפֿן צו</span>
     </div>
-    <div lang="en" class="gloss">may he/she make haste and intercede on our behalf in Heaven</div>
+    <div lang="en" class="translit">AVEKLOYFN TSU</div>
+    <div lang="en" class="gloss">run/hurry to</div>
+  </div>
+</div>
+`;
+
+// Adjective with dual POS (adj./adv.), a comparative form, and a secondary
+// adverb-only sense. Captured from the live response for query "beautiful" ->
+// ln="שײן" (2026-06-06).
+const SHEYN_HTML = `
+<div id="definition">
+  <div class="def">
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="lemma">שײן</span>
+    </div>
+    <div lang="en" class="translit">ShEYN</div>
+    <div dir="rtl" lang="yi" class="rtl"><span class="gram"><span class="glossed">אַדי<span class="help">adjective</span></span>/<span class="glossed">אַדװ<span class="help">adverb</span></span></span> <span class="gram">קאָמפּ</span> <span class="glossed">שענער<span class="help">comparative</span></span></div>
+    <div lang="en" class="translit"><span class="glossed">adj.<span class="help">adjective</span></span>/<span class="glossed">adv.<span class="help">adverb</span></span> comp. <span class="glossed">ShENER<span class="help">comparative</span></span></div>
+    <div lang="en" class="gloss">beautiful, pretty, handsome; respectable, considerable</div>
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="gram">
+        <span class="glossed">אַדװ<span class="help">adverb</span></span>
+      </span>
+    </div>
+    <div lang="en" class="translit">
+      <span class="glossed">adv.<span class="help">adverb</span></span>
+    </div>
+    <div lang="en" class="gloss"><span class="italic">also</span> good, well</div>
   </div>
 </div>
 `;
@@ -85,6 +111,56 @@ const NOUN_NESTED_HTML = `
     </div>
     <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">N<span class="help">plural</span></span>)</div>
     <div lang="en" class="gloss">certificate, diploma</div>
+  </div>
+</div>
+`;
+
+// Verb whose secondary phrase bakes its own grammar annotation directly into its
+// Hebrew/romanized text (".gram" -> "דאַט"/"DAT" for a dative usage), distinct
+// from the entry's own part of speech. Captured from the live response for query
+// "sheyn" -> ln="שײַנען" (2026-06-06).
+const SHAYNEN_HTML = `
+<div id="definition">
+  <div class="def">
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="lemma">שײַנ|ען</span>
+    </div>
+    <div lang="en" class="translit">ShAYN|EN</div>
+    <div dir="rtl" lang="yi" class="rtl"><span class="gram glossed">װ <span class="help">verb</span></span> <span class="glossed">(גע—ט<span class="help">past participle</span>)</span></div>
+    <div lang="en" class="translit">v.  (<span class="glossed">GE—T<span class="help">past participle</span></span>)</div>
+    <div lang="en" class="gloss">shine, glow; beam</div>
+    <div dir="rtl" lang="yi" class="rtl sep">
+      <span>שײַנען <span class="gram"><span class="glossed">דאַט<span class="help">dative</span></span></span></span>
+    </div>
+    <div lang="en" class="translit">ShAYNEN <span class="gram">DAT</span></div>
+    <div lang="en" class="gloss"><span class="italic">Germ.</span> seem/appear to s.o.</div>
+    <div dir="rtl" lang="yi" class="rtl sep">
+      <span>װי עס שײַנט</span>
+    </div>
+    <div lang="en" class="translit">VI ES ShAYNT</div>
+    <div lang="en" class="gloss"><span class="italic">Germ.</span> as it seems, as it appears</div>
+  </div>
+</div>
+`;
+
+// Verb whose secondary phrase carries no grammar annotation of its own — the
+// phrase line must not borrow "v." from the entry's main definition. Captured
+// from the live response for query "loyfn" -> ln="לױפֿן" (2026-06-06).
+const LOYFN_HTML = `
+<div id="definition">
+  <div class="def">
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="lemma">לױפֿ|ן</span>
+    </div>
+    <div lang="en" class="translit">LOYF|N</div>
+    <div dir="rtl" lang="yi" class="rtl"><span class="gram glossed">װ <span class="help">verb</span></span> <span class="glossed">(איז געלאָפֿן<span class="help">past participle</span>)</span></div>
+    <div lang="en" class="translit">v.  (<span class="glossed">IZ GELOFN<span class="help">past participle</span></span>)</div>
+    <div lang="en" class="gloss">run; <span class="field">(water, fluids)</span> flow; <span class="field">(time)</span> fly; flee, fly; <span class="field">(timepiece)</span> be fast</div>
+    <div dir="rtl" lang="yi" class="rtl sep">
+      <span>זאָל ער/זי לױפֿן און בעטן</span>
+    </div>
+    <div lang="en" class="translit">ZOL ER/ZI LOYFN UN BETN</div>
+    <div lang="en" class="gloss"><span class="field">(in speaking of a deceased relative)</span> may he/she make haste and intercede on our behalf in Heaven</div>
   </div>
 </div>
 `;
@@ -152,28 +228,26 @@ beforeEach(() => {
 // Parser — noun
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — noun entry (variant A: .gram.glossed same element)', () => {
-  it('extracts the headword with no stem separator', () => {
+describe('parseVerterbukhhHtml — noun entry with plural folding (variant A: .gram.glossed same element)', () => {
+  it('strips the | stem separator and folds the plural suffix into the Hebrew headword with a dash', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
-    expect(entries[0].yiddishHebrew).toBe('פּאַסירל');
+    expect(entries[0].yiddishHebrew).toBe('פּאַסירל, -עך');
   });
 
-  it('extracts YIVO romanization from first .translit div', () => {
+  it('folds the romanized plural suffix into yiddishRomanized with a dash', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
-    expect(entries[0].yiddishRomanized).toBe('PASIRL');
+    expect(entries[0].yiddishRomanized).toBe('PASIRL, -EKh');
   });
 
-  it('extracts the primary part of speech', () => {
+  it('extracts a terse part of speech straight from Verterbukh\'s romanized grammar', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
-    expect(entries[0].partOfSpeech).toBe('neuter noun');
+    expect(entries[0].partOfSpeech).toBe('n. neut.');
   });
 
-  it('extracts secondary grammatical info (plural) and excludes .translit .glossed spans', () => {
+  it('omits the folded plural from grammaticalInfo — no duplication with the headword', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
-    expect(entries[0].grammaticalInfo).toContain('plural');
-    expect(entries[0].grammaticalInfo).toContain('עך');
-    // Should NOT contain romanized grammar labels from the second .translit div
-    expect(entries[0].grammaticalInfo).not.toContain('neut.');
+    expect(entries[0].grammaticalInfo).toBe('n. neut.');
+    expect(entries[0].grammaticalInfo).not.toContain('plural');
   });
 
   it('extracts the English definition', () => {
@@ -181,7 +255,7 @@ describe('parseVerterbukhhHtml — noun entry (variant A: .gram.glossed same ele
     expect(entries[0].english).toBe('pass, permit');
   });
 
-  it('returns null for example fields when no .sep is present', () => {
+  it('returns null for the legacy example fields — phrases now fold into grammaticalInfo', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
     expect(entries[0].exampleYiddish).toBeNull();
     expect(entries[0].exampleEnglish).toBeNull();
@@ -194,45 +268,110 @@ describe('parseVerterbukhhHtml — noun entry (variant A: .gram.glossed same ele
 });
 
 // ---------------------------------------------------------------------------
-// Parser — verb with example phrase
+// Parser — verb with past participle + usage phrase (live HTML 2026-06-06)
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — verb entry (variant A: .gram.glossed same element)', () => {
-  it('strips the | stem separator from the headword', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].yiddishHebrew).toBe('לױפֿן');
+describe('parseVerterbukhhHtml — verb entry with past participle + phrase (avek-loyfn)', () => {
+  it('strips | stem separators and folds the past participle into the Hebrew headword', () => {
+    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    expect(entries[0].yiddishHebrew).toBe("אַװע'קלױפֿן, איז אַװע'קגעלאָפֿן");
     expect(entries[0].yiddishHebrew).not.toContain('|');
   });
 
-  it('extracts YIVO romanization from first .translit div', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].yiddishRomanized).toBe('LOYFN');
+  it('folds the romanized past participle (with auxiliary) into yiddishRomanized', () => {
+    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    expect(entries[0].yiddishRomanized).toBe("AVE'KLOYFN, IZ AVE'KGELOFN");
+    expect(entries[0].yiddishRomanized).not.toContain('|');
   });
 
-  it('extracts verb as primary part of speech', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].partOfSpeech).toBe('verb');
-  });
-
-  it('extracts past participle in grammaticalInfo', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].grammaticalInfo).toContain('past participle');
-    expect(entries[0].grammaticalInfo).toContain('איז געלאָפֿן');
+  it('extracts a terse part of speech, omitting the participle now folded into the headword', () => {
+    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    expect(entries[0].partOfSpeech).toBe('v.');
   });
 
   it('extracts the main definition as the first .gloss', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].english).toContain('run');
+    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    expect(entries[0].english).toBe('leave hastily; run away, flee');
   });
 
-  it('extracts the Yiddish example phrase from .sep', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].exampleYiddish).toContain('לױפֿן');
+  it('folds the usage phrase into grammaticalInfo as "{Yiddish} - {romanized} - {English}", with no POS label borrowed from the definition', () => {
+    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    expect(entries[0].grammaticalInfo).toBe(
+      'v.\nאַװעקלױפֿן צו - AVEKLOYFN TSU - run/hurry to'
+    );
   });
 
-  it('extracts the example translation from the second .gloss', () => {
-    const { entries } = parseVerterbukhhHtml(VERB_HTML);
-    expect(entries[0].exampleEnglish).toContain('make haste');
+  it('returns null for the legacy example fields — the phrase now lives in grammaticalInfo', () => {
+    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    expect(entries[0].exampleYiddish).toBeNull();
+    expect(entries[0].exampleEnglish).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parser — phrase formatting: no POS carry-over; inline ".gram" annotations set
+// off in parentheses (live HTML 2026-06-06)
+// ---------------------------------------------------------------------------
+
+describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own grammar annotation (shaynen)', () => {
+  it('sets the inline ".gram" annotation off in parentheses, on both the Hebrew and romanized phrase text', () => {
+    const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
+    expect(entries[0].grammaticalInfo).toBe(
+      'v.\n' +
+        'שײַנען (דאַט) - ShAYNEN (DAT) - Germ. seem/appear to s.o.\n' +
+        'װי עס שײַנט - VI ES ShAYNT - Germ. as it seems, as it appears'
+    );
+  });
+
+  it('excludes the ".help" tooltip text ("dative") from the rendered annotation', () => {
+    const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
+    expect(entries[0].grammaticalInfo).not.toContain('dative');
+  });
+
+  it('leaves a phrase with no inline annotation as plain text, with no parentheses added', () => {
+    const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
+    expect(entries[0].grammaticalInfo).toContain('װי עס שײַנט - VI ES ShAYNT -');
+  });
+});
+
+describe('parseVerterbukhhHtml — verb entry whose phrase carries no grammar of its own (loyfn)', () => {
+  it('does not prefix the phrase line with the entry\'s part of speech (no carry-over)', () => {
+    const { entries } = parseVerterbukhhHtml(LOYFN_HTML);
+    expect(entries[0].partOfSpeech).toBe('v.');
+    expect(entries[0].grammaticalInfo).toBe(
+      'v.\n' +
+        'זאָל ער/זי לױפֿן און בעטן - ZOL ER/ZI LOYFN UN BETN - ' +
+        '(in speaking of a deceased relative) may he/she make haste and intercede on our behalf in Heaven'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parser — adjective with dual POS, comparative, and secondary sense (live HTML 2026-06-06)
+// ---------------------------------------------------------------------------
+
+describe('parseVerterbukhhHtml — adjective entry with dual POS + comparative + secondary sense (sheyn)', () => {
+  it('keeps the headword bare — comparatives are not folded in', () => {
+    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    expect(entries[0].yiddishHebrew).toBe('שײן');
+    expect(entries[0].yiddishRomanized).toBe('ShEYN');
+  });
+
+  it('preserves both POS/comparative alternatives instead of dropping one (dual-alternative bug fix)', () => {
+    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    expect(entries[0].partOfSpeech).toBe('adj./adv. comp. ShENER');
+  });
+
+  it('extracts the primary definition', () => {
+    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    expect(entries[0].english).toBe('beautiful, pretty, handsome; respectable, considerable');
+  });
+
+  it('folds the secondary adverb-only sense into grammaticalInfo as "{POS} - {gloss}"', () => {
+    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    expect(entries[0].grammaticalInfo).toBe(
+      'adj./adv. comp. ShENER\nadv. - also good, well'
+    );
   });
 });
 
@@ -240,28 +379,26 @@ describe('parseVerterbukhhHtml — verb entry (variant A: .gram.glossed same ele
 // Parser — noun entry variant B (nested .gram > .glossed, live HTML 2026-04-10)
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — noun entry (variant B: .gram wraps .glossed)', () => {
-  it('extracts the headword', () => {
+describe('parseVerterbukhhHtml — noun entry with plural folding (variant B: .gram wraps .glossed)', () => {
+  it('folds the plural suffix into the Hebrew headword with a dash', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
-    expect(entries[0].yiddishHebrew).toBe("צײַ'געניש");
+    expect(entries[0].yiddishHebrew).toBe("צײַ'געניש, -ן");
   });
 
-  it('extracts YIVO romanization from first .translit div', () => {
+  it('folds the romanized plural suffix into yiddishRomanized with a dash', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
-    expect(entries[0].yiddishRomanized).toBe("TSAY'GENISh");
+    expect(entries[0].yiddishRomanized).toBe("TSAY'GENISh, -N");
   });
 
-  it('extracts POS from nested .gram > .glossed structure', () => {
+  it('extracts terse POS from the nested .gram > .glossed structure', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
-    expect(entries[0].partOfSpeech).toBe('neuter noun');
+    expect(entries[0].partOfSpeech).toBe('n. neut.');
   });
 
-  it('extracts secondary grammatical info and excludes .translit .glossed spans', () => {
+  it('omits the folded plural from grammaticalInfo — no duplication with the headword', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
-    expect(entries[0].grammaticalInfo).toContain('plural');
-    expect(entries[0].grammaticalInfo).toContain('ן');
-    // Should NOT pick up romanized labels from the second .translit div
-    expect(entries[0].grammaticalInfo).not.toContain('neut.');
+    expect(entries[0].grammaticalInfo).toBe('n. neut.');
+    expect(entries[0].grammaticalInfo).not.toContain('plural');
   });
 
   it('extracts the English definition', () => {
