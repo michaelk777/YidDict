@@ -230,6 +230,7 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
           <GrammarText
             text={entry.grammaticalInfo ?? entry.partOfSpeech ?? ''}
             style={[s.grammar, { color: theme.textSecondary }]}
+            separatorColor={theme.borderGrammar}
           />
         ) : null}
 

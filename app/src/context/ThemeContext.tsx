@@ -8,6 +8,7 @@ export interface Theme {
   textSecondary: string;
   primary: string;
   border: string;
+  borderGrammar: string;
   sourceFinkel: string;
   sourceVerterbukh: string;
   sourceGoogle: string;
@@ -20,6 +21,7 @@ export const lightTheme: Theme = {
   textSecondary: '#6B6B6B',
   primary: '#0D9488',
   border: '#E8DFC8',
+  borderGrammar: '#C9BC9C',
   sourceFinkel: '#2563EB',
   sourceVerterbukh: '#DC2626',
   sourceGoogle: '#16A34A',
@@ -32,6 +34,7 @@ export const darkTheme: Theme = {
   textSecondary: '#A0A0A0',
   primary: '#2DD4BF',
   border: '#2E2E2E',
+  borderGrammar: '#444444',
   sourceFinkel: '#60A5FA',
   sourceVerterbukh: '#F87171',
   sourceGoogle: '#4ADE80',

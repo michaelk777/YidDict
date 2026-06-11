@@ -132,6 +132,7 @@ describe('ThemeContext', () => {
           <Text testID="t-textSecondary">{theme.textSecondary}</Text>
           <Text testID="t-primary">{theme.primary}</Text>
           <Text testID="t-border">{theme.border}</Text>
+          <Text testID="t-borderGrammar">{theme.borderGrammar}</Text>
           <Text testID="t-sourceFinkel">{theme.sourceFinkel}</Text>
           <Text testID="t-sourceVerterbukh">{theme.sourceVerterbukh}</Text>
           <Text testID="t-sourceGoogle">{theme.sourceGoogle}</Text>
@@ -145,6 +146,7 @@ describe('ThemeContext', () => {
     expect(screen.getByTestId('t-textSecondary').props.children).toBe('#6B6B6B');
     expect(screen.getByTestId('t-primary').props.children).toBe('#0D9488');
     expect(screen.getByTestId('t-border').props.children).toBe('#E8DFC8');
+    expect(screen.getByTestId('t-borderGrammar').props.children).toBe('#C9BC9C');
     expect(screen.getByTestId('t-sourceFinkel').props.children).toBe('#2563EB');
     expect(screen.getByTestId('t-sourceVerterbukh').props.children).toBe('#DC2626');
     expect(screen.getByTestId('t-sourceGoogle').props.children).toBe('#16A34A');
@@ -162,6 +164,7 @@ describe('ThemeContext', () => {
           <Text testID="t-textSecondary">{theme.textSecondary}</Text>
           <Text testID="t-primary">{theme.primary}</Text>
           <Text testID="t-border">{theme.border}</Text>
+          <Text testID="t-borderGrammar">{theme.borderGrammar}</Text>
           <Text testID="t-sourceFinkel">{theme.sourceFinkel}</Text>
           <Text testID="t-sourceVerterbukh">{theme.sourceVerterbukh}</Text>
           <Text testID="t-sourceGoogle">{theme.sourceGoogle}</Text>
@@ -175,6 +178,7 @@ describe('ThemeContext', () => {
     expect(screen.getByTestId('t-textSecondary').props.children).toBe('#A0A0A0');
     expect(screen.getByTestId('t-primary').props.children).toBe('#2DD4BF');
     expect(screen.getByTestId('t-border').props.children).toBe('#2E2E2E');
+    expect(screen.getByTestId('t-borderGrammar').props.children).toBe('#444444');
     expect(screen.getByTestId('t-sourceFinkel').props.children).toBe('#60A5FA');
     expect(screen.getByTestId('t-sourceVerterbukh').props.children).toBe('#F87171');
     expect(screen.getByTestId('t-sourceGoogle').props.children).toBe('#4ADE80');

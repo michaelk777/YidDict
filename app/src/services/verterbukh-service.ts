@@ -5,6 +5,14 @@ import { DictEntry } from '../types';
 
 const BASE_URL = 'https://verterbukh.org/vb';
 
+// Unicode bidi isolate marks (RLI/PDI). Wrapping a Hebrew phrase in these tells the
+// bidi algorithm to skip it when picking the paragraph's base direction (UAX #9 P2),
+// so a line starting with Yiddish text resolves to LTR base (matching its Latin
+// continuation) instead of RTL — which would otherwise reverse the whole
+// "{Yiddish} - {romanized} - {English}" segment order.
+const RLI = '⁧';
+const PDI = '⁩';
+
 export interface VerterbukChoice {
   label: string;           // YIVO label (Yiddish→English) or Hebrew text (English→Yiddish)
   superscript?: string;    // Homograph number from <span class='sup'>, e.g. "1", "2"
@@ -395,9 +403,11 @@ function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
       // a prior definition (a phrase's part of speech isn't necessarily the
       // same as the definition it follows), e.g.
       // "אַװעקלױפֿן צו - AVEKLOYFN TSU - run/hurry to"
-      const parts = [seg.yiddishPhrase, seg.romanizedPhrase, seg.englishPhrase].filter(
-        (p): p is string => !!p
-      );
+      const parts = [
+        seg.yiddishPhrase ? `${RLI}${seg.yiddishPhrase}${PDI}` : null,
+        seg.romanizedPhrase,
+        seg.englishPhrase,
+      ].filter((p): p is string => !!p);
       if (parts.length > 0) grammarLines.push(parts.join(' - '));
     }
   }

@@ -27,6 +27,29 @@ describe('GrammarText', () => {
     expect(getByText('foo ', { exact: false })).toBeTruthy();
     expect(getByText('DAT')).toBeTruthy();
   });
+
+  it('does not draw a separator above a single-line entry', () => {
+    const { getByText } = render(<GrammarText text="v." separatorColor="#E8DFC8" />);
+    const flatStyle = StyleSheetFlatten(getByText('v.').props.style);
+    expect(flatStyle.borderTopWidth).toBeUndefined();
+  });
+
+  it('draws a hairline separator above each entry after the first when separatorColor is given', () => {
+    const { getByText } = render(<GrammarText text={'v.\nfoo - bar'} separatorColor="#E8DFC8" />);
+
+    const firstLine = StyleSheetFlatten(getByText('v.').props.style);
+    expect(firstLine.borderTopWidth).toBeUndefined();
+
+    const secondLine = StyleSheetFlatten(getByText('foo - bar').props.style);
+    expect(secondLine.borderTopWidth).toBeGreaterThan(0);
+    expect(secondLine.borderTopColor).toBe('#E8DFC8');
+  });
+
+  it('omits the separator when separatorColor is not provided, even with multiple lines', () => {
+    const { getByText } = render(<GrammarText text={'v.\nfoo - bar'} />);
+    const secondLine = StyleSheetFlatten(getByText('foo - bar').props.style);
+    expect(secondLine.borderTopWidth).toBeUndefined();
+  });
 });
 
 // Mirrors RN's StyleSheet.flatten without importing react-native directly,

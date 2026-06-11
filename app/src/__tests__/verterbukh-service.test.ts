@@ -11,6 +11,11 @@ import {
   lookupVerterbukh,
 } from '../services/verterbukh-service';
 
+// Bidi isolate marks (RLI/PDI) — parseDef wraps each phrase's Yiddish portion in
+// these so the line's bidi base direction resolves to LTR (see verterbukh-service.ts).
+const RLI = '⁧';
+const PDI = '⁩';
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -318,7 +323,7 @@ describe('parseVerterbukhhHtml — verb entry with past participle + phrase (ave
   it('folds the usage phrase into grammaticalInfo as "{Yiddish} - {romanized} - {English}", with no POS label borrowed from the definition', () => {
     const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
-      'v.\nאַװעקלױפֿן צו - AVEKLOYFN TSU - run/hurry to'
+      `v.\n${RLI}אַװעקלױפֿן צו${PDI} - AVEKLOYFN TSU - run/hurry to`
     );
   });
 
@@ -334,8 +339,8 @@ describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own gram
     const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'v.\n' +
-        'שײַנען *דאַט* - ShAYNEN *DAT* - Germ. seem/appear to s.o.\n' +
-        'װי עס שײַנט - VI ES ShAYNT - Germ. as it seems, as it appears'
+        `${RLI}שײַנען *דאַט*${PDI} - ShAYNEN *DAT* - Germ. seem/appear to s.o.\n` +
+        `${RLI}װי עס שײַנט${PDI} - VI ES ShAYNT - Germ. as it seems, as it appears`
     );
   });
 
@@ -346,7 +351,7 @@ describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own gram
 
   it('leaves a phrase with no inline annotation as plain text, with no asterisks added', () => {
     const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
-    expect(entries[0].grammaticalInfo).toContain('װי עס שײַנט - VI ES ShAYNT -');
+    expect(entries[0].grammaticalInfo).toContain(`${RLI}װי עס שײַנט${PDI} - VI ES ShAYNT -`);
   });
 });
 
@@ -355,7 +360,7 @@ describe('parseVerterbukhhHtml — noun entry whose phrase bakes in a ".gram" an
     const { entries } = parseVerterbukhhHtml(MARROW_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'n. masc.\n' +
-        "(אַרױ'ס|)ציִ|ען בײַ/פֿון *דאַט* דעם מאַרך פֿון די בײנער - " +
+        `${RLI}(אַרױ'ס|)ציִ|ען בײַ/פֿון *דאַט* דעם מאַרך פֿון די בײנער${PDI} - ` +
         "(AROY'S|)TSI|EN BAY/FUN *DAT* DEM MARKh FUN DI BEYNER - suck s.o. dry"
     );
   });
@@ -372,7 +377,7 @@ describe('parseVerterbukhhHtml — verb entry whose phrase carries no grammar of
     expect(entries[0].partOfSpeech).toBe('v.');
     expect(entries[0].grammaticalInfo).toBe(
       'v.\n' +
-        'זאָל ער/זי לױפֿן און בעטן - ZOL ER/ZI LOYFN UN BETN - ' +
+        `${RLI}זאָל ער/זי לױפֿן און בעטן${PDI} - ZOL ER/ZI LOYFN UN BETN - ` +
         '(in speaking of a deceased relative) may he/she make haste and intercede on our behalf in Heaven'
     );
   });

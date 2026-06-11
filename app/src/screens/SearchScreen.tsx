@@ -814,6 +814,7 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
         <GrammarText
           text={entry.grammaticalInfo ?? entry.partOfSpeech ?? ''}
           style={[s.grammar, { color: theme.textSecondary }]}
+          separatorColor={theme.borderGrammar}
         />
       ) : null}
 
