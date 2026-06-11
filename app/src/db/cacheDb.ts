@@ -122,7 +122,5 @@ function rowToEntry(row: CachedResultRow): DictEntry {
     partOfSpeech: row.part_of_speech,
     grammaticalInfo: row.conjugation_info,
     isPhrase: row.is_phrase === 1,
-    exampleYiddish: null,
-    exampleEnglish: null,
   };
 }

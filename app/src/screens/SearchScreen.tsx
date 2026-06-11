@@ -24,6 +24,7 @@ import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
+import { GrammarText } from '../components/GrammarText';
 import { Ionicons } from '@expo/vector-icons';
 import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, saveVerterbukhQuota } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
@@ -810,9 +811,10 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
       {/* Row 4: grammar — grammaticalInfo already contains all lines including the first;
           fall back to partOfSpeech for older cached / non-Finkel entries */}
       {(entry.partOfSpeech || entry.grammaticalInfo) ? (
-        <Text style={[s.grammar, { color: theme.textSecondary }]}>
-          {entry.grammaticalInfo ?? entry.partOfSpeech}
-        </Text>
+        <GrammarText
+          text={entry.grammaticalInfo ?? entry.partOfSpeech ?? ''}
+          style={[s.grammar, { color: theme.textSecondary }]}
+        />
       ) : null}
 
       {/* Row 5: source + cache tags */}

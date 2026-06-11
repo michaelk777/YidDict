@@ -17,6 +17,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useSaved } from '../context/SavedContext';
 import { DictSource, SOURCE_LABELS } from '../db/settingsDb';
 import { formatHebrewLemma, splitHebrewLemma, toSuperscript } from '../utils/hebrewDisplay';
+import { GrammarText } from '../components/GrammarText';
 import {
   SavedEntry,
   deleteEntry,
@@ -226,9 +227,10 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
 
         {/* Row 4: grammar */}
         {(entry.partOfSpeech || entry.grammaticalInfo) ? (
-          <Text style={[s.grammar, { color: theme.textSecondary }]}>
-            {entry.grammaticalInfo ?? entry.partOfSpeech}
-          </Text>
+          <GrammarText
+            text={entry.grammaticalInfo ?? entry.partOfSpeech ?? ''}
+            style={[s.grammar, { color: theme.textSecondary }]}
+          />
         ) : null}
 
         {/* Row 5: source tags */}

@@ -38,8 +38,6 @@ export async function lookupGoogleTranslate(
       partOfSpeech: null,
       grammaticalInfo: null,
       isPhrase: false,
-      exampleYiddish: null,
-      exampleEnglish: null,
     }];
   } else {
     const result = await fetchTranslation(query, 'en', 'yi');
@@ -53,8 +51,6 @@ export async function lookupGoogleTranslate(
       partOfSpeech: null,
       grammaticalInfo: null,
       isPhrase: false,
-      exampleYiddish: null,
-      exampleEnglish: null,
     }];
   }
 }

@@ -143,6 +143,33 @@ const SHAYNEN_HTML = `
 </div>
 `;
 
+// Noun whose usage phrase bakes its own grammar annotation in the *middle* of
+// the phrase (".gram" -> "דאַט"/"DAT" for a dative usage), rather than at the
+// end as in SHAYNEN_HTML. Captured from the live response for query "marrow"
+// -> ln="מאַרך" (2026-06-10).
+const MARROW_HTML = `
+<div id="definition">
+  <div class="def">
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="lemma">מאַרך</span>
+    </div>
+    <div lang="en" class="translit">MARKh</div>
+    <div dir="rtl" lang="yi" class="rtl">
+      <span class="gram">
+        <span class="glossed">דער<span class="help">masculine noun</span></span>
+      </span>
+    </div>
+    <div lang="en" class="translit">n. <span class="glossed">masc.<span class="help">masculine noun</span></span></div>
+    <div lang="en" class="gloss">brain, gray matter; (bone) marrow</div>
+    <div dir="rtl" lang="yi" class="rtl sep">
+      <span>(אַרױ'ס|)ציִ|ען בײַ/פֿון <span class="gram"><span class="glossed">דאַט<span class="help">dative</span></span></span> דעם מאַרך פֿון די בײנער</span>
+    </div>
+    <div lang="en" class="translit">(AROY'S|)TSI|EN BAY/FUN <span class="gram">DAT</span> DEM MARKh FUN DI BEYNER</div>
+    <div lang="en" class="gloss">suck s.o. dry</div>
+  </div>
+</div>
+`;
+
 // Verb whose secondary phrase carries no grammar annotation of its own — the
 // phrase line must not borrow "v." from the entry's main definition. Captured
 // from the live response for query "loyfn" -> ln="לױפֿן" (2026-06-06).
@@ -255,12 +282,6 @@ describe('parseVerterbukhhHtml — noun entry with plural folding (variant A: .g
     expect(entries[0].english).toBe('pass, permit');
   });
 
-  it('returns null for the legacy example fields — phrases now fold into grammaticalInfo', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
-    expect(entries[0].exampleYiddish).toBeNull();
-    expect(entries[0].exampleEnglish).toBeNull();
-  });
-
   it('returns null choices when no .choice_container is present', () => {
     const { choices } = parseVerterbukhhHtml(NOUN_HTML);
     expect(choices).toBeNull();
@@ -301,24 +322,19 @@ describe('parseVerterbukhhHtml — verb entry with past participle + phrase (ave
     );
   });
 
-  it('returns null for the legacy example fields — the phrase now lives in grammaticalInfo', () => {
-    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
-    expect(entries[0].exampleYiddish).toBeNull();
-    expect(entries[0].exampleEnglish).toBeNull();
-  });
 });
 
 // ---------------------------------------------------------------------------
-// Parser — phrase formatting: no POS carry-over; inline ".gram" annotations set
-// off in parentheses (live HTML 2026-06-06)
+// Parser — phrase formatting: no POS carry-over; inline ".gram" annotations
+// marked with *...* (live HTML 2026-06-06 / 2026-06-10)
 // ---------------------------------------------------------------------------
 
 describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own grammar annotation (shaynen)', () => {
-  it('sets the inline ".gram" annotation off in parentheses, on both the Hebrew and romanized phrase text', () => {
+  it('marks the inline ".gram" annotation with *...*, on both the Hebrew and romanized phrase text', () => {
     const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'v.\n' +
-        'שײַנען (דאַט) - ShAYNEN (DAT) - Germ. seem/appear to s.o.\n' +
+        'שײַנען *דאַט* - ShAYNEN *DAT* - Germ. seem/appear to s.o.\n' +
         'װי עס שײַנט - VI ES ShAYNT - Germ. as it seems, as it appears'
     );
   });
@@ -328,9 +344,25 @@ describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own gram
     expect(entries[0].grammaticalInfo).not.toContain('dative');
   });
 
-  it('leaves a phrase with no inline annotation as plain text, with no parentheses added', () => {
+  it('leaves a phrase with no inline annotation as plain text, with no asterisks added', () => {
     const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).toContain('װי עס שײַנט - VI ES ShAYNT -');
+  });
+});
+
+describe('parseVerterbukhhHtml — noun entry whose phrase bakes in a ".gram" annotation mid-phrase (marrow)', () => {
+  it('marks the inline ".gram" annotation with *...* in the middle of the phrase, on both Hebrew and romanized text', () => {
+    const { entries } = parseVerterbukhhHtml(MARROW_HTML);
+    expect(entries[0].grammaticalInfo).toBe(
+      'n. masc.\n' +
+        "(אַרױ'ס|)ציִ|ען בײַ/פֿון *דאַט* דעם מאַרך פֿון די בײנער - " +
+        "(AROY'S|)TSI|EN BAY/FUN *DAT* DEM MARKh FUN DI BEYNER - suck s.o. dry"
+    );
+  });
+
+  it('excludes the ".help" tooltip text ("dative") from the rendered annotation', () => {
+    const { entries } = parseVerterbukhhHtml(MARROW_HTML);
+    expect(entries[0].grammaticalInfo).not.toContain('dative');
   });
 });
 

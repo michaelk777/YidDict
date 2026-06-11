@@ -455,7 +455,5 @@ function buildEntryFromSegment(
     partOfSpeech,
     grammaticalInfo,
     isPhrase,
-    exampleYiddish: null,
-    exampleEnglish: null,
   };
 }

@@ -3,12 +3,10 @@
  *
  * Fields populated per source:
  *   Finkel:          yiddishHebrew, yiddishRomanized, english, partOfSpeech, grammaticalInfo, isPhrase
- *   Verterbukh:      yiddishHebrew, yiddishRomanized, english, partOfSpeech, grammaticalInfo, exampleYiddish, exampleEnglish
+ *   Verterbukh:      yiddishHebrew, yiddishRomanized, english, partOfSpeech, grammaticalInfo
  *   Google Translate: yiddishHebrew, english
  *
  * Fields not populated by a given source are null (or false for isPhrase).
- * exampleYiddish/exampleEnglish are not persisted to the SQLite cache;
- * they are available on live lookups only.
  */
 export interface DictEntry {
   source: 'finkel' | 'verterbukh' | 'google_translate';
@@ -19,7 +17,5 @@ export interface DictEntry {
   partOfSpeech: string | null;
   grammaticalInfo: string | null;
   isPhrase: boolean;
-  exampleYiddish: string | null;
-  exampleEnglish: string | null;
   hebrewIsGenerated?: boolean;
 }

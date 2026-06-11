@@ -106,8 +106,6 @@ const sampleEntries: DictEntry[] = [
     partOfSpeech: 'adjective',
     grammaticalInfo: null,
     isPhrase: false,
-    exampleYiddish: null,
-    exampleEnglish: null,
   },
   {
     source: 'finkel',
@@ -118,8 +116,6 @@ const sampleEntries: DictEntry[] = [
     partOfSpeech: 'noun',
     grammaticalInfo: 'gender f',
     isPhrase: true,
-    exampleYiddish: null,
-    exampleEnglish: null,
   },
 ];
 
@@ -521,7 +517,7 @@ describe('SearchScreen — source order', () => {
   });
 
   it('falls through to Verterbukh when Finkel returns nothing and user is logged in', async () => {
-    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
+    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValue([]);            // Finkel returns nothing
@@ -538,7 +534,7 @@ describe('SearchScreen — source order', () => {
   });
 
   it('shows Verterbukh badge when Verterbukh is the result source', async () => {
-    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null };
+    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookupVerterbukh.mockResolvedValue(verterbukSample);
@@ -555,7 +551,7 @@ describe('SearchScreen — source order', () => {
 
 describe('SearchScreen — Verterbukh quota badge', () => {
   const sampleVerterbukEntry = {
-    entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }],
+    entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false }],
     choices: null,
   };
 
@@ -658,7 +654,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     { label: 'LOYFN', hebrewLemma: 'לױפֿן', dir: 'from' as const },
     { label: 'LOYFER', hebrewLemma: 'לױפֿער', dir: 'from' as const },
   ];
-  const sampleVerterbukEntry = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: sampleChoices };
+  const sampleVerterbukEntry = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false }], choices: sampleChoices };
 
   beforeEach(() => {
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
@@ -693,7 +689,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   });
 
   it('auto-retries with dir=to when dir=from returns no entries and no choices (Latin input)', async () => {
-    const englishEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
+    const englishEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
     mockLookupVerterbukh
       .mockResolvedValueOnce({ entries: [], choices: null, quota: null })           // dir=from → nothing
       .mockResolvedValueOnce({ entries: [englishEntry], choices: null, quota: null }); // dir=to → result
@@ -723,7 +719,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   it('fetches the selected other option and replaces results', async () => {
     mockLookupVerterbukh
       .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
-      .mockResolvedValueOnce({ entries: [{ yiddishHebrew: 'לױפֿער', yiddishRomanized: 'loyfer', english: 'runner', partOfSpeech: 'noun', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false }], choices: null }); // choice lookup
+      .mockResolvedValueOnce({ entries: [{ yiddishHebrew: 'לױפֿער', yiddishRomanized: 'loyfer', english: 'runner', partOfSpeech: 'noun', grammaticalInfo: null, isPhrase: false }], choices: null }); // choice lookup
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
@@ -773,8 +769,8 @@ describe('SearchScreen — Verterbukh other options', () => {
   it('queries all active sources with choice label when use-all-sources is on', async () => {
     mockGetUseAllSources.mockResolvedValue(true);
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'finkel', 'none']);
-    const chosenEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run (verb)', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
-    const finkelLoyfnEntry = { source: 'finkel' as const, fromCache: false, yiddishHebrew: null, yiddishRomanized: 'loyfn', english: 'to run, jog', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false, exampleYiddish: null, exampleEnglish: null };
+    const chosenEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run (verb)', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
+    const finkelLoyfnEntry = { source: 'finkel' as const, fromCache: false, yiddishHebrew: null, yiddishRomanized: 'loyfn', english: 'to run, jog', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
     mockLookupVerterbukh
       .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
       .mockResolvedValueOnce({ entries: [chosenEntry], choices: null, quota: null }); // disambiguation lookup
@@ -800,7 +796,7 @@ describe('SearchScreen — Verterbukh other options', () => {
 });
 
 describe('SearchScreen — fallback note', () => {
-  const vEntry = { yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
+  const vEntry = { yiddishHebrew: 'שיין', yiddishRomanized: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false };
 
   it('shows a fallback note when the primary source returns nothing and a later source succeeds', async () => {
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
@@ -893,7 +889,7 @@ describe('SearchScreen — fallback note', () => {
 });
 
 describe('SearchScreen — Verterbukh token exhaustion', () => {
-  const vEntry = { yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, exampleYiddish: null, exampleEnglish: null, isPhrase: false };
+  const vEntry = { yiddishHebrew: 'לױפֿן', yiddishRomanized: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
   let mockAlert: jest.Mock;
 
   beforeEach(() => {

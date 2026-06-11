@@ -28,8 +28,6 @@ const sampleEntry: DictEntry = {
   partOfSpeech: 'adjective',
   grammaticalInfo: null,
   isPhrase: false,
-  exampleYiddish: null,
-  exampleEnglish: null,
   hebrewIsGenerated: false,
 };
 

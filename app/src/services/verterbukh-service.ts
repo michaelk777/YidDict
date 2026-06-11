@@ -234,21 +234,29 @@ function grammarSummaryLine(node: ReturnType<typeof parse> | null, skipLabels: S
 }
 
 /**
- * Render a phrase node's text, setting off any inline grammar annotation Verterbukh
+ * Render a phrase node's text, marking any inline grammar annotation Verterbukh
  * bakes directly into the phrase itself (e.g. a `.gram` span reading "DAT"/"דאַט" for
- * a dative usage) in parentheses — "שײַנען (דאַט)" / "ShAYNEN (DAT)" — so it reads as
- * a grammar tag rather than blending into the phrase's own wording.
+ * a dative usage, which may appear at the start, middle, or end of the phrase) with
+ * `*...*` — "...בײַ/פֿון *דאַט* דעם..." / "...BAY/FUN *DAT* DEM..." — so the UI can
+ * render it distinctly from the phrase's own wording.
  */
 function formatPhraseText(node: ReturnType<typeof parse>): string {
-  const full = textExcludingHelp(node).trim();
-  const gram = node.querySelector('.gram');
-  if (!gram) return full;
-
-  const annotation = textExcludingHelp(gram).trim();
-  if (!annotation || !full.endsWith(annotation)) return full;
-
-  const base = full.slice(0, full.length - annotation.length).trim();
-  return base ? `${base} (${annotation})` : `(${annotation})`;
+  let result = '';
+  for (const child of node.childNodes) {
+    if (!('classList' in child)) {
+      result += (child as unknown as { text: string }).text;
+      continue;
+    }
+    const el = child as ReturnType<typeof parse>;
+    if (el.classList?.contains('help')) continue;
+    if (el.classList?.contains('gram')) {
+      const annotation = textExcludingHelp(el).trim();
+      if (annotation) result += `*${annotation}*`;
+      continue;
+    }
+    result += el.childNodes.length > 0 ? formatPhraseText(el) : el.text;
+  }
+  return result.trim();
 }
 
 /** Group a `.def` block's child divs into headword info + ordered definition/phrase segments. */
@@ -404,8 +412,6 @@ function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
     partOfSpeech,
     grammaticalInfo,
     english,
-    exampleYiddish: null,
-    exampleEnglish: null,
     isPhrase: false,
   };
 }
