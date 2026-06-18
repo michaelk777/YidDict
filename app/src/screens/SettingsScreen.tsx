@@ -18,8 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   getCredentials,
   saveCredentials,
-  deleteCredentials,
   login,
+  logout,
+  startSession,
 } from '../services/verterbukh-auth';
 import {
   getSourceOrder,
@@ -42,6 +43,8 @@ import {
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
   getVerterbukhQuota,
+  getVbKeepLoggedIn,
+  setVbKeepLoggedIn,
 } from '../db/settingsDb';
 import { clearCache } from '../db/cacheDb';
 
@@ -79,6 +82,9 @@ export default function SettingsScreen() {
   // Experimental settings state
   const [yivoToHebrew, setYivoToHebrewState] = useState(false);
 
+  // Keep-logged-in preference
+  const [keepLoggedIn, setKeepLoggedInState] = useState(false);
+
   // Last-known Verterbukh quota (persisted after each search)
   const [verterbukhQuota, setVerterbukhQuotaState] = useState<{ used: number; total: number } | null>(null);
 
@@ -95,6 +101,7 @@ export default function SettingsScreen() {
     getCacheTtlDays().then(setCacheTtlDaysState).catch(() => {});
     getUseAllSources().then(setUseAllSourcesState).catch(() => {});
     getYivoToHebrew().then(setYivoToHebrewState).catch(() => {});
+    getVbKeepLoggedIn().then(setKeepLoggedInState).catch(() => {});
     getVerterbukhQuota().then(setVerterbukhQuotaState).catch(() => {});
   }, []);
 
@@ -132,11 +139,20 @@ export default function SettingsScreen() {
   }, [username, password]);
 
   const handleLogout = useCallback(async () => {
-    await deleteCredentials();
+    await logout();
     setSavedUsername(null);
     setLoginStatus('idle');
     setStatusMessage(null);
   }, []);
+
+  const handleToggleKeepLoggedIn = useCallback(async (value: boolean) => {
+    setKeepLoggedInState(value);
+    await setVbKeepLoggedIn(value).catch(() => {});
+    if (!value && savedUsername !== null) {
+      // Switching to short-term mode while logged in: start the 24h timer now.
+      startSession();
+    }
+  }, [savedUsername]);
 
   const handleSaveMaxEntries = useCallback(async (value: number) => {
     setMaxSavedEntriesState(value);
@@ -353,6 +369,21 @@ export default function SettingsScreen() {
             {statusMessage}
           </Text>
         ) : null}
+        <View style={[s.toggleRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[s.toggleLabel, { color: theme.text }]}>Keep me logged in</Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
+              When off, session ends after 24 hours or when the app is fully closed.
+            </Text>
+          </View>
+          <Switch
+            value={keepLoggedIn}
+            onValueChange={handleToggleKeepLoggedIn}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="keep-logged-in-toggle"
+          />
+        </View>
         <NumericSettingRow
           label="Token usage alert"
           value={lowTokenThreshold}

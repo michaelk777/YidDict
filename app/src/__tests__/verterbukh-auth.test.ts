@@ -1,7 +1,7 @@
 /**
  * verterbukh-auth.test.ts
  *
- * Tests for credential storage, login POST, session detection, and
+ * Tests for credential storage, login/logout, session detection, and
  * ensureSession re-auth logic. All external dependencies (expo-secure-store,
  * axios) are mocked.
  */
@@ -13,8 +13,12 @@ import {
   getCredentials,
   deleteCredentials,
   login,
+  logout,
   isLoggedOut,
   ensureSession,
+  startSession,
+  endSession,
+  __resetSessionState,
   VbCredentials,
 } from '../services/verterbukh-auth';
 
@@ -27,6 +31,7 @@ jest.mock('axios');
 
 const { __resetStore } = SecureStore as typeof SecureStore & { __resetStore: () => void };
 const mockPost = axios.post as jest.Mock;
+const mockGet = axios.get as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -56,6 +61,7 @@ const LOGGED_OUT_HTML = `
 beforeEach(() => {
   jest.clearAllMocks();
   __resetStore();
+  __resetSessionState();
 });
 
 // ---------------------------------------------------------------------------
@@ -147,39 +153,137 @@ describe('login', () => {
     mockPost.mockRejectedValue(new Error('Network Error'));
     await expect(login(CREDS)).rejects.toThrow('Network Error');
   });
+
+  it('does not include credentials in the error message', async () => {
+    mockPost.mockResolvedValue({ data: LOGGED_OUT_HTML });
+    await expect(login(CREDS)).rejects.toThrow(
+      expect.not.stringContaining(CREDS.password)
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
-// ensureSession
+// logout
 // ---------------------------------------------------------------------------
 
-describe('ensureSession', () => {
+describe('logout', () => {
+  it('deletes credentials and ends the session', async () => {
+    await saveCredentials(CREDS);
+    startSession();
+    mockGet.mockResolvedValue({});
+    await logout();
+    expect(await getCredentials()).toBeNull();
+  });
+
+  it('calls the server logout endpoint', async () => {
+    mockGet.mockResolvedValue({});
+    await logout();
+    expect(mockGet).toHaveBeenCalledWith(
+      'https://verterbukh.org/vb',
+      { params: { page: 'logout' } }
+    );
+  });
+
+  it('still clears local state even when the server logout request fails', async () => {
+    await saveCredentials(CREDS);
+    startSession();
+    mockGet.mockRejectedValue(new Error('Network Error'));
+    await expect(logout()).resolves.toBeUndefined();
+    expect(await getCredentials()).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ensureSession — keepLoggedIn=true (indefinite mode)
+// ---------------------------------------------------------------------------
+
+describe('ensureSession (keepLoggedIn=true)', () => {
   it('does nothing when lastResponseHtml shows a valid session', async () => {
-    await ensureSession(LOGGED_IN_HTML);
+    await ensureSession(LOGGED_IN_HTML, true);
     expect(mockPost).not.toHaveBeenCalled();
   });
 
   it('re-authenticates when lastResponseHtml shows session expired', async () => {
     await saveCredentials(CREDS);
     mockPost.mockResolvedValue({ data: LOGGED_IN_HTML });
-    await ensureSession(LOGGED_OUT_HTML);
+    await ensureSession(LOGGED_OUT_HTML, true);
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 
   it('re-authenticates when called with no lastResponseHtml', async () => {
     await saveCredentials(CREDS);
     mockPost.mockResolvedValue({ data: LOGGED_IN_HTML });
-    await ensureSession();
+    await ensureSession(undefined, true);
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 
   it('throws when session is expired and no credentials are stored', async () => {
-    await expect(ensureSession(LOGGED_OUT_HTML)).rejects.toThrow('credentials not saved');
+    await expect(ensureSession(LOGGED_OUT_HTML, true)).rejects.toThrow('credentials not saved');
   });
 
   it('throws when session is expired and login fails', async () => {
     await saveCredentials(CREDS);
     mockPost.mockResolvedValue({ data: LOGGED_OUT_HTML });
-    await expect(ensureSession(LOGGED_OUT_HTML)).rejects.toThrow('Login failed');
+    await expect(ensureSession(LOGGED_OUT_HTML, true)).rejects.toThrow('Login failed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ensureSession — keepLoggedIn=false (short-term mode, default)
+// ---------------------------------------------------------------------------
+
+describe('ensureSession (keepLoggedIn=false)', () => {
+  it('throws immediately when no login has occurred this app instance', async () => {
+    await saveCredentials(CREDS);
+    await expect(ensureSession(LOGGED_IN_HTML)).rejects.toThrow('Not logged in');
+  });
+
+  it('does nothing when session is active and HTML shows valid session', async () => {
+    startSession();
+    await ensureSession(LOGGED_IN_HTML);
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it('re-authenticates mid-session when HTTP cookie expires', async () => {
+    startSession();
+    await saveCredentials(CREDS);
+    mockPost.mockResolvedValue({ data: LOGGED_IN_HTML });
+    await ensureSession(LOGGED_OUT_HTML);
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when session is older than 24 hours', async () => {
+    startSession();
+    // Backdate the session start by 25 hours
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 60 * 60 * 1000);
+    await expect(ensureSession(LOGGED_IN_HTML)).rejects.toThrow('Session expired after 24 hours');
+    (Date.now as jest.Mock).mockRestore?.();
+    jest.restoreAllMocks();
+  });
+
+  it('clears session state when 24h expiry is triggered', async () => {
+    startSession();
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 25 * 60 * 60 * 1000);
+    await expect(ensureSession(LOGGED_IN_HTML)).rejects.toThrow();
+    jest.restoreAllMocks();
+    // A subsequent call should also fail (session is now ended)
+    await expect(ensureSession(LOGGED_IN_HTML)).rejects.toThrow('Not logged in');
+  });
+
+  it('throws when session is active but no credentials are stored (for HTTP re-auth)', async () => {
+    startSession();
+    await expect(ensureSession(LOGGED_OUT_HTML)).rejects.toThrow('credentials not saved');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// startSession / endSession
+// ---------------------------------------------------------------------------
+
+describe('startSession / endSession', () => {
+  it('endSession prevents ensureSession from proceeding', async () => {
+    startSession();
+    endSession();
+    await expect(ensureSession(LOGGED_IN_HTML)).rejects.toThrow('Not logged in');
   });
 });

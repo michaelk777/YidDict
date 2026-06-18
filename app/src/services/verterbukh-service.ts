@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { parse } from 'node-html-parser';
 import { ensureSession, isLoggedOut } from './verterbukh-auth';
+import { getVbKeepLoggedIn } from '../db/settingsDb';
 import { DictEntry } from '../types';
 
 const BASE_URL = 'https://verterbukh.org/vb';
@@ -53,13 +54,15 @@ export async function lookupVerterbukh(
   forcedDir?: 'from' | 'to',
 ): Promise<VerterbukResult> {
   const primaryDir = forcedDir ?? 'from';
+  const keepLoggedIn = await getVbKeepLoggedIn();
   const html = await fetchSearch(query, primaryDir, ln);
 
   if (isLoggedOut(html)) {
     // Session missing or expired — re-auth using stored credentials and retry once.
-    // ensureSession throws if no credentials are saved (user must visit Settings).
+    // ensureSession throws if no credentials are saved, session expired, or the
+    // user hasn't logged in during this app instance (keepLoggedIn=false gate).
     console.log('[YidDict] VerterbukService: not logged in — authenticating');
-    await ensureSession(html);
+    await ensureSession(html, keepLoggedIn);
     const retryHtml = await fetchSearch(query, primaryDir, ln);
     if (isLoggedOut(retryHtml)) {
       throw new Error('Verterbukh authentication failed — check credentials in Settings');

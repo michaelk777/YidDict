@@ -135,6 +135,22 @@ export async function saveVerterbukhQuota(used: number, total: number): Promise<
   await setNumericSetting('verterbukh_quota_total', total);
 }
 
+export async function getVbKeepLoggedIn(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['vb_keep_logged_in']
+  );
+  return row?.value === '1';
+}
+
+export async function setVbKeepLoggedIn(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['vb_keep_logged_in', v ? '1' : '0']
+  );
+}
+
 export async function getThemePreference(): Promise<'light' | 'dark' | 'system'> {
   const db = getDatabase();
   const row = await db.getFirstAsync<{ value: string }>(

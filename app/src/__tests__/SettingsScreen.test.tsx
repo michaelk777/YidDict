@@ -32,8 +32,9 @@ jest.mock('../db/cacheDb', () => ({
 jest.mock('../services/verterbukh-auth', () => ({
   getCredentials: jest.fn(),
   saveCredentials: jest.fn(),
-  deleteCredentials: jest.fn(),
   login: jest.fn(),
+  logout: jest.fn(),
+  startSession: jest.fn(),
 }));
 
 jest.mock('../db/settingsDb', () => ({
@@ -55,6 +56,8 @@ jest.mock('../db/settingsDb', () => ({
   getYivoToHebrewWarned: jest.fn(),
   setYivoToHebrewWarned: jest.fn(),
   getVerterbukhQuota: jest.fn(),
+  getVbKeepLoggedIn: jest.fn(),
+  setVbKeepLoggedIn: jest.fn(),
 }));
 
 import { clearCache } from '../db/cacheDb';
@@ -62,8 +65,9 @@ import { clearCache } from '../db/cacheDb';
 import {
   getCredentials,
   saveCredentials,
-  deleteCredentials,
   login,
+  logout,
+  startSession,
 } from '../services/verterbukh-auth';
 
 import {
@@ -83,11 +87,13 @@ import {
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
   getVerterbukhQuota,
+  getVbKeepLoggedIn,
+  setVbKeepLoggedIn,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
 const mockSaveCredentials = saveCredentials as jest.Mock;
-const mockDeleteCredentials = deleteCredentials as jest.Mock;
+const mockLogout = logout as jest.Mock;
 const mockLogin = login as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
 const mockSetSourceOrderSlot = setSourceOrderSlot as jest.Mock;
@@ -119,8 +125,11 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetCredentials.mockResolvedValue(null);
   mockSaveCredentials.mockResolvedValue(undefined);
-  mockDeleteCredentials.mockResolvedValue(undefined);
+  mockLogout.mockResolvedValue(undefined);
   mockLogin.mockResolvedValue(undefined);
+  (startSession as jest.Mock).mockImplementation(() => {});
+  (getVbKeepLoggedIn as jest.Mock).mockResolvedValue(false);
+  (setVbKeepLoggedIn as jest.Mock).mockResolvedValue(undefined);
   mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'google_translate']);
   mockSetSourceOrderSlot.mockResolvedValue(undefined);
   mockGetMaxSavedEntries.mockResolvedValue(500);
@@ -496,14 +505,14 @@ describe('SettingsScreen — logout flow', () => {
     mockGetCredentials.mockResolvedValue({ username: 'testuser', password: 'testpass' });
   });
 
-  it('calls deleteCredentials and returns to logged-out state', async () => {
+  it('calls logout and returns to logged-out state', async () => {
     renderScreen();
     await waitFor(() => screen.getByTestId('logout-button'));
 
     fireEvent.press(screen.getByTestId('logout-button'));
 
     await waitFor(() => {
-      expect(mockDeleteCredentials).toHaveBeenCalledTimes(1);
+      expect(mockLogout).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('login-button')).toBeTruthy();
       expect(screen.queryByTestId('logout-button')).toBeNull();
     });

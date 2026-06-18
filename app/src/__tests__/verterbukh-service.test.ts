@@ -25,6 +25,9 @@ jest.mock('../services/verterbukh-auth', () => ({
   ensureSession: jest.fn(),
   isLoggedOut: jest.fn(),
 }));
+jest.mock('../db/settingsDb', () => ({
+  getVbKeepLoggedIn: jest.fn().mockResolvedValue(false),
+}));
 
 import { ensureSession, isLoggedOut } from '../services/verterbukh-auth';
 
