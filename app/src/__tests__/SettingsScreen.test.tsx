@@ -55,6 +55,10 @@ jest.mock('../db/settingsDb', () => ({
   setYivoToHebrew: jest.fn(),
   getYivoToHebrewWarned: jest.fn(),
   setYivoToHebrewWarned: jest.fn(),
+  getHebrewToYivo: jest.fn(),
+  setHebrewToYivo: jest.fn(),
+  getHebrewToYivoWarned: jest.fn(),
+  setHebrewToYivoWarned: jest.fn(),
   getVerterbukhQuota: jest.fn(),
   getVbKeepLoggedIn: jest.fn(),
   setVbKeepLoggedIn: jest.fn(),
@@ -86,6 +90,10 @@ import {
   setYivoToHebrew,
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
+  getHebrewToYivo,
+  setHebrewToYivo,
+  getHebrewToYivoWarned,
+  setHebrewToYivoWarned,
   getVerterbukhQuota,
   getVbKeepLoggedIn,
   setVbKeepLoggedIn,
@@ -145,6 +153,10 @@ beforeEach(() => {
   (setYivoToHebrew as jest.Mock).mockResolvedValue(undefined);
   (getYivoToHebrewWarned as jest.Mock).mockResolvedValue(false);
   (setYivoToHebrewWarned as jest.Mock).mockResolvedValue(undefined);
+  (getHebrewToYivo as jest.Mock).mockResolvedValue(false);
+  (setHebrewToYivo as jest.Mock).mockResolvedValue(undefined);
+  (getHebrewToYivoWarned as jest.Mock).mockResolvedValue(false);
+  (setHebrewToYivoWarned as jest.Mock).mockResolvedValue(undefined);
   (clearCache as jest.Mock).mockResolvedValue(undefined);
   (getVerterbukhQuota as jest.Mock).mockResolvedValue(null);
 });

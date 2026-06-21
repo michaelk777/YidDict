@@ -123,6 +123,38 @@ export async function setYivoToHebrewWarned(): Promise<void> {
   );
 }
 
+export async function getHebrewToYivo(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['hebrew_to_yivo']
+  );
+  return row?.value === '1';
+}
+
+export async function setHebrewToYivo(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['hebrew_to_yivo', v ? '1' : '0']
+  );
+}
+
+export async function getHebrewToYivoWarned(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['hebrew_to_yivo_warned']
+  );
+  return row?.value === '1';
+}
+
+export async function setHebrewToYivoWarned(): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['hebrew_to_yivo_warned', '1']
+  );
+}
+
 export async function getVerterbukhQuota(): Promise<{ used: number; total: number } | null> {
   const used = await getNumericSetting('verterbukh_quota_used', -1);
   const total = await getNumericSetting('verterbukh_quota_total', -1);

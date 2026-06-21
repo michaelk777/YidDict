@@ -1,0 +1,199 @@
+import { hebrewToYivo } from '../utils/hebrewToYivo';
+
+describe('hebrewToYivo()', () => {
+  // ---------------------------------------------------------------------------
+  // Guard conditions
+  // ---------------------------------------------------------------------------
+
+  it('returns null for empty string', () => {
+    expect(hebrewToYivo('')).toBeNull();
+  });
+
+  it('returns null for whitespace-only string', () => {
+    expect(hebrewToYivo('   ')).toBeNull();
+  });
+
+  it('returns null if input contains no Hebrew characters', () => {
+    expect(hebrewToYivo('shalom')).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Single letters
+  // ---------------------------------------------------------------------------
+
+  it('converts pasekh-alef → a', () => {
+    expect(hebrewToYivo('אַ')).toBe('a');
+  });
+
+  it('converts ב → b', () => {
+    expect(hebrewToYivo('ב')).toBe('b');
+  });
+
+  it('converts ayin → e', () => {
+    expect(hebrewToYivo('ע')).toBe('e');
+  });
+
+  it('converts komets-alef → o', () => {
+    expect(hebrewToYivo('אָ')).toBe('o');
+  });
+
+  it('converts tsvey-vovn → v', () => {
+    expect(hebrewToYivo('וו')).toBe('v');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Digraphs
+  // ---------------------------------------------------------------------------
+
+  it('converts shin → sh', () => {
+    expect(hebrewToYivo('ש')).toBe('sh');
+  });
+
+  it('converts langer khof → kh', () => {
+    expect(hebrewToYivo('ך')).toBe('kh');
+  });
+
+  it('converts langer tsadek → ts', () => {
+    expect(hebrewToYivo('ץ')).toBe('ts');
+  });
+
+  it('converts tes-shin → tsh', () => {
+    expect(hebrewToYivo('טש')).toBe('tsh');
+  });
+
+  it('converts zayin-shin → zh', () => {
+    expect(hebrewToYivo('זש')).toBe('zh');
+  });
+
+  it('converts tsvey-yudn → ey', () => {
+    expect(hebrewToYivo('יי')).toBe('ey');
+  });
+
+  it('converts vov-yud → oy', () => {
+    expect(hebrewToYivo('וי')).toBe('oy');
+  });
+
+  it('converts pasekh-tsvey-yudn → ay', () => {
+    expect(hebrewToYivo('ייַ')).toBe('ay');
+  });
+
+  // tsvey-yudn must not win over the longer pasekh-tsvey-yudn sequence
+  it('prefers pasekh-tsvey-yudn over tsvey-yudn when the pasekh is present', () => {
+    const result = hebrewToYivo('ייַנגל');
+    expect(result).toMatch(/^ay/);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bare yud: word-initial → glide "y"; elsewhere → vowel "i"
+  // ---------------------------------------------------------------------------
+
+  it('converts word-initial bare yud as the glide "y"', () => {
+    expect(hebrewToYivo('יד')).toBe('yd');
+  });
+
+  it('converts mid-word bare yud as the vowel "i"', () => {
+    // "ליד" (song) — yud is the second letter, not word-initial
+    expect(hebrewToYivo('ליד')).toBe('lid');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Langer / final forms map to the same YIVO as their regular counterpart
+  // ---------------------------------------------------------------------------
+
+  it('converts sofit mem the same as regular mem', () => {
+    // "קים" — yud is mid-word, so it's the vowel "i"
+    expect(hebrewToYivo('קים')).toBe('kim');
+  });
+
+  it('converts langer nun the same as regular nun', () => {
+    expect(hebrewToYivo('קין')).toBe('kin');
+  });
+
+  it('converts langer khof the same as regular khof', () => {
+    expect(hebrewToYivo('בוך')).toBe('bukh');
+  });
+
+  it('converts langer tsadek the same as regular tsadek', () => {
+    expect(hebrewToYivo('בליץ')).toBe('blits');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Full word conversions
+  // ---------------------------------------------------------------------------
+
+  it('converts "שרייַען" (to shout)', () => {
+    expect(hebrewToYivo('שרייַען')).toBe('shrayen');
+  });
+
+  it('converts "בוך" (book)', () => {
+    expect(hebrewToYivo('בוך')).toBe('bukh');
+  });
+
+  it('converts "מענטש" (person) — in exceptions', () => {
+    expect(hebrewToYivo('מענטש')).toBe('mentsh');
+  });
+
+  it('converts "גרויס" (big)', () => {
+    expect(hebrewToYivo('גרויס')).toBe('groys');
+  });
+
+  it('converts "וואַסער" (water)', () => {
+    expect(hebrewToYivo('וואַסער')).toBe('vaser');
+  });
+
+  it('converts "ליגן" (to lie/recline)', () => {
+    expect(hebrewToYivo('ליגן')).toBe('lign');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Hyphenated forms (Finkel suffix patterns)
+  // ---------------------------------------------------------------------------
+
+  it('handles hyphenated suffix forms', () => {
+    const result = hebrewToYivo('גרויס-ע');
+    expect(result).toContain('-');
+    expect(result).not.toBeNull();
+  });
+
+  it('converts both tokens of a hyphenated form', () => {
+    expect(hebrewToYivo('גרין-ע')).toBe('grin-e');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Exceptions dictionary
+  // ---------------------------------------------------------------------------
+
+  it('returns exception for "שבת"', () => {
+    expect(hebrewToYivo('שבת')).toBe('shabos');
+  });
+
+  it('returns exception for "שלום"', () => {
+    expect(hebrewToYivo('שלום')).toBe('sholem');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Multi-word input
+  // ---------------------------------------------------------------------------
+
+  it('converts multi-word phrase with spaces', () => {
+    const result = hebrewToYivo('אַ גוטער טאָג');
+    expect(result).not.toBeNull();
+    expect(result).toContain(' ');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Returns null when no YIVO produced
+  // ---------------------------------------------------------------------------
+
+  it('returns null for a string of unrecognised characters only', () => {
+    expect(hebrewToYivo('123')).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Ellipsis / pass-through characters (Finkel abbreviation patterns)
+  // ---------------------------------------------------------------------------
+
+  it('preserves ellipsis in abbreviated forms like "גע...ט"', () => {
+    expect(hebrewToYivo('גע...ט')).toBe('ge...t');
+  });
+});

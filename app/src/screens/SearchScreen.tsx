@@ -26,8 +26,9 @@ import { detectInputScript } from '../utils/inputDetector';
 import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, saveVerterbukhQuota } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
+import { hebrewToYivo } from '../utils/hebrewToYivo';
 
 /**
  * Convert an enriched YIVO romanized headword to Hebrew script, preserving
@@ -62,6 +63,34 @@ function yivoHeadwordToHebrew(yivo: string): string | null {
   }
 
   return yivoToHebrew(yivo);
+}
+
+/**
+ * Convert an enriched Hebrew headword to YIVO romanization, preserving the
+ * enrichment format the parser appended. Mirrors yivoHeadwordToHebrew above,
+ * in reverse: handles "word (stem)" and "word, suffix" enrichment patterns
+ * before falling back to plain conversion.
+ */
+function hebrewHeadwordToYivo(hebrew: string): string | null {
+  // "word (stem)" — adjective stem enrichment
+  const parenMatch = hebrew.match(/^(.+?)\s+\((.+)\)$/);
+  if (parenMatch) {
+    const baseYivo = hebrewToYivo(parenMatch[1].trim());
+    if (!baseYivo) return null;
+    const stemYivo = hebrewToYivo(parenMatch[2].trim());
+    return stemYivo ? `${baseYivo} (${stemYivo})` : baseYivo;
+  }
+
+  // "word, suffix" — plural suffix or participle enrichment
+  const commaMatch = hebrew.match(/^(.+),\s+(.+)$/);
+  if (commaMatch) {
+    const baseYivo = hebrewToYivo(commaMatch[1].trim());
+    if (!baseYivo) return null;
+    const suffixYivo = hebrewToYivo(commaMatch[2].trim());
+    return suffixYivo ? `${baseYivo}, ${suffixYivo}` : baseYivo;
+  }
+
+  return hebrewToYivo(hebrew);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,14 +178,21 @@ export default function SearchScreen() {
       const cacheTtl = await getCacheTtlDays();
       const useAllSources = await getUseAllSources();
       const yivoToHebrewEnabled = await getYivoToHebrew();
+      const hebrewToYivoEnabled = await getHebrewToYivo();
 
       const applyConverter = (es: DictEntry[]): DictEntry[] => {
-        if (!yivoToHebrewEnabled) return es;
+        if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
         return es.map(e => {
-          if (e.yiddishHebrew || !e.yiddishRomanized) return e;
-          const generated = yivoHeadwordToHebrew(e.yiddishRomanized);
-          if (!generated) return e;
-          return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
+          let updated = e;
+          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishRomanized) {
+            const generated = yivoHeadwordToHebrew(updated.yiddishRomanized);
+            if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
+          }
+          if (hebrewToYivoEnabled && !updated.yiddishRomanized && updated.yiddishHebrew) {
+            const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
+            if (generated) updated = { ...updated, yiddishRomanized: generated, romanizedIsGenerated: true };
+          }
+          return updated;
         });
       };
 
@@ -313,14 +349,21 @@ export default function SearchScreen() {
       const cacheTtl = await getCacheTtlDays();
       const useAllSourcesEnabled = await getUseAllSources();
       const yivoToHebrewEnabled = await getYivoToHebrew();
+      const hebrewToYivoEnabled = await getHebrewToYivo();
 
       const applyConverter = (es: DictEntry[]): DictEntry[] => {
-        if (!yivoToHebrewEnabled) return es;
+        if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
         return es.map(e => {
-          if (e.yiddishHebrew || !e.yiddishRomanized) return e;
-          const generated = yivoHeadwordToHebrew(e.yiddishRomanized);
-          if (!generated) return e;
-          return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
+          let updated = e;
+          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishRomanized) {
+            const generated = yivoHeadwordToHebrew(updated.yiddishRomanized);
+            if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
+          }
+          if (hebrewToYivoEnabled && !updated.yiddishRomanized && updated.yiddishHebrew) {
+            const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
+            if (generated) updated = { ...updated, yiddishRomanized: generated, romanizedIsGenerated: true };
+          }
+          return updated;
         });
       };
 
@@ -392,14 +435,21 @@ export default function SearchScreen() {
       const cacheTtl = await getCacheTtlDays();
       const useAllSourcesEnabled = await getUseAllSources();
       const yivoToHebrewEnabled = await getYivoToHebrew();
+      const hebrewToYivoEnabled = await getHebrewToYivo();
 
       const applyConverter = (es: DictEntry[]): DictEntry[] => {
-        if (!yivoToHebrewEnabled) return es;
+        if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
         return es.map(e => {
-          if (e.yiddishHebrew || !e.yiddishRomanized) return e;
-          const generated = yivoHeadwordToHebrew(e.yiddishRomanized);
-          if (!generated) return e;
-          return { ...e, yiddishHebrew: generated, hebrewIsGenerated: true };
+          let updated = e;
+          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishRomanized) {
+            const generated = yivoHeadwordToHebrew(updated.yiddishRomanized);
+            if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
+          }
+          if (hebrewToYivoEnabled && !updated.yiddishRomanized && updated.yiddishHebrew) {
+            const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
+            if (generated) updated = { ...updated, yiddishRomanized: generated, romanizedIsGenerated: true };
+          }
+          return updated;
         });
       };
 
@@ -800,12 +850,20 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
 
       {/* Row 3: YIVO transliteration */}
       {entry.yiddishRomanized ? (
-        <Text style={[s.romanized, { color: theme.text }]}>
-          {(() => {
-            const sup = splitHebrewLemma(entry.yiddishHebrew ?? '').sup;
-            return `"${entry.yiddishRomanized}"${sup ? toSuperscript(sup) : ''}`;
-          })()}
-        </Text>
+        <View style={s.romanizedWrapper}>
+          {entry.romanizedIsGenerated ? (
+            <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+          ) : null}
+          <Text style={[s.romanized, { color: theme.text }]}>
+            {(() => {
+              const sup = splitHebrewLemma(entry.yiddishHebrew ?? '').sup;
+              return `"${entry.yiddishRomanized}"${sup ? toSuperscript(sup) : ''}`;
+            })()}
+          </Text>
+          {entry.romanizedIsGenerated ? (
+            <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
+          ) : null}
+        </View>
       ) : null}
 
       {/* Row 4: grammar — grammaticalInfo already contains all lines including the first;
@@ -1006,6 +1064,11 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     hebrewWrapper: {
       flex: 1,
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 4,
+    },
+    romanizedWrapper: {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,

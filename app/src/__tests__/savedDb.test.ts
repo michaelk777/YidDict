@@ -247,6 +247,7 @@ const savedEntry: SavedEntry = {
   savedAt: 1000000,
   isPhrase: false,
   hebrewIsGenerated: false,
+  romanizedIsGenerated: false,
 };
 
 describe('generateCsv', () => {

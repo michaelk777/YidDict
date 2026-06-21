@@ -18,4 +18,5 @@ export interface DictEntry {
   grammaticalInfo: string | null;
   isPhrase: boolean;
   hebrewIsGenerated?: boolean;
+  romanizedIsGenerated?: boolean;
 }

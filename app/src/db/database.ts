@@ -48,6 +48,11 @@ export async function initDatabase(): Promise<void> {
   } catch {
     // Column already exists — safe to ignore.
   }
+  try {
+    await db.execAsync('ALTER TABLE saved_entries ADD COLUMN romanized_is_generated INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    // Column already exists — safe to ignore.
+  }
 
   console.log('[YidDict] database: tables created');
 
@@ -63,6 +68,8 @@ export async function initDatabase(): Promise<void> {
     ['use_all_sources', '0'],
     ['yivo_to_hebrew', '0'],
     ['yivo_to_hebrew_warned', '0'],
+    ['hebrew_to_yivo', '0'],
+    ['hebrew_to_yivo_warned', '0'],
   ];
 
   console.log('[YidDict] database: seeding default settings');

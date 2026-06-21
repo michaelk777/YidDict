@@ -39,6 +39,7 @@ const sampleEntries: SavedEntry[] = [
     savedAt: 2000000,
     isPhrase: false,
     hebrewIsGenerated: false,
+    romanizedIsGenerated: false,
   },
   {
     id: 2,
@@ -52,6 +53,7 @@ const sampleEntries: SavedEntry[] = [
     savedAt: 1000000,
     isPhrase: false,
     hebrewIsGenerated: false,
+    romanizedIsGenerated: false,
   },
 ];
 

@@ -16,6 +16,7 @@ interface SavedRow {
   saved_at: number;
   is_phrase: number;
   hebrew_is_generated: number;
+  romanized_is_generated: number;
 }
 
 export interface SavedEntry {
@@ -30,6 +31,7 @@ export interface SavedEntry {
   savedAt: number;
   isPhrase: boolean;
   hebrewIsGenerated: boolean;
+  romanizedIsGenerated: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,8 +77,8 @@ export async function saveEntry(
   await db.runAsync(
     `INSERT INTO saved_entries
        (query, yiddish_hebrew, yiddish_romanized, english,
-        part_of_speech, grammatical_info, source, saved_at, is_phrase, hebrew_is_generated)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        part_of_speech, grammatical_info, source, saved_at, is_phrase, hebrew_is_generated, romanized_is_generated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       query,
       entry.yiddishHebrew,
@@ -88,6 +90,7 @@ export async function saveEntry(
       Date.now(),
       entry.isPhrase ? 1 : 0,
       entry.hebrewIsGenerated ? 1 : 0,
+      entry.romanizedIsGenerated ? 1 : 0,
     ]
   );
   await trimSaved(max);
@@ -222,5 +225,6 @@ function rowToSavedEntry(row: SavedRow): SavedEntry {
     savedAt: row.saved_at,
     isPhrase: row.is_phrase === 1,
     hebrewIsGenerated: row.hebrew_is_generated === 1,
+    romanizedIsGenerated: row.romanized_is_generated === 1,
   };
 }

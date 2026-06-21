@@ -42,6 +42,10 @@ import {
   setYivoToHebrew,
   getYivoToHebrewWarned,
   setYivoToHebrewWarned,
+  getHebrewToYivo,
+  setHebrewToYivo,
+  getHebrewToYivoWarned,
+  setHebrewToYivoWarned,
   getVerterbukhQuota,
   getVbKeepLoggedIn,
   setVbKeepLoggedIn,
@@ -81,6 +85,7 @@ export default function SettingsScreen() {
 
   // Experimental settings state
   const [yivoToHebrew, setYivoToHebrewState] = useState(false);
+  const [hebrewToYivo, setHebrewToYivoState] = useState(false);
 
   // Keep-logged-in preference
   const [keepLoggedIn, setKeepLoggedInState] = useState(false);
@@ -101,6 +106,7 @@ export default function SettingsScreen() {
     getCacheTtlDays().then(setCacheTtlDaysState).catch(() => {});
     getUseAllSources().then(setUseAllSourcesState).catch(() => {});
     getYivoToHebrew().then(setYivoToHebrewState).catch(() => {});
+    getHebrewToYivo().then(setHebrewToYivoState).catch(() => {});
     getVbKeepLoggedIn().then(setKeepLoggedInState).catch(() => {});
     getVerterbukhQuota().then(setVerterbukhQuotaState).catch(() => {});
   }, []);
@@ -202,6 +208,21 @@ export default function SettingsScreen() {
           'YIVO romanization → Hebrew script conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
         );
         await setYivoToHebrewWarned().catch(() => {});
+      }
+    }
+  }, []);
+
+  const handleToggleHebrewToYivo = useCallback(async (value: boolean) => {
+    setHebrewToYivoState(value);
+    await setHebrewToYivo(value).catch(() => {});
+    if (value) {
+      const warned = await getHebrewToYivoWarned().catch(() => false);
+      if (!warned) {
+        Alert.alert(
+          'Experimental Feature',
+          'Hebrew script → YIVO romanization conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
+        );
+        await setHebrewToYivoWarned().catch(() => {});
       }
     }
   }, []);
@@ -494,6 +515,23 @@ export default function SettingsScreen() {
             trackColor={{ false: theme.textSecondary, true: theme.primary }}
             thumbColor="#FFFFFF"
             testID="yivo-to-hebrew-toggle"
+          />
+        </View>
+        <View style={[s.toggleRow, { borderTopWidth: 1, borderTopColor: theme.border }]}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[s.toggleLabel, { color: theme.text }]}>
+              Hebrew script → YIVO romanization
+            </Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
+              Auto-generates YIVO for entries that lack it. Results marked with ~ (as in '~word~').
+            </Text>
+          </View>
+          <Switch
+            value={hebrewToYivo}
+            onValueChange={handleToggleHebrewToYivo}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="hebrew-to-yivo-toggle"
           />
         </View>
       </View>

@@ -60,6 +60,7 @@ jest.mock('../db/settingsDb', () => ({
   getCacheTtlDays: jest.fn().mockResolvedValue(90),
   getUseAllSources: jest.fn().mockResolvedValue(false),
   getYivoToHebrew: jest.fn().mockResolvedValue(false),
+  getHebrewToYivo: jest.fn().mockResolvedValue(false),
   saveVerterbukhQuota: jest.fn().mockResolvedValue(undefined),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
