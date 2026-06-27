@@ -84,6 +84,40 @@ describe('hebrewToYivo()', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Yiddish ligature letters (tsvey-vovn, vov-yud, tsvey-yudn) and bare
+  // (undotted) letters — both seen in real-world data, e.g. Google Translate
+  // output, that doesn't always match the plain-letter spellings above.
+  // ---------------------------------------------------------------------------
+
+  it('converts the tsvey-yudn ligature alone → ey', () => {
+    expect(hebrewToYivo('ײ')).toBe('ey');
+  });
+
+  it('converts the tsvey-vovn ligature alone → v', () => {
+    expect(hebrewToYivo('װ')).toBe('v');
+  });
+
+  it('converts the vov-yud ligature alone → oy', () => {
+    expect(hebrewToYivo('ױ')).toBe('oy');
+  });
+
+  it('converts the pasekh-tsvey-yudn ligature (ligature + pasekh) → ay', () => {
+    expect(hebrewToYivo('ײַ')).toBe('ay');
+  });
+
+  it('converts veys (beys with rafe) → v', () => {
+    expect(hebrewToYivo('בֿ')).toBe('v');
+  });
+
+  it('converts bare (undotted) alef → a', () => {
+    expect(hebrewToYivo('א')).toBe('a');
+  });
+
+  it('converts bare (undotted) pe → f', () => {
+    expect(hebrewToYivo('פ')).toBe('f');
+  });
+
+  // ---------------------------------------------------------------------------
   // Bare yud: word-initial → glide "y"; elsewhere → vowel "i"
   // ---------------------------------------------------------------------------
 

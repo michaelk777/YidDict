@@ -37,6 +37,21 @@ export function __resetSessionState(): void {
   sessionStartedAt = null;
 }
 
+/**
+ * Reports whether Verterbukh is actually usable right now, mirroring the
+ * gating logic in ensureSession without making a network call.
+ *
+ * keepLoggedIn=true: always true (transparent re-auth covers any gap).
+ * keepLoggedIn=false: true only if login() has run this app instance and
+ * the 24h window hasn't elapsed — false after app restart or session expiry,
+ * even though credentials remain in secure storage.
+ */
+export function hasActiveSession(keepLoggedIn: boolean): boolean {
+  if (keepLoggedIn) return true;
+  if (!sessionActiveThisInstance || sessionStartedAt === null) return false;
+  return Date.now() - sessionStartedAt <= SESSION_MAX_MS;
+}
+
 // ---------------------------------------------------------------------------
 // Credential storage
 // ---------------------------------------------------------------------------

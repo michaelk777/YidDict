@@ -21,6 +21,7 @@ import {
   login,
   logout,
   startSession,
+  hasActiveSession,
 } from '../services/verterbukh-auth';
 import {
   getSourceOrder,
@@ -246,7 +247,7 @@ export default function SettingsScreen() {
     }
   }, [pickerSlot, sourceOrder]);
 
-  const isLoggedIn = savedUsername !== null;
+  const isLoggedIn = savedUsername !== null && hasActiveSession(keepLoggedIn);
   const pickerOptions = pickerSlot !== null ? availableOptionsForSlot(sourceOrder, pickerSlot) : [];
 
   return (

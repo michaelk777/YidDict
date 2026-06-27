@@ -35,6 +35,7 @@ jest.mock('../services/verterbukh-auth', () => ({
   login: jest.fn(),
   logout: jest.fn(),
   startSession: jest.fn(),
+  hasActiveSession: jest.fn(),
 }));
 
 jest.mock('../db/settingsDb', () => ({
@@ -72,6 +73,7 @@ import {
   login,
   logout,
   startSession,
+  hasActiveSession,
 } from '../services/verterbukh-auth';
 
 import {
@@ -136,6 +138,7 @@ beforeEach(() => {
   mockLogout.mockResolvedValue(undefined);
   mockLogin.mockResolvedValue(undefined);
   (startSession as jest.Mock).mockImplementation(() => {});
+  (hasActiveSession as jest.Mock).mockReturnValue(true);
   (getVbKeepLoggedIn as jest.Mock).mockResolvedValue(false);
   (setVbKeepLoggedIn as jest.Mock).mockResolvedValue(undefined);
   mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'google_translate']);
@@ -444,6 +447,16 @@ describe('SettingsScreen — logged in', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('username-input')).toBeNull();
       expect(screen.queryByTestId('password-input')).toBeNull();
+    });
+  });
+
+  it('shows the Login form, not the logged-in status, when credentials are saved but the session is inactive (e.g. after app restart in short-term mode)', async () => {
+    (hasActiveSession as jest.Mock).mockReturnValue(false);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.queryByTestId('logged-in-status')).toBeNull();
+      expect(screen.queryByTestId('logout-button')).toBeNull();
+      expect(screen.getByTestId('login-button')).toBeTruthy();
     });
   });
 });

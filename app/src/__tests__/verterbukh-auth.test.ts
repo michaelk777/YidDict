@@ -18,6 +18,7 @@ import {
   ensureSession,
   startSession,
   endSession,
+  hasActiveSession,
   __resetSessionState,
   VbCredentials,
 } from '../services/verterbukh-auth';
@@ -285,5 +286,39 @@ describe('startSession / endSession', () => {
     startSession();
     endSession();
     await expect(ensureSession(LOGGED_IN_HTML)).rejects.toThrow('Not logged in');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hasActiveSession
+// ---------------------------------------------------------------------------
+
+describe('hasActiveSession', () => {
+  it('returns true when keepLoggedIn is true, regardless of session state', () => {
+    expect(hasActiveSession(true)).toBe(true);
+  });
+
+  it('returns false when keepLoggedIn is false and no login has occurred this instance', () => {
+    expect(hasActiveSession(false)).toBe(false);
+  });
+
+  it('returns true when keepLoggedIn is false but login occurred this instance and is within 24h', () => {
+    startSession();
+    expect(hasActiveSession(false)).toBe(true);
+  });
+
+  it('returns false after endSession even if keepLoggedIn is false', () => {
+    startSession();
+    endSession();
+    expect(hasActiveSession(false)).toBe(false);
+  });
+
+  it('returns false when keepLoggedIn is false and the 24h window has elapsed', () => {
+    const realNow = Date.now;
+    Date.now = () => 1000;
+    startSession();
+    Date.now = () => 1000 + 24 * 60 * 60 * 1000 + 1;
+    expect(hasActiveSession(false)).toBe(false);
+    Date.now = realNow;
   });
 });
