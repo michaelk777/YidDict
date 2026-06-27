@@ -8,7 +8,7 @@ interface CachedResultRow {
   id: number;
   query: string;
   yiddish_hebrew: string | null;
-  yiddish_romanized: string | null;
+  yiddish_transliterated: string | null;
   english: string | null;
   part_of_speech: string | null;
   conjugation_info: string | null;
@@ -60,14 +60,14 @@ export async function saveToCache(
   for (const entry of entries) {
     await db.runAsync(
       `INSERT OR IGNORE INTO cached_results
-         (query, yiddish_hebrew, yiddish_romanized, english,
+         (query, yiddish_hebrew, yiddish_transliterated, english,
           part_of_speech, conjugation_info, source,
           fetched_at, is_phrase)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         query,
         entry.yiddishHebrew,
-        entry.yiddishRomanized,
+        entry.yiddishTransliterated,
         entry.english,
         entry.partOfSpeech,
         entry.grammaticalInfo,
@@ -116,7 +116,7 @@ function rowToEntry(row: CachedResultRow): DictEntry {
   return {
     source: row.source as DictEntry['source'],
     fromCache: true,
-    yiddishRomanized: row.yiddish_romanized,
+    yiddishTransliterated: row.yiddish_transliterated,
     yiddishHebrew: row.yiddish_hebrew,
     english: row.english,
     partOfSpeech: row.part_of_speech,

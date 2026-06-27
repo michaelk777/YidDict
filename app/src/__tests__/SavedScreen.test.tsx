@@ -31,7 +31,7 @@ const sampleEntries: SavedEntry[] = [
     id: 1,
     query: 'sheyn',
     yiddishHebrew: 'שיין',
-    yiddishRomanized: 'sheyn',
+    yiddishTransliterated: 'sheyn',
     english: 'pretty',
     partOfSpeech: 'adjective',
     grammaticalInfo: null,
@@ -39,13 +39,13 @@ const sampleEntries: SavedEntry[] = [
     savedAt: 2000000,
     isPhrase: false,
     hebrewIsGenerated: false,
-    romanizedIsGenerated: false,
+    transliteratedIsGenerated: false,
   },
   {
     id: 2,
     query: 'gut',
     yiddishHebrew: 'גוט',
-    yiddishRomanized: 'gut',
+    yiddishTransliterated: 'gut',
     english: 'good',
     partOfSpeech: 'adjective',
     grammaticalInfo: null,
@@ -53,7 +53,7 @@ const sampleEntries: SavedEntry[] = [
     savedAt: 1000000,
     isPhrase: false,
     hebrewIsGenerated: false,
-    romanizedIsGenerated: false,
+    transliteratedIsGenerated: false,
   },
 ];
 
@@ -119,7 +119,7 @@ describe('SavedScreen — entries', () => {
     });
   });
 
-  it('shows the YIVO romanization', async () => {
+  it('shows the YIVO transliteration', async () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('"sheyn"')).toBeTruthy());
   });

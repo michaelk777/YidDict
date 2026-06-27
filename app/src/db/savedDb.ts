@@ -8,7 +8,7 @@ interface SavedRow {
   id: number;
   query: string;
   yiddish_hebrew: string | null;
-  yiddish_romanized: string | null;
+  yiddish_transliterated: string | null;
   english: string | null;
   part_of_speech: string | null;
   grammatical_info: string | null;
@@ -16,14 +16,14 @@ interface SavedRow {
   saved_at: number;
   is_phrase: number;
   hebrew_is_generated: number;
-  romanized_is_generated: number;
+  transliterated_is_generated: number;
 }
 
 export interface SavedEntry {
   id: number;
   query: string;
   yiddishHebrew: string | null;
-  yiddishRomanized: string | null;
+  yiddishTransliterated: string | null;
   english: string | null;
   partOfSpeech: string | null;
   grammaticalInfo: string | null;
@@ -31,7 +31,7 @@ export interface SavedEntry {
   savedAt: number;
   isPhrase: boolean;
   hebrewIsGenerated: boolean;
-  romanizedIsGenerated: boolean;
+  transliteratedIsGenerated: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,13 +76,13 @@ export async function saveEntry(
   const db = getDatabase();
   await db.runAsync(
     `INSERT INTO saved_entries
-       (query, yiddish_hebrew, yiddish_romanized, english,
-        part_of_speech, grammatical_info, source, saved_at, is_phrase, hebrew_is_generated, romanized_is_generated)
+       (query, yiddish_hebrew, yiddish_transliterated, english,
+        part_of_speech, grammatical_info, source, saved_at, is_phrase, hebrew_is_generated, transliterated_is_generated)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       query,
       entry.yiddishHebrew,
-      entry.yiddishRomanized,
+      entry.yiddishTransliterated,
       entry.english,
       entry.partOfSpeech,
       entry.grammaticalInfo,
@@ -90,7 +90,7 @@ export async function saveEntry(
       Date.now(),
       entry.isPhrase ? 1 : 0,
       entry.hebrewIsGenerated ? 1 : 0,
-      entry.romanizedIsGenerated ? 1 : 0,
+      entry.transliteratedIsGenerated ? 1 : 0,
     ]
   );
   await trimSaved(max);
@@ -161,7 +161,7 @@ const EXPORT_HEADER = ['Yiddish', 'Transliteration', 'English', 'Grammar', 'Sour
 function entryToColumns(e: SavedEntry): string[] {
   return [
     e.yiddishHebrew ?? '',
-    e.yiddishRomanized ?? '',
+    e.yiddishTransliterated ?? '',
     e.english ?? '',
     buildFullGrammar(e.partOfSpeech, e.grammaticalInfo),
     e.source,
@@ -217,7 +217,7 @@ function rowToSavedEntry(row: SavedRow): SavedEntry {
     id: row.id,
     query: row.query,
     yiddishHebrew: row.yiddish_hebrew,
-    yiddishRomanized: row.yiddish_romanized,
+    yiddishTransliterated: row.yiddish_transliterated,
     english: row.english,
     partOfSpeech: row.part_of_speech,
     grammaticalInfo: row.grammatical_info,
@@ -225,6 +225,6 @@ function rowToSavedEntry(row: SavedRow): SavedEntry {
     savedAt: row.saved_at,
     isPhrase: row.is_phrase === 1,
     hebrewIsGenerated: row.hebrew_is_generated === 1,
-    romanizedIsGenerated: row.romanized_is_generated === 1,
+    transliteratedIsGenerated: row.transliterated_is_generated === 1,
   };
 }

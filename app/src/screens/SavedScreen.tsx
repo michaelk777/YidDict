@@ -218,16 +218,16 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
         ) : null}
 
         {/* Row 3: YIVO transliteration */}
-        {entry.yiddishRomanized ? (
-          <View style={s.romanizedWrapper}>
-            {entry.romanizedIsGenerated ? (
+        {entry.yiddishTransliterated ? (
+          <View style={s.transliteratedWrapper}>
+            {entry.transliteratedIsGenerated ? (
               <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
             ) : null}
-            <Text style={[s.romanized, { color: theme.text }]}>{(() => {
+            <Text style={[s.transliterated, { color: theme.text }]}>{(() => {
               const sup = splitHebrewLemma(entry.yiddishHebrew ?? '').sup;
-              return `"${entry.yiddishRomanized}"${sup ? toSuperscript(sup) : ''}`;
+              return `"${entry.yiddishTransliterated}"${sup ? toSuperscript(sup) : ''}`;
             })()}</Text>
-            {entry.romanizedIsGenerated ? (
+            {entry.transliteratedIsGenerated ? (
               <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
             ) : null}
           </View>
@@ -328,12 +328,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignItems: 'baseline',
       gap: 4,
     },
-    romanizedWrapper: {
+    transliteratedWrapper: {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,
     },
-    romanized: {
+    transliterated: {
       fontSize: 16,
       fontStyle: 'italic',
     },

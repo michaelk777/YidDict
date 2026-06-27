@@ -1,11 +1,11 @@
 # YidDict
 
-A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English lookup, supporting both Hebrew script and YIVO standard romanization.
+A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English lookup, supporting both Hebrew script and YIVO standard transliteration.
 
 ## Features
 
 - Search Yiddish→English and English→Yiddish
-- Input in Hebrew script or YIVO romanization
+- Input in Hebrew script or YIVO transliteration
 - Aggregates results from three sources:
   - **Finkel's dictionary** — `cs.engr.uky.edu/~raphael/yiddish`
   - **Verterbukh** — `verterbukh.org`

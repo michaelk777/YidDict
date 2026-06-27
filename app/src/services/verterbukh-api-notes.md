@@ -54,7 +54,7 @@ GET https://verterbukh.org/vb?yq=<query>&dir=from&tsu=en
 
 | Parameter | Values | Notes |
 |---|---|---|
-| `yq` | string | The search query (YIVO romanization or Hebrew script) |
+| `yq` | string | The search query (YIVO transliteration or Hebrew script) |
 | `dir` | `from` / `to` | `from` = Yiddish→English; `to` = English→Yiddish |
 | `tsu` | `en` / `fr` | Definition language (always use `en`) |
 | `ln` | Hebrew lemma string | Optional — pins to a specific lemma when disambiguation is needed |
@@ -77,7 +77,7 @@ To pin a specific lemma after disambiguation: add `&ln=<hebrew-lemma>` (e.g. `&l
 
 ### Single entry (noun example — live HTML captured 2026-04-10)
 
-With `trns=t`, each `.def` gains two `.translit` divs: the first contains the YIVO headword romanization, the second contains romanized grammatical info (ignore for parsing — use the Yiddish `.rtl` grammar block instead).
+With `trns=t`, each `.def` gains two `.translit` divs: the first contains the YIVO headword transliteration, the second contains transliterated grammatical info (ignore for parsing — use the Yiddish `.rtl` grammar block instead).
 
 The grammar block appears in two variants depending on the entry:
 - **Variant A** (older): `.gram` and `.glossed` on the same `<span class="gram glossed">`
@@ -90,12 +90,12 @@ Both variants may appear in the same session. The parser handles both.
   <div dir="rtl" lang="yi" class="rtl">
     <span class="lemma">צײַ'געניש</span>
   </div>
-  <div lang="en" class="translit">TSAY'GENISh</div>          <!-- first .translit = YIVO romanization -->
+  <div lang="en" class="translit">TSAY'GENISh</div>          <!-- first .translit = YIVO transliteration -->
   <div dir="rtl" lang="yi" class="rtl">
     <span class="gram"><span class="glossed">דאָס<span class="help">neuter noun</span></span></span>
     <span class="glossed">(ן<span class="help">plural</span>)</span>
   </div>
-  <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">N<span class="help">plural</span></span>)</div>   <!-- second .translit = romanized grammar — skip -->
+  <div lang="en" class="translit">n. <span class="glossed">neut.<span class="help">neuter noun</span></span> (<span class="glossed">N<span class="help">plural</span></span>)</div>   <!-- second .translit = transliterated grammar — skip -->
   <div lang="en" class="gloss">certificate, diploma</div>
 </div>
 ```

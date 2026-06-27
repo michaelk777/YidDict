@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   getCredentials,
   saveCredentials,
+  deleteCredentials,
+  setInMemoryCredentials,
   login,
   logout,
   startSession,
@@ -134,7 +136,11 @@ export default function SettingsScreen() {
     try {
       const creds = { username: trimmedUser, password: trimmedPass };
       await login(creds);
-      await saveCredentials(creds);
+      if (keepLoggedIn) {
+        await saveCredentials(creds);
+      } else {
+        setInMemoryCredentials(creds);
+      }
       setSavedUsername(trimmedUser);
       setUsername('');
       setPassword('');
@@ -155,9 +161,24 @@ export default function SettingsScreen() {
   const handleToggleKeepLoggedIn = useCallback(async (value: boolean) => {
     setKeepLoggedInState(value);
     await setVbKeepLoggedIn(value).catch(() => {});
-    if (!value && savedUsername !== null) {
-      // Switching to short-term mode while logged in: start the 24h timer now.
-      startSession();
+    if (value) {
+      // Switching to keep-logged-in while an active short-term session exists:
+      // persist in-memory credentials to SecureStore so they survive app restarts.
+      if (savedUsername !== null) {
+        const creds = await getCredentials().catch(() => null);
+        if (creds) await saveCredentials(creds).catch(() => {});
+      }
+    } else {
+      // Switching to short-term mode while logged in: move credentials from
+      // SecureStore to memory (re-auth still works this session) and start the
+      // 24h timer. After app restart, credentials won't be in SecureStore so
+      // toggling back on won't auto-log them in.
+      if (savedUsername !== null) {
+        const creds = await getCredentials().catch(() => null);
+        if (creds) setInMemoryCredentials(creds);
+        await deleteCredentials().catch(() => {});
+        startSession();
+      }
     }
   }, [savedUsername]);
 
@@ -206,7 +227,7 @@ export default function SettingsScreen() {
       if (!warned) {
         Alert.alert(
           'Experimental Feature',
-          'YIVO romanization → Hebrew script conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
+          'YIVO transliteration → Hebrew script conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
         );
         await setYivoToHebrewWarned().catch(() => {});
       }
@@ -221,7 +242,7 @@ export default function SettingsScreen() {
       if (!warned) {
         Alert.alert(
           'Experimental Feature',
-          'Hebrew script → YIVO romanization conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
+          'Hebrew script → YIVO transliteration conversion is rule-based and may produce inaccurate results, especially for loshn-koydesh (Hebrew/Aramaic-origin) words. Auto-generated entries are marked with ~ (as in \'~word~\').',
         );
         await setHebrewToYivoWarned().catch(() => {});
       }
@@ -504,7 +525,7 @@ export default function SettingsScreen() {
         <View style={s.toggleRow}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={[s.toggleLabel, { color: theme.text }]}>
-              YIVO romanization → Hebrew script
+              YIVO transliteration → Hebrew script
             </Text>
             <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
               Auto-generates Hebrew for entries that lack it. Results marked with ~ (as in '~word~').
@@ -521,7 +542,7 @@ export default function SettingsScreen() {
         <View style={[s.toggleRow, { borderTopWidth: 1, borderTopColor: theme.border }]}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={[s.toggleLabel, { color: theme.text }]}>
-              Hebrew script → YIVO romanization
+              Hebrew script → YIVO transliteration
             </Text>
             <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
               Auto-generates YIVO for entries that lack it. Results marked with ~ (as in '~word~').

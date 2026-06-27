@@ -12,9 +12,9 @@ describe('GrammarText', () => {
     const { getByText } = render(<GrammarText text="שײַנען *דאַט* - ShAYNEN *DAT*" />);
 
     const hebrewAnnotation = getByText('דאַט');
-    const romanizedAnnotation = getByText('DAT');
+    const transliteratedAnnotation = getByText('DAT');
 
-    for (const node of [hebrewAnnotation, romanizedAnnotation]) {
+    for (const node of [hebrewAnnotation, transliteratedAnnotation]) {
       const flatStyle = StyleSheetFlatten(node.props.style);
       expect(flatStyle.fontWeight).toBe('bold');
       expect(flatStyle.fontStyle).toBe('normal');

@@ -73,33 +73,33 @@ describe('parseFinkelHtml', () => {
     });
 
     it('extracts Hebrew form for kapore including plural enrichment', () => {
-      const kapore = entries.find(e => e.yiddishRomanized?.includes('kapore') && !e.isPhrase);
+      const kapore = entries.find(e => e.yiddishTransliterated?.includes('kapore') && !e.isPhrase);
       expect(kapore).toBeDefined();
       expect(kapore!.yiddishHebrew).toBe('כּפּרה, כּפּרות');
     });
 
     it('extracts English definition for kapore', () => {
-      const kapore = entries.find(e => e.yiddishRomanized?.includes('kapore') && !e.isPhrase);
+      const kapore = entries.find(e => e.yiddishTransliterated?.includes('kapore') && !e.isPhrase);
       expect(kapore!.english).toBe('atonement');
     });
 
     it('extracts part of speech for kapore (gender after plural line dropped)', () => {
-      const kapore = entries.find(e => e.yiddishRomanized?.includes('kapore') && !e.isPhrase);
+      const kapore = entries.find(e => e.yiddishTransliterated?.includes('kapore') && !e.isPhrase);
       expect(kapore!.partOfSpeech).toBe('gender f');
     });
 
     it('extracts sheyn as a main entry (not a phrase), headword unchanged', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishTransliterated === 'sheyn' && !e.isPhrase);
       expect(sheyn).toBeDefined();
     });
 
     it('extracts sheyn definition as "pretty"', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishTransliterated === 'sheyn' && !e.isPhrase);
       expect(sheyn!.english).toBe('pretty');
     });
 
     it('extracts sheyn part of speech', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishTransliterated === 'sheyn' && !e.isPhrase);
       expect(sheyn!.partOfSpeech).toMatch(/adjective/i);
     });
 
@@ -111,41 +111,41 @@ describe('parseFinkelHtml', () => {
 
     it('extracts phrase definition correctly', () => {
       const phrase = entries.find(e => e.english === 'good riddance');
-      expect(phrase!.yiddishRomanized).toContain('kapore');
+      expect(phrase!.yiddishTransliterated).toContain('kapore');
     });
 
     it('extracts sheynkayt as a phrase sub-entry', () => {
-      const sheynkayt = entries.find(e => e.yiddishRomanized?.includes('sheynkayt'));
+      const sheynkayt = entries.find(e => e.yiddishTransliterated?.includes('sheynkayt'));
       expect(sheynkayt).toBeDefined();
       expect(sheynkayt!.isPhrase).toBe(true);
       expect(sheynkayt!.english).toBe('beauty');
     });
 
     it('extracts loshn-koydesh entry shney_', () => {
-      const shney = entries.find(e => e.yiddishRomanized?.includes('shney'));
+      const shney = entries.find(e => e.yiddishTransliterated?.includes('shney'));
       expect(shney).toBeDefined();
       expect(shney!.yiddishHebrew).toBe('שני');
       expect(shney!.english).toBe('two');
     });
 
     it('handles entry with no English definition (sheyndl)', () => {
-      const sheyndl = entries.find(e => e.yiddishRomanized?.includes('sheyndl'));
+      const sheyndl = entries.find(e => e.yiddishTransliterated?.includes('sheyndl'));
       expect(sheyndl).toBeDefined();
       expect(sheyndl!.english).toBeNull();
     });
 
     it('enriches sheynkayt headword with plural suffix', () => {
-      const sheynkayt = entries.find(e => e.yiddishRomanized?.includes('sheynkayt'));
-      expect(sheynkayt!.yiddishRomanized).toBe('sheynkayt, -n');
+      const sheynkayt = entries.find(e => e.yiddishTransliterated?.includes('sheynkayt'));
+      expect(sheynkayt!.yiddishTransliterated).toBe('sheynkayt, -n');
     });
 
     it('includes source span text in grammaticalInfo (shney_ indeclinable)', () => {
-      const shney = entries.find(e => e.yiddishRomanized?.includes('shney'));
+      const shney = entries.find(e => e.yiddishTransliterated?.includes('shney'));
       expect(shney!.grammaticalInfo).toContain('indeclinable');
     });
 
     it('builds grammaticalInfo as newline-separated lines (sheyn)', () => {
-      const sheyn = entries.find(e => e.yiddishRomanized === 'sheyn' && !e.isPhrase);
+      const sheyn = entries.find(e => e.yiddishTransliterated === 'sheyn' && !e.isPhrase);
       expect(sheyn!.grammaticalInfo).toContain('\n');
       expect(sheyn!.grammaticalInfo).toContain('gradable adjective with stem "shen"');
       expect(sheyn!.grammaticalInfo).toContain('adjectival form with "-ink"');
@@ -188,8 +188,8 @@ describe('parseFinkelHtml', () => {
     let entry: ReturnType<typeof parseFinkelHtml>[0];
     beforeAll(() => { [entry] = parseFinkelHtml(SKELET_HTML); });
 
-    it('enriches yiddishRomanized with plural suffix', () => {
-      expect(entry.yiddishRomanized).toBe('skelet, -n');
+    it('enriches yiddishTransliterated with plural suffix', () => {
+      expect(entry.yiddishTransliterated).toBe('skelet, -n');
     });
 
     it('english is the main definition, not the secondary one', () => {
@@ -215,8 +215,8 @@ describe('parseFinkelHtml', () => {
     let entry: ReturnType<typeof parseFinkelHtml>[0];
     beforeAll(() => { [entry] = parseFinkelHtml(LOYF_HTML); });
 
-    it('enriches yiddishRomanized with participle form', () => {
-      expect(entry.yiddishRomanized).toBe('loyf, gelofn');
+    it('enriches yiddishTransliterated with participle form', () => {
+      expect(entry.yiddishTransliterated).toBe('loyf, gelofn');
     });
 
     it('english is correct', () => {
@@ -256,8 +256,8 @@ describe('parseFinkelHtml', () => {
     let entry: ReturnType<typeof parseFinkelHtml>[0];
     beforeAll(() => { [entry] = parseFinkelHtml(HIRHER_HTML); });
 
-    it('enriches yiddishRomanized with full plural form', () => {
-      expect(entry.yiddishRomanized).toBe('hirher, hirhurem');
+    it('enriches yiddishTransliterated with full plural form', () => {
+      expect(entry.yiddishTransliterated).toBe('hirher, hirhurem');
     });
 
     it('enriches yiddishHebrew with plural Hebrew span', () => {
@@ -282,7 +282,7 @@ describe('parseFinkelHtml', () => {
     beforeAll(() => { [entry] = parseFinkelHtml(KAPORE_WEAKMATCH_HTML); });
 
     it('assembles full YIVO plural from weakmatch + text', () => {
-      expect(entry.yiddishRomanized).toBe('kapore, kapores');
+      expect(entry.yiddishTransliterated).toBe('kapore, kapores');
     });
 
     it('enriches yiddishHebrew with plural Hebrew span', () => {
@@ -308,8 +308,8 @@ describe('parseFinkelHtml', () => {
     let entry: ReturnType<typeof parseFinkelHtml>[0];
     beforeAll(() => { [entry] = parseFinkelHtml(HOYRIES_HTML); });
 
-    it('yiddishRomanized shows dash headword with plural', () => {
-      expect(entry.yiddishRomanized).toBe('-, hoyries');
+    it('yiddishTransliterated shows dash headword with plural', () => {
+      expect(entry.yiddishTransliterated).toBe('-, hoyries');
     });
 
     it('yiddishHebrew is the plural Hebrew form (no singular)', () => {
@@ -334,12 +334,12 @@ describe('parseFinkelHtml', () => {
     });
 
     it('first entry is sheynkayt with plural enrichment', () => {
-      expect(entries[0].yiddishRomanized).toBe('sheynkayt, -n');
+      expect(entries[0].yiddishTransliterated).toBe('sheynkayt, -n');
       expect(entries[0].english).toBe('beauty');
     });
 
     it('second entry is sheynhayt with plural enrichment', () => {
-      expect(entries[1].yiddishRomanized).toBe('sheynhayt, -n');
+      expect(entries[1].yiddishTransliterated).toBe('sheynhayt, -n');
       expect(entries[1].english).toBe('beautiful person or thing');
     });
   });

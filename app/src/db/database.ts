@@ -13,7 +13,7 @@ export async function initDatabase(): Promise<void> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       query TEXT NOT NULL,
       yiddish_hebrew TEXT,
-      yiddish_romanized TEXT,
+      yiddish_transliterated TEXT,
       english TEXT,
       part_of_speech TEXT,
       grammatical_info TEXT,
@@ -26,7 +26,7 @@ export async function initDatabase(): Promise<void> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       query TEXT NOT NULL,
       yiddish_hebrew TEXT,
-      yiddish_romanized TEXT,
+      yiddish_transliterated TEXT,
       english TEXT,
       part_of_speech TEXT,
       conjugation_info TEXT,
@@ -42,17 +42,26 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // Column migration for saved_entries.
+  // Rename yiddish_romanized → yiddish_transliterated on existing installs (no-op on fresh).
+  try {
+    await db.execAsync('ALTER TABLE saved_entries RENAME COLUMN yiddish_romanized TO yiddish_transliterated');
+  } catch { /* already renamed or fresh install */ }
+  try {
+    await db.execAsync('ALTER TABLE cached_results RENAME COLUMN yiddish_romanized TO yiddish_transliterated');
+  } catch { /* already renamed or fresh install */ }
+
+  // hebrew_is_generated: add if not present.
   try {
     await db.execAsync('ALTER TABLE saved_entries ADD COLUMN hebrew_is_generated INTEGER NOT NULL DEFAULT 0');
-  } catch {
-    // Column already exists — safe to ignore.
-  }
+  } catch { /* already exists */ }
+
+  // transliterated_is_generated: rename old column on existing installs, then add for fresh installs.
   try {
-    await db.execAsync('ALTER TABLE saved_entries ADD COLUMN romanized_is_generated INTEGER NOT NULL DEFAULT 0');
-  } catch {
-    // Column already exists — safe to ignore.
-  }
+    await db.execAsync('ALTER TABLE saved_entries RENAME COLUMN romanized_is_generated TO transliterated_is_generated');
+  } catch { /* already renamed or doesn't exist */ }
+  try {
+    await db.execAsync('ALTER TABLE saved_entries ADD COLUMN transliterated_is_generated INTEGER NOT NULL DEFAULT 0');
+  } catch { /* already exists (either from RENAME above or previous run) */ }
 
   console.log('[YidDict] database: tables created');
 

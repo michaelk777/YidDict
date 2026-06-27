@@ -1,5 +1,5 @@
 /**
- * Rule-based standard Yiddish Hebrew-script → YIVO romanization converter.
+ * Rule-based standard Yiddish Hebrew-script → YIVO transliteration converter.
  *
  * This is an approximation — the UI shows a ~ marker on auto-generated entries.
  * Common loshn-koydesh words with irregular spellings are handled via an
@@ -125,7 +125,7 @@ function convertToken(token: string): string {
 }
 
 /**
- * Converts a standard Yiddish Hebrew-script string to YIVO romanization.
+ * Converts a standard Yiddish Hebrew-script string to YIVO transliteration.
  *
  * Returns null if the input is empty or contains no Hebrew characters.
  */

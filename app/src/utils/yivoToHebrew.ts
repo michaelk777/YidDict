@@ -1,5 +1,5 @@
 /**
- * Rule-based YIVO romanization → standard Yiddish Hebrew-script converter.
+ * Rule-based YIVO transliteration → standard Yiddish Hebrew-script converter.
  *
  * This is an approximation — the UI shows a ~ marker on auto-generated entries.
  * Common loshn-koydesh words with irregular spellings are handled via an
@@ -61,7 +61,7 @@ const SOFIT: Record<string, string> = {
 };
 
 // Whole-word exceptions for loshn-koydesh and other irregular spellings.
-// Keys are lowercase YIVO romanization.
+// Keys are lowercase YIVO transliteration.
 const EXCEPTIONS: Record<string, string> = {
   'shabos':  'שבת',
   'shabat':  'שבת',
@@ -114,7 +114,7 @@ function convertToken(token: string): string {
 }
 
 /**
- * Converts a YIVO romanization string to standard Yiddish Hebrew script.
+ * Converts a YIVO transliteration string to standard Yiddish Hebrew script.
  *
  * Returns null if the input is empty or already contains Hebrew characters.
  */

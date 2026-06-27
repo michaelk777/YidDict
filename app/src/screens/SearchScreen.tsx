@@ -31,10 +31,10 @@ import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { hebrewToYivo } from '../utils/hebrewToYivo';
 
 /**
- * Convert an enriched YIVO romanized headword to Hebrew script, preserving
+ * Convert an enriched YIVO transliterated headword to Hebrew script, preserving
  * the enrichment format the parser appended.
  *
- * The Finkel parser may enrich yiddishRomanized with:
+ * The Finkel parser may enrich yiddishTransliterated with:
  *   "word (stem)"   — adjective stem, e.g. "sheyn (shen)"
  *   "word, suffix"  — plural suffix or participle, e.g. "sheynkayt, -n"
  *
@@ -66,7 +66,7 @@ function yivoHeadwordToHebrew(yivo: string): string | null {
 }
 
 /**
- * Convert an enriched Hebrew headword to YIVO romanization, preserving the
+ * Convert an enriched Hebrew headword to YIVO transliteration, preserving the
  * enrichment format the parser appended. Mirrors yivoHeadwordToHebrew above,
  * in reverse: handles "word (stem)" and "word, suffix" enrichment patterns
  * before falling back to plain conversion.
@@ -184,13 +184,13 @@ export default function SearchScreen() {
         if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
         return es.map(e => {
           let updated = e;
-          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishRomanized) {
-            const generated = yivoHeadwordToHebrew(updated.yiddishRomanized);
+          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
+            const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
             if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
           }
-          if (hebrewToYivoEnabled && !updated.yiddishRomanized && updated.yiddishHebrew) {
+          if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
             const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
-            if (generated) updated = { ...updated, yiddishRomanized: generated, romanizedIsGenerated: true };
+            if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
           }
           return updated;
         });
@@ -355,13 +355,13 @@ export default function SearchScreen() {
         if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
         return es.map(e => {
           let updated = e;
-          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishRomanized) {
-            const generated = yivoHeadwordToHebrew(updated.yiddishRomanized);
+          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
+            const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
             if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
           }
-          if (hebrewToYivoEnabled && !updated.yiddishRomanized && updated.yiddishHebrew) {
+          if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
             const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
-            if (generated) updated = { ...updated, yiddishRomanized: generated, romanizedIsGenerated: true };
+            if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
           }
           return updated;
         });
@@ -441,13 +441,13 @@ export default function SearchScreen() {
         if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
         return es.map(e => {
           let updated = e;
-          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishRomanized) {
-            const generated = yivoHeadwordToHebrew(updated.yiddishRomanized);
+          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
+            const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
             if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
           }
-          if (hebrewToYivoEnabled && !updated.yiddishRomanized && updated.yiddishHebrew) {
+          if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
             const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
-            if (generated) updated = { ...updated, yiddishRomanized: generated, romanizedIsGenerated: true };
+            if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
           }
           return updated;
         });
@@ -849,18 +849,18 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
       ) : null}
 
       {/* Row 3: YIVO transliteration */}
-      {entry.yiddishRomanized ? (
-        <View style={s.romanizedWrapper}>
-          {entry.romanizedIsGenerated ? (
+      {entry.yiddishTransliterated ? (
+        <View style={s.transliteratedWrapper}>
+          {entry.transliteratedIsGenerated ? (
             <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
           ) : null}
-          <Text style={[s.romanized, { color: theme.text }]}>
+          <Text style={[s.transliterated, { color: theme.text }]}>
             {(() => {
               const sup = splitHebrewLemma(entry.yiddishHebrew ?? '').sup;
-              return `"${entry.yiddishRomanized}"${sup ? toSuperscript(sup) : ''}`;
+              return `"${entry.yiddishTransliterated}"${sup ? toSuperscript(sup) : ''}`;
             })()}
           </Text>
-          {entry.romanizedIsGenerated ? (
+          {entry.transliteratedIsGenerated ? (
             <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
           ) : null}
         </View>
@@ -1068,7 +1068,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       alignItems: 'baseline',
       gap: 4,
     },
-    romanizedWrapper: {
+    transliteratedWrapper: {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,
@@ -1087,7 +1087,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     saveAllText: {
       fontSize: 12,
     },
-    romanized: {
+    transliterated: {
       fontSize: 16,
       fontStyle: 'italic',
     },

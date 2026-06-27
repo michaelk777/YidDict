@@ -45,7 +45,7 @@ describe('lookupGoogleTranslate — Hebrew script input', () => {
     expect(results).toHaveLength(1);
     expect(results[0].english).toBe('pretty');
     expect(results[0].yiddishHebrew).toBe('שיין');
-    expect(results[0].yiddishRomanized).toBeNull();
+    expect(results[0].yiddishTransliterated).toBeNull();
   });
 
   it('sets partOfSpeech, conjugationInfo, and isPhrase to null/false', async () => {
@@ -90,7 +90,7 @@ describe('lookupGoogleTranslate — Latin (English) input', () => {
     expect(results).toHaveLength(1);
     expect(results[0].yiddishHebrew).toBe('שיין');
     expect(results[0].english).toBe('pretty');
-    expect(results[0].yiddishRomanized).toBeNull();
+    expect(results[0].yiddishTransliterated).toBeNull();
   });
 
   it('returns empty array when translated text equals the query', async () => {

@@ -10,7 +10,7 @@ const BASE_URL = 'https://verterbukh.org/vb';
 // bidi algorithm to skip it when picking the paragraph's base direction (UAX #9 P2),
 // so a line starting with Yiddish text resolves to LTR base (matching its Latin
 // continuation) instead of RTL — which would otherwise reverse the whole
-// "{Yiddish} - {romanized} - {English}" segment order.
+// "{Yiddish} - {transliterated} - {English}" segment order.
 const RLI = '⁧';
 const PDI = '⁩';
 
@@ -41,7 +41,7 @@ export interface VerterbukResult {
  * Handles session expiry: if the response shows a logged-out page,
  * re-authenticates once and retries.
  *
- * @param query      YIVO romanization, Hebrew script, or English
+ * @param query      YIVO transliteration, Hebrew script, or English
  * @param ln         Optional Hebrew lemma — pins to a specific entry after the
  *                   user has chosen from disambiguation choices. Consumes a token.
  * @param forcedDir  Search direction. Defaults to 'from' (Yiddish→English). Pass
@@ -78,7 +78,7 @@ async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Prom
     yq: query,
     dir,
     tsu: 'en',
-    trns: 't',    // request YIVO romanization alongside Hebrew headwords
+    trns: 't',    // request YIVO transliteration alongside Hebrew headwords
     extend: '1',  // return all disambiguation choices without a "more" button
   };
   if (ln) params.ln = ln;
@@ -168,14 +168,14 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
 interface DefinitionSegment {
   kind: 'definition';
   grammarYiddish: ReturnType<typeof parse> | null;
-  grammarRomanized: ReturnType<typeof parse> | null;
+  grammarTransliterated: ReturnType<typeof parse> | null;
   gloss: string;
 }
 
 interface PhraseSegment {
   kind: 'phrase';
   yiddishPhrase: string;
-  romanizedPhrase: string | null;
+  transliteratedPhrase: string | null;
   englishPhrase: string;
 }
 
@@ -215,7 +215,7 @@ function formByLabel(node: ReturnType<typeof parse> | null, targetLabel: string)
 }
 
 /**
- * Render a grammar block's terse summary straight from Verterbukh's own romanized
+ * Render a grammar block's terse summary straight from Verterbukh's own transliterated
  * text — preserves its abbreviations and "/" alternatives ("n. masc./neut.",
  * "adj./adv. comp. ShENER") without us inventing any abbreviation scheme. Spans
  * whose `.help` label is in `skipLabels` are omitted — used to remove forms that
@@ -273,7 +273,7 @@ function formatPhraseText(node: ReturnType<typeof parse>): string {
 /** Group a `.def` block's child divs into headword info + ordered definition/phrase segments. */
 function collectDefSegments(defNode: ReturnType<typeof parse>): {
   baseHebrew: string | null;
-  baseRomanized: string | null;
+  baseTransliterated: string | null;
   segments: DefSegment[];
 } {
   const children = defNode.childNodes.filter(
@@ -281,7 +281,7 @@ function collectDefSegments(defNode: ReturnType<typeof parse>): {
   );
 
   let baseHebrew: string | null = null;
-  let baseRomanized: string | null = null;
+  let baseTransliterated: string | null = null;
   const segments: DefSegment[] = [];
   let i = 0;
 
@@ -293,7 +293,7 @@ function collectDefSegments(defNode: ReturnType<typeof parse>): {
     }
   }
   if (i < children.length && children[i].classList?.contains('translit') && !children[i].querySelector('.glossed')) {
-    baseRomanized = children[i].text.replace(/\|/g, '').trim() || null;
+    baseTransliterated = children[i].text.replace(/\|/g, '').trim() || null;
     i++;
   }
 
@@ -302,14 +302,14 @@ function collectDefSegments(defNode: ReturnType<typeof parse>): {
 
     if (node.classList?.contains('sep')) {
       // formatPhraseText (not .text) — phrases sometimes bake an inline grammar
-      // annotation into their own Hebrew/romanized spans (e.g. "שײַנען דאַט" /
+      // annotation into their own Hebrew/transliterated spans (e.g. "שײַנען דאַט" /
       // "ShAYNEN DAT" for a dative usage); it both excludes the hidden .help
       // tooltip text ("dative") and sets the annotation off in parentheses.
       const yiddishPhrase = formatPhraseText(node);
       i++;
-      let romanizedPhrase: string | null = null;
+      let transliteratedPhrase: string | null = null;
       if (i < children.length && children[i].classList?.contains('translit')) {
-        romanizedPhrase = formatPhraseText(children[i]) || null;
+        transliteratedPhrase = formatPhraseText(children[i]) || null;
         i++;
       }
       let englishPhrase = '';
@@ -317,16 +317,16 @@ function collectDefSegments(defNode: ReturnType<typeof parse>): {
         englishPhrase = children[i].text.trim();
         i++;
       }
-      segments.push({ kind: 'phrase', yiddishPhrase, romanizedPhrase, englishPhrase });
+      segments.push({ kind: 'phrase', yiddishPhrase, transliteratedPhrase, englishPhrase });
       continue;
     }
 
     if (node.classList?.contains('rtl') && node.querySelector('.glossed')) {
       const grammarYiddish = node;
       i++;
-      let grammarRomanized: ReturnType<typeof parse> | null = null;
+      let grammarTransliterated: ReturnType<typeof parse> | null = null;
       if (i < children.length && children[i].classList?.contains('translit')) {
-        grammarRomanized = children[i];
+        grammarTransliterated = children[i];
         i++;
       }
       let gloss = '';
@@ -334,12 +334,12 @@ function collectDefSegments(defNode: ReturnType<typeof parse>): {
         gloss = children[i].text.trim();
         i++;
       }
-      segments.push({ kind: 'definition', grammarYiddish, grammarRomanized, gloss });
+      segments.push({ kind: 'definition', grammarYiddish, grammarTransliterated, gloss });
       continue;
     }
 
     if (node.classList?.contains('gloss')) {
-      segments.push({ kind: 'definition', grammarYiddish: null, grammarRomanized: null, gloss: node.text.trim() });
+      segments.push({ kind: 'definition', grammarYiddish: null, grammarTransliterated: null, gloss: node.text.trim() });
       i++;
       continue;
     }
@@ -347,14 +347,14 @@ function collectDefSegments(defNode: ReturnType<typeof parse>): {
     i++; // skip anything unrecognized (e.g. stray whitespace-only nodes)
   }
 
-  return { baseHebrew, baseRomanized, segments };
+  return { baseHebrew, baseTransliterated, segments };
 }
 
 function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
-  const { baseHebrew, baseRomanized, segments } = collectDefSegments(defNode);
+  const { baseHebrew, baseTransliterated, segments } = collectDefSegments(defNode);
 
   let yiddishHebrew = baseHebrew;
-  let yiddishRomanized = baseRomanized;
+  let yiddishTransliterated = baseTransliterated;
   let partOfSpeech: string | null = null;
   let english: string | null = null;
   const grammarLines: string[] = [];
@@ -368,26 +368,26 @@ function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
       // matching Finkel's "word, gelofn" / "word, -n" conventions. Adjective
       // comparatives/stems are deliberately NOT folded in — they stay below.
       const participleHebrew = formByLabel(seg.grammarYiddish, 'past participle');
-      const participleRom = formByLabel(seg.grammarRomanized, 'past participle');
+      const participleRom = formByLabel(seg.grammarTransliterated, 'past participle');
       if (participleHebrew) {
         yiddishHebrew = yiddishHebrew ? `${yiddishHebrew}, ${participleHebrew}` : participleHebrew;
         if (participleRom) {
-          yiddishRomanized = yiddishRomanized ? `${yiddishRomanized}, ${participleRom}` : participleRom;
+          yiddishTransliterated = yiddishTransliterated ? `${yiddishTransliterated}, ${participleRom}` : participleRom;
         }
         skipLabels.add('past participle');
       }
 
       const pluralHebrew = formByLabel(seg.grammarYiddish, 'plural');
-      const pluralRom = formByLabel(seg.grammarRomanized, 'plural');
+      const pluralRom = formByLabel(seg.grammarTransliterated, 'plural');
       if (pluralHebrew) {
         yiddishHebrew = yiddishHebrew ? `${yiddishHebrew}, -${pluralHebrew}` : `-${pluralHebrew}`;
         if (pluralRom) {
-          yiddishRomanized = yiddishRomanized ? `${yiddishRomanized}, -${pluralRom}` : `-${pluralRom}`;
+          yiddishTransliterated = yiddishTransliterated ? `${yiddishTransliterated}, -${pluralRom}` : `-${pluralRom}`;
         }
         skipLabels.add('plural');
       }
 
-      const summary = grammarSummaryLine(seg.grammarRomanized, skipLabels);
+      const summary = grammarSummaryLine(seg.grammarTransliterated, skipLabels);
 
       if (english === null) {
         english = seg.gloss || null;
@@ -408,7 +408,7 @@ function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
       // "אַװעקלױפֿן צו - AVEKLOYFN TSU - run/hurry to"
       const parts = [
         seg.yiddishPhrase ? `${RLI}${seg.yiddishPhrase}${PDI}` : null,
-        seg.romanizedPhrase,
+        seg.transliteratedPhrase,
         seg.englishPhrase,
       ].filter((p): p is string => !!p);
       if (parts.length > 0) grammarLines.push(parts.join(' - '));
@@ -421,7 +421,7 @@ function parseDef(defNode: ReturnType<typeof parse>): DictEntry {
     source: 'verterbukh',
     fromCache: false,
     yiddishHebrew,
-    yiddishRomanized,
+    yiddishTransliterated,
     partOfSpeech,
     grammaticalInfo,
     english,

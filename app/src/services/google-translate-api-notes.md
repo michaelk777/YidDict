@@ -39,7 +39,7 @@ Direction is determined by the `isHebrew` flag, not auto-detection:
 | Latin (English)   | `en` | `yi` | `yiddishHebrew`   |
 
 Google Translate does not reliably recognize YIVO
-romanization as Yiddish — it may misidentify it as Polish, German, or
+transliteration as Yiddish — it may misidentify it as Polish, German, or
 another Latin-script language. Latin input by a user is therefore always treated as
 English. This is appropriate since Google Translate is more of a fallback source;
 Finkel and Verterbukh handle YIVO input directly.
@@ -49,6 +49,6 @@ Finkel and Verterbukh handle YIVO input directly.
 - **Unofficial**: URL or response format could change without notice
 - **No formal rate limit** documented; fine for single-user mobile app
 - **Machine translation quality**: suitable as a fallback source — no
-  grammatical metadata (POS, conjugation info, romanization)
+  grammatical metadata (POS, conjugation info, transliteration)
 - **Integration test note**: Use mocked axios in unit tests; verify live
   behavior manually before release and consider making non-mock axios in unit tests as well

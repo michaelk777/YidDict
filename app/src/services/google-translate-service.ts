@@ -14,7 +14,7 @@ const TRANSLATE_URL = 'https://translate.googleapis.com/translate_a/single';
  *   - Hebrew script (isHebrew=true)  → Yiddish→English  (sl=yi, tl=en)
  *   - Latin input   (isHebrew=false) → English→Yiddish  (sl=en, tl=yi)
  *
- * YIVO romanization is not reliably detected as Yiddish by Google, so Latin
+ * YIVO transliteration is not reliably detected as Yiddish by Google, so Latin
  * input is always treated as English.
  *
  * Returns a single GoogleTranslateEntry, or an empty array if no meaningful
@@ -33,7 +33,7 @@ export async function lookupGoogleTranslate(
       source: 'google_translate',
       fromCache: false,
       yiddishHebrew: query,
-      yiddishRomanized: null,
+      yiddishTransliterated: null,
       english: result.translatedText,
       partOfSpeech: null,
       grammaticalInfo: null,
@@ -46,7 +46,7 @@ export async function lookupGoogleTranslate(
       source: 'google_translate',
       fromCache: false,
       yiddishHebrew: result.translatedText,
-      yiddishRomanized: null,
+      yiddishTransliterated: null,
       english: query,
       partOfSpeech: null,
       grammaticalInfo: null,

@@ -8,7 +8,7 @@ Endpoint: `https://www.cs.engr.uky.edu/~raphael/yiddish/dictionary.cgi`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `word` | text | Search query — English, YIVO romanization, or Hebrew script. **Server auto-detects script.** Partial/fragment match by default. |
+| `word` | text | Search query — English, YIVO transliteration, or Hebrew script. **Server auto-detects script.** Partial/fragment match by default. |
 | `wholeWord` | checkbox (`on`) | Restrict to exact whole-word matches. Omit for partial matching (default in YidDict). |
 | `base` | text | Supply a full *inflected* form; server derives the stem and returns the base entry. Used by YidDict as a Stage 2 fallback when `word=` returns nothing. |
 
@@ -22,7 +22,7 @@ Results appear in the **first `<ul>`** element that contains at least one `.defi
 
 | Class | Content |
 |-------|---------|
-| `lexeme` | YIVO romanization of the headword. May end with `(` when a Hebrew form follows. May contain `goodmatch` / `weakmatch` spans (matched portion highlight). |
+| `lexeme` | YIVO transliteration of the headword. May end with `(` when a Hebrew form follows. May contain `goodmatch` / `weakmatch` spans (matched portion highlight). |
 | `hebrew` | Hebrew script form. **Sibling of `.lexeme`**, not nested inside it. First occurrence = base form; later occurrences = plural/other inflected forms. |
 | `grammar` | Grammatical annotation (part of speech, gender, plural pattern, etc.). Multiple per entry — first is usually the POS, rest are conjugation info. |
 | `definition` | English gloss. |

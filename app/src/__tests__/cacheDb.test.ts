@@ -18,7 +18,7 @@ const mockGetDatabase = getDatabase as jest.Mock;
 const sampleEntry: DictEntry = {
   source: 'finkel',
   fromCache: false,
-  yiddishRomanized: 'sheyn',
+  yiddishTransliterated: 'sheyn',
   yiddishHebrew: 'שיין',
   english: 'pretty',
   partOfSpeech: 'adjective',
@@ -29,7 +29,7 @@ const sampleEntry: DictEntry = {
 const sampleRow = {
   id: 1,
   query: 'sheyn',
-  yiddish_romanized: 'sheyn',
+  yiddish_transliterated: 'sheyn',
   yiddish_hebrew: 'שיין',
   english: 'pretty',
   part_of_speech: 'adjective',
@@ -65,7 +65,7 @@ describe('getCachedEntries', () => {
     const result = await getCachedEntries('sheyn', 'finkel');
     expect(result).not.toBeNull();
     expect(result!.length).toBe(1);
-    expect(result![0].yiddishRomanized).toBe('sheyn');
+    expect(result![0].yiddishTransliterated).toBe('sheyn');
     expect(result![0].yiddishHebrew).toBe('שיין');
     expect(result![0].english).toBe('pretty');
     expect(result![0].partOfSpeech).toBe('adjective');
@@ -83,13 +83,13 @@ describe('getCachedEntries', () => {
 
   it('returns multiple rows in id ASC order', async () => {
     const rows = [
-      { ...sampleRow, id: 1, yiddish_romanized: 'sheyn' },
-      { ...sampleRow, id: 2, yiddish_romanized: 'sheynkayt' },
-      { ...sampleRow, id: 3, yiddish_romanized: 'sheyndl' },
+      { ...sampleRow, id: 1, yiddish_transliterated: 'sheyn' },
+      { ...sampleRow, id: 2, yiddish_transliterated: 'sheynkayt' },
+      { ...sampleRow, id: 3, yiddish_transliterated: 'sheyndl' },
     ];
     __mockDb.getAllAsync.mockResolvedValueOnce(rows);
     const result = await getCachedEntries('sheyn', 'finkel');
-    expect(result!.map(e => e.yiddishRomanized)).toEqual(['sheyn', 'sheynkayt', 'sheyndl']);
+    expect(result!.map(e => e.yiddishTransliterated)).toEqual(['sheyn', 'sheynkayt', 'sheyndl']);
   });
 
   it('maps is_phrase=1 to isPhrase=true', async () => {

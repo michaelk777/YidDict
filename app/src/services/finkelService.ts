@@ -136,13 +136,13 @@ function collectEntries(
       continue;
     }
 
-    // Base romanized: strip trailing '(' that Finkel appends before a Hebrew span.
-    const baseRomanized = lexemeSpan.text.replace(/\($/, '').trim() || null;
+    // Base transliterated: strip trailing '(' that Finkel appends before a Hebrew span.
+    const baseTransliterated = lexemeSpan.text.replace(/\($/, '').trim() || null;
     // Base Hebrew: only the span that precedes the first grammar span.
     // Spans appearing after a grammar span are inflected forms captured via events.
     const baseHebrew = baseHebrewOf(li);
 
-    out.push(...parseEntryChildren(li.childNodes, baseRomanized, baseHebrew, isPhrase));
+    out.push(...parseEntryChildren(li.childNodes, baseTransliterated, baseHebrew, isPhrase));
 
     // Some entries have phrase sub-entries in an inline nested <ul>.
     const inlineUl = (li.childNodes as Node[]).find(
@@ -334,7 +334,7 @@ function cleanBare(s: string): string {
 
 function parseEntryChildren(
   nodes: Node[],
-  baseRomanized: string | null,
+  baseTransliterated: string | null,
   baseHebrew: string | null,
   isPhrase: boolean
 ): DictEntry[] {
@@ -344,7 +344,7 @@ function parseEntryChildren(
   // Partition events into per-entry segments at each split point.
   const segments: Array<{ lexeme: string | null; hebrew: string | null; slice: Ev[] }> = [];
   let start = 0;
-  let segLexeme = baseRomanized;
+  let segLexeme = baseTransliterated;
   let segHebrew = baseHebrew;
 
   for (const splitIdx of splitIndices) {
@@ -380,7 +380,7 @@ function buildEntryFromSegment(
   //   plural in  → strip to base POS ("noun, plural in" → "noun")
   //   participle → drop entirely (null)
   //   with stem  → keep span as-is, strip only the bare stem value
-  let yiddishRomanized = lexeme;
+  let yiddishTransliterated = lexeme;
   let yiddishHebrew = hebrew;
   let enrichedLineIndex = -1;
   let enrichedLineReplacement: string | null = null;
@@ -390,7 +390,7 @@ function buildEntryFromSegment(
     const b = cleanBare(bare);
 
     if (span.includes('plural in') && b.startsWith('-')) {
-      if (yiddishRomanized) yiddishRomanized = `${yiddishRomanized}, ${b}`;
+      if (yiddishTransliterated) yiddishTransliterated = `${yiddishTransliterated}, ${b}`;
       if (yiddishHebrew) {
         const h = yivoToHebrew(b);
         if (h) yiddishHebrew = `${yiddishHebrew}, ${h}`;
@@ -401,7 +401,7 @@ function buildEntryFromSegment(
     }
 
     if (span.trim() === 'participle' && b) {
-      if (yiddishRomanized) yiddishRomanized = `${yiddishRomanized}, ${b}`;
+      if (yiddishTransliterated) yiddishTransliterated = `${yiddishTransliterated}, ${b}`;
       if (yiddishHebrew) {
         const h = yivoToHebrew(b);
         if (h) yiddishHebrew = `${yiddishHebrew}, ${h}`;
@@ -418,7 +418,7 @@ function buildEntryFromSegment(
       // plural is already assembled in `b` (e.g. "kapore" + "s" = "kapores").
       const plural = b.replace(/\(\)/g, '').trim();
       if (plural && /[a-zA-Z]/.test(plural)) {
-        if (yiddishRomanized) yiddishRomanized = `${yiddishRomanized}, ${plural}`;
+        if (yiddishTransliterated) yiddishTransliterated = `${yiddishTransliterated}, ${plural}`;
         // Use the Hebrew span text captured alongside this grammar line directly —
         // no conversion needed and avoids incorrect yivoToHebrew output for
         // loshn-koydesh words like כּפּרות.
@@ -449,7 +449,7 @@ function buildEntryFromSegment(
   return {
     source: 'finkel',
     fromCache: false,
-    yiddishRomanized,
+    yiddishTransliterated,
     yiddishHebrew,
     english,
     partOfSpeech,

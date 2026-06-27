@@ -22,7 +22,7 @@ const mockGetDatabase = getDatabase as jest.Mock;
 const sampleEntry: DictEntry = {
   source: 'finkel',
   fromCache: false,
-  yiddishRomanized: 'sheyn',
+  yiddishTransliterated: 'sheyn',
   yiddishHebrew: 'שיין',
   english: 'pretty',
   partOfSpeech: 'adjective',
@@ -35,7 +35,7 @@ const sampleRow = {
   id: 1,
   query: 'sheyn',
   yiddish_hebrew: 'שיין',
-  yiddish_romanized: 'sheyn',
+  yiddish_transliterated: 'sheyn',
   english: 'pretty',
   part_of_speech: 'adjective',
   grammatical_info: null,
@@ -72,7 +72,7 @@ describe('getSavedEntries', () => {
     expect(result.id).toBe(1);
     expect(result.query).toBe('sheyn');
     expect(result.yiddishHebrew).toBe('שיין');
-    expect(result.yiddishRomanized).toBe('sheyn');
+    expect(result.yiddishTransliterated).toBe('sheyn');
     expect(result.english).toBe('pretty');
     expect(result.partOfSpeech).toBe('adjective');
     expect(result.grammaticalInfo).toBeNull();
@@ -239,7 +239,7 @@ const savedEntry: SavedEntry = {
   id: 1,
   query: 'sheyn',
   yiddishHebrew: 'שיין',
-  yiddishRomanized: 'sheyn',
+  yiddishTransliterated: 'sheyn',
   english: 'pretty',
   partOfSpeech: 'adjective',
   grammaticalInfo: null,
@@ -247,7 +247,7 @@ const savedEntry: SavedEntry = {
   savedAt: 1000000,
   isPhrase: false,
   hebrewIsGenerated: false,
-  romanizedIsGenerated: false,
+  transliteratedIsGenerated: false,
 };
 
 describe('generateCsv', () => {

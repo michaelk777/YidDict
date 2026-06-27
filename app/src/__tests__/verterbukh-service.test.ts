@@ -124,7 +124,7 @@ const NOUN_NESTED_HTML = `
 `;
 
 // Verb whose secondary phrase bakes its own grammar annotation directly into its
-// Hebrew/romanized text (".gram" -> "דאַט"/"DAT" for a dative usage), distinct
+// Hebrew/transliterated text (".gram" -> "דאַט"/"DAT" for a dative usage), distinct
 // from the entry's own part of speech. Captured from the live response for query
 // "sheyn" -> ln="שײַנען" (2026-06-06).
 const SHAYNEN_HTML = `
@@ -269,12 +269,12 @@ describe('parseVerterbukhhHtml — noun entry with plural folding (variant A: .g
     expect(entries[0].yiddishHebrew).toBe('פּאַסירל, -עך');
   });
 
-  it('folds the romanized plural suffix into yiddishRomanized with a dash', () => {
+  it('folds the transliterated plural suffix into yiddishTransliterated with a dash', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
-    expect(entries[0].yiddishRomanized).toBe('PASIRL, -EKh');
+    expect(entries[0].yiddishTransliterated).toBe('PASIRL, -EKh');
   });
 
-  it('extracts a terse part of speech straight from Verterbukh\'s romanized grammar', () => {
+  it('extracts a terse part of speech straight from Verterbukh\'s transliterated grammar', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_HTML);
     expect(entries[0].partOfSpeech).toBe('n. neut.');
   });
@@ -307,10 +307,10 @@ describe('parseVerterbukhhHtml — verb entry with past participle + phrase (ave
     expect(entries[0].yiddishHebrew).not.toContain('|');
   });
 
-  it('folds the romanized past participle (with auxiliary) into yiddishRomanized', () => {
+  it('folds the transliterated past participle (with auxiliary) into yiddishTransliterated', () => {
     const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
-    expect(entries[0].yiddishRomanized).toBe("AVE'KLOYFN, IZ AVE'KGELOFN");
-    expect(entries[0].yiddishRomanized).not.toContain('|');
+    expect(entries[0].yiddishTransliterated).toBe("AVE'KLOYFN, IZ AVE'KGELOFN");
+    expect(entries[0].yiddishTransliterated).not.toContain('|');
   });
 
   it('extracts a terse part of speech, omitting the participle now folded into the headword', () => {
@@ -323,7 +323,7 @@ describe('parseVerterbukhhHtml — verb entry with past participle + phrase (ave
     expect(entries[0].english).toBe('leave hastily; run away, flee');
   });
 
-  it('folds the usage phrase into grammaticalInfo as "{Yiddish} - {romanized} - {English}", with no POS label borrowed from the definition', () => {
+  it('folds the usage phrase into grammaticalInfo as "{Yiddish} - {transliterated} - {English}", with no POS label borrowed from the definition', () => {
     const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       `v.\n${RLI}אַװעקלױפֿן צו${PDI} - AVEKLOYFN TSU - run/hurry to`
@@ -338,7 +338,7 @@ describe('parseVerterbukhhHtml — verb entry with past participle + phrase (ave
 // ---------------------------------------------------------------------------
 
 describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own grammar annotation (shaynen)', () => {
-  it('marks the inline ".gram" annotation with *...*, on both the Hebrew and romanized phrase text', () => {
+  it('marks the inline ".gram" annotation with *...*, on both the Hebrew and transliterated phrase text', () => {
     const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'v.\n' +
@@ -359,7 +359,7 @@ describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own gram
 });
 
 describe('parseVerterbukhhHtml — noun entry whose phrase bakes in a ".gram" annotation mid-phrase (marrow)', () => {
-  it('marks the inline ".gram" annotation with *...* in the middle of the phrase, on both Hebrew and romanized text', () => {
+  it('marks the inline ".gram" annotation with *...* in the middle of the phrase, on both Hebrew and transliterated text', () => {
     const { entries } = parseVerterbukhhHtml(MARROW_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'n. masc.\n' +
@@ -394,7 +394,7 @@ describe('parseVerterbukhhHtml — adjective entry with dual POS + comparative +
   it('keeps the headword bare — comparatives are not folded in', () => {
     const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
     expect(entries[0].yiddishHebrew).toBe('שײן');
-    expect(entries[0].yiddishRomanized).toBe('ShEYN');
+    expect(entries[0].yiddishTransliterated).toBe('ShEYN');
   });
 
   it('preserves both POS/comparative alternatives instead of dropping one (dual-alternative bug fix)', () => {
@@ -425,9 +425,9 @@ describe('parseVerterbukhhHtml — noun entry with plural folding (variant B: .g
     expect(entries[0].yiddishHebrew).toBe("צײַ'געניש, -ן");
   });
 
-  it('folds the romanized plural suffix into yiddishRomanized with a dash', () => {
+  it('folds the transliterated plural suffix into yiddishTransliterated with a dash', () => {
     const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
-    expect(entries[0].yiddishRomanized).toBe("TSAY'GENISh, -N");
+    expect(entries[0].yiddishTransliterated).toBe("TSAY'GENISh, -N");
   });
 
   it('extracts terse POS from the nested .gram > .glossed structure', () => {
@@ -446,10 +446,10 @@ describe('parseVerterbukhhHtml — noun entry with plural folding (variant B: .g
     expect(entries[0].english).toBe('certificate, diploma');
   });
 
-  it('returns null yiddishRomanized when no .translit div is present', () => {
+  it('returns null yiddishTransliterated when no .translit div is present', () => {
     const noTranslit = `<div class="def"><div class="rtl"><span class="lemma">טעסט</span></div><div class="gloss">test</div></div>`;
     const { entries } = parseVerterbukhhHtml(noTranslit);
-    expect(entries[0].yiddishRomanized).toBeNull();
+    expect(entries[0].yiddishTransliterated).toBeNull();
   });
 });
 
