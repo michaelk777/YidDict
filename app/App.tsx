@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { SavedProvider } from './src/context/SavedContext';
 import { initDatabase } from './src/db/database';
+import { initAuth } from './src/services/verterbukh-auth';
 import { getThemePreference } from './src/db/settingsDb';
 import AppNavigator from './src/navigation/AppNavigator';
 
@@ -18,6 +19,7 @@ function Root() {
     initDatabase()
       .then(async () => {
         console.log('[YidDict] App: DB init succeeded, rendering navigator');
+        await initAuth();
         const saved = await getThemePreference();
         setColorScheme(saved);
         setDbReady(true);

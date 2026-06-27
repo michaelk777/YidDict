@@ -32,6 +32,8 @@ jest.mock('../db/cacheDb', () => ({
 jest.mock('../services/verterbukh-auth', () => ({
   getCredentials: jest.fn(),
   saveCredentials: jest.fn(),
+  deleteCredentials: jest.fn(),
+  setInMemoryCredentials: jest.fn(),
   login: jest.fn(),
   logout: jest.fn(),
   startSession: jest.fn(),
@@ -70,6 +72,8 @@ import { clearCache } from '../db/cacheDb';
 import {
   getCredentials,
   saveCredentials,
+  deleteCredentials,
+  setInMemoryCredentials,
   login,
   logout,
   startSession,
@@ -135,6 +139,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetCredentials.mockResolvedValue(null);
   mockSaveCredentials.mockResolvedValue(undefined);
+  (deleteCredentials as jest.Mock).mockResolvedValue(undefined);
+  (setInMemoryCredentials as jest.Mock).mockImplementation(() => {});
   mockLogout.mockResolvedValue(undefined);
   mockLogin.mockResolvedValue(undefined);
   (startSession as jest.Mock).mockImplementation(() => {});
@@ -466,7 +472,23 @@ describe('SettingsScreen — logged in', () => {
 // ---------------------------------------------------------------------------
 
 describe('SettingsScreen — login flow', () => {
-  it('calls login and saveCredentials with entered credentials', async () => {
+  it('calls login and setInMemoryCredentials (not saveCredentials) when keepLoggedIn is off', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('username-input'));
+
+    fireEvent.changeText(screen.getByTestId('username-input'), 'testuser');
+    fireEvent.changeText(screen.getByTestId('password-input'), 'testpass');
+    fireEvent.press(screen.getByTestId('login-button'));
+
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith({ username: 'testuser', password: 'testpass' });
+      expect(setInMemoryCredentials as jest.Mock).toHaveBeenCalledWith({ username: 'testuser', password: 'testpass' });
+      expect(mockSaveCredentials).not.toHaveBeenCalled();
+    });
+  });
+
+  it('calls login and saveCredentials (not setInMemoryCredentials) when keepLoggedIn is on', async () => {
+    (getVbKeepLoggedIn as jest.Mock).mockResolvedValue(true);
     renderScreen();
     await waitFor(() => screen.getByTestId('username-input'));
 
@@ -477,6 +499,7 @@ describe('SettingsScreen — login flow', () => {
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith({ username: 'testuser', password: 'testpass' });
       expect(mockSaveCredentials).toHaveBeenCalledWith({ username: 'testuser', password: 'testpass' });
+      expect(setInMemoryCredentials as jest.Mock).not.toHaveBeenCalled();
     });
   });
 

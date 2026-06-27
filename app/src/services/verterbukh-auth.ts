@@ -21,6 +21,14 @@ let sessionStartedAt: number | null = null;
 
 const SESSION_MAX_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// True iff credentials are currently stored in SecureStore (keep-logged-in mode).
+// Initialized from SecureStore by initAuth() at app startup.
+let credentialsPersisted = false;
+
+// Short-term session credentials held in memory only — never written to SecureStore
+// when keepLoggedIn is off. Cleared on logout or app restart.
+let inMemoryCredentials: VbCredentials | null = null;
+
 export function startSession(): void {
   sessionActiveThisInstance = true;
   sessionStartedAt = Date.now();
@@ -35,19 +43,38 @@ export function endSession(): void {
 export function __resetSessionState(): void {
   sessionActiveThisInstance = false;
   sessionStartedAt = null;
+  credentialsPersisted = false;
+  inMemoryCredentials = null;
+}
+
+/**
+ * Call once at app startup (after initDatabase) to sync credentialsPersisted
+ * with what is actually in SecureStore.
+ */
+export async function initAuth(): Promise<void> {
+  const stored = await SecureStore.getItemAsync(CREDENTIALS_KEY);
+  credentialsPersisted = stored !== null;
+}
+
+/**
+ * Store credentials in memory only (short-term mode — never written to SecureStore).
+ * Cleared automatically when the module reloads (app restart).
+ */
+export function setInMemoryCredentials(credentials: VbCredentials | null): void {
+  inMemoryCredentials = credentials;
 }
 
 /**
  * Reports whether Verterbukh is actually usable right now, mirroring the
  * gating logic in ensureSession without making a network call.
  *
- * keepLoggedIn=true: always true (transparent re-auth covers any gap).
+ * keepLoggedIn=true: true if credentials are persisted in SecureStore (will
+ *   auto-re-auth transparently) OR an active session exists this instance.
  * keepLoggedIn=false: true only if login() has run this app instance and
- * the 24h window hasn't elapsed — false after app restart or session expiry,
- * even though credentials remain in secure storage.
+ *   the 24h window hasn't elapsed.
  */
 export function hasActiveSession(keepLoggedIn: boolean): boolean {
-  if (keepLoggedIn) return true;
+  if (keepLoggedIn) return credentialsPersisted || sessionActiveThisInstance;
   if (!sessionActiveThisInstance || sessionStartedAt === null) return false;
   return Date.now() - sessionStartedAt <= SESSION_MAX_MS;
 }
@@ -58,16 +85,18 @@ export function hasActiveSession(keepLoggedIn: boolean): boolean {
 
 export async function saveCredentials(credentials: VbCredentials): Promise<void> {
   await SecureStore.setItemAsync(CREDENTIALS_KEY, JSON.stringify(credentials));
+  credentialsPersisted = true;
 }
 
 export async function getCredentials(): Promise<VbCredentials | null> {
   const stored = await SecureStore.getItemAsync(CREDENTIALS_KEY);
-  if (!stored) return null;
-  return JSON.parse(stored) as VbCredentials;
+  if (stored) return JSON.parse(stored) as VbCredentials;
+  return inMemoryCredentials;
 }
 
 export async function deleteCredentials(): Promise<void> {
   await SecureStore.deleteItemAsync(CREDENTIALS_KEY);
+  credentialsPersisted = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +140,7 @@ export async function login(credentials: VbCredentials): Promise<void> {
  */
 export async function logout(): Promise<void> {
   endSession();
+  inMemoryCredentials = null;
   await deleteCredentials();
   try {
     await axios.get(BASE_URL, { params: { page: 'logout' } });

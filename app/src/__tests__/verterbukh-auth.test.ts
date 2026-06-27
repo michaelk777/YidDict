@@ -12,6 +12,8 @@ import {
   saveCredentials,
   getCredentials,
   deleteCredentials,
+  setInMemoryCredentials,
+  initAuth,
   login,
   logout,
   isLoggedOut,
@@ -80,13 +82,26 @@ describe('saveCredentials', () => {
 });
 
 describe('getCredentials', () => {
-  it('returns null when nothing is stored', async () => {
+  it('returns null when nothing is stored and no in-memory credentials', async () => {
     expect(await getCredentials()).toBeNull();
   });
 
-  it('returns the parsed credentials after saving', async () => {
+  it('returns the parsed credentials after saving to SecureStore', async () => {
     await saveCredentials(CREDS);
     expect(await getCredentials()).toEqual(CREDS);
+  });
+
+  it('returns in-memory credentials when SecureStore is empty', async () => {
+    setInMemoryCredentials(CREDS);
+    expect(await getCredentials()).toEqual(CREDS);
+  });
+
+  it('prefers SecureStore credentials over in-memory', async () => {
+    const persistedCreds = { username: 'persisted', password: 'p1' };
+    const memCreds = { username: 'inmemory', password: 'p2' };
+    await saveCredentials(persistedCreds);
+    setInMemoryCredentials(memCreds);
+    expect(await getCredentials()).toEqual(persistedCreds);
   });
 });
 
@@ -294,7 +309,17 @@ describe('startSession / endSession', () => {
 // ---------------------------------------------------------------------------
 
 describe('hasActiveSession', () => {
-  it('returns true when keepLoggedIn is true, regardless of session state', () => {
+  it('returns false when keepLoggedIn is true but no credentials persisted and no active session', () => {
+    expect(hasActiveSession(true)).toBe(false);
+  });
+
+  it('returns true when keepLoggedIn is true and credentials are persisted in SecureStore', async () => {
+    await saveCredentials(CREDS);
+    expect(hasActiveSession(true)).toBe(true);
+  });
+
+  it('returns true when keepLoggedIn is true and an active session exists this instance', () => {
+    startSession();
     expect(hasActiveSession(true)).toBe(true);
   });
 
@@ -320,5 +345,21 @@ describe('hasActiveSession', () => {
     Date.now = () => 1000 + 24 * 60 * 60 * 1000 + 1;
     expect(hasActiveSession(false)).toBe(false);
     Date.now = realNow;
+  });
+});
+
+describe('initAuth', () => {
+  it('sets credentialsPersisted to true when SecureStore has credentials', async () => {
+    await saveCredentials(CREDS);
+    // Reset the flag (simulates app restart after saveCredentials ran in a prev session)
+    __resetSessionState();
+    expect(hasActiveSession(true)).toBe(false); // flag is cleared
+    await initAuth();
+    expect(hasActiveSession(true)).toBe(true);  // flag restored from SecureStore
+  });
+
+  it('leaves credentialsPersisted false when SecureStore is empty', async () => {
+    await initAuth();
+    expect(hasActiveSession(true)).toBe(false);
   });
 });
