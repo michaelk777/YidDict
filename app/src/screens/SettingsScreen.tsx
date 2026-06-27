@@ -96,22 +96,38 @@ export default function SettingsScreen() {
   // Last-known Verterbukh quota (persisted after each search)
   const [verterbukhQuota, setVerterbukhQuotaState] = useState<{ used: number; total: number } | null>(null);
 
-  // Load all settings on mount
+  // False until all settings are loaded from DB — prevents toggles flashing off on mount.
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Load all settings on mount in parallel so toggles render with correct values immediately.
   useEffect(() => {
-    getCredentials().then(creds => {
+    async function loadSettings() {
+      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, quota] =
+        await Promise.all([
+          getCredentials().catch(() => null),
+          getSourceOrder().catch(() => ['finkel', 'verterbukh', 'google_translate'] as SourceSlot[]),
+          getMaxSavedEntries().catch(() => 500),
+          getLowTokenThreshold().catch(() => 90),
+          getCacheTtlDays().catch(() => 90),
+          getUseAllSources().catch(() => false),
+          getYivoToHebrew().catch(() => false),
+          getHebrewToYivo().catch(() => false),
+          getVbKeepLoggedIn().catch(() => false),
+          getVerterbukhQuota().catch(() => null),
+        ]);
       if (creds) setSavedUsername(creds.username);
-    });
-    getSourceOrder()
-      .then(order => setSourceOrder(order))
-      .catch(() => { /* DB not ready — keep defaults */ });
-    getMaxSavedEntries().then(setMaxSavedEntriesState).catch(() => {});
-    getLowTokenThreshold().then(setLowTokenThresholdState).catch(() => {});
-    getCacheTtlDays().then(setCacheTtlDaysState).catch(() => {});
-    getUseAllSources().then(setUseAllSourcesState).catch(() => {});
-    getYivoToHebrew().then(setYivoToHebrewState).catch(() => {});
-    getHebrewToYivo().then(setHebrewToYivoState).catch(() => {});
-    getVbKeepLoggedIn().then(setKeepLoggedInState).catch(() => {});
-    getVerterbukhQuota().then(setVerterbukhQuotaState).catch(() => {});
+      setSourceOrder(order);
+      setMaxSavedEntriesState(maxEntries);
+      setLowTokenThresholdState(threshold);
+      setCacheTtlDaysState(ttl);
+      setUseAllSourcesState(allSources);
+      setYivoToHebrewState(yivoToHeb);
+      setHebrewToYivoState(hebToYivo);
+      setKeepLoggedInState(keepLI);
+      setVerterbukhQuotaState(quota);
+      setSettingsLoaded(true);
+    }
+    loadSettings();
   }, []);
 
   // Re-read quota whenever the Settings tab comes into focus so the sub-label
@@ -159,6 +175,11 @@ export default function SettingsScreen() {
   }, []);
 
   const handleToggleKeepLoggedIn = useCallback(async (value: boolean) => {
+    if (!value && savedUsername !== null) {
+      // Start the 24h session BEFORE the state update so the re-render sees an
+      // active session and doesn't momentarily flip the UI to the login form.
+      startSession();
+    }
     setKeepLoggedInState(value);
     await setVbKeepLoggedIn(value).catch(() => {});
     if (value) {
@@ -169,15 +190,13 @@ export default function SettingsScreen() {
         if (creds) await saveCredentials(creds).catch(() => {});
       }
     } else {
-      // Switching to short-term mode while logged in: move credentials from
-      // SecureStore to memory (re-auth still works this session) and start the
-      // 24h timer. After app restart, credentials won't be in SecureStore so
-      // toggling back on won't auto-log them in.
+      // Switching to short-term mode: move credentials from SecureStore to memory
+      // so re-auth still works this session. After app restart they're gone, so
+      // toggling back on won't auto-log the user in.
       if (savedUsername !== null) {
         const creds = await getCredentials().catch(() => null);
         if (creds) setInMemoryCredentials(creds);
         await deleteCredentials().catch(() => {});
-        startSession();
       }
     }
   }, [savedUsername]);
@@ -270,6 +289,14 @@ export default function SettingsScreen() {
 
   const isLoggedIn = savedUsername !== null && hasActiveSession(keepLoggedIn);
   const pickerOptions = pickerSlot !== null ? availableOptionsForSlot(sourceOrder, pickerSlot) : [];
+
+  if (!settingsLoaded) {
+    return (
+      <View style={[s.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator color={theme.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -749,6 +776,11 @@ const settingsRowStyle: object = {
 
 function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
   return StyleSheet.create({
+    loadingContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     scrollContent: {
       paddingBottom: 40,
     },
