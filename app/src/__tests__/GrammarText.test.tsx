@@ -50,6 +50,21 @@ describe('GrammarText', () => {
     const secondLine = StyleSheetFlatten(getByText('foo - bar').props.style);
     expect(secondLine.borderTopWidth).toBeUndefined();
   });
+
+  it('renders \\r within a line as a visual line break with no hairline divider between them', () => {
+    const { getByText } = render(
+      <GrammarText text={'noun\n*also:* entry one;\rentry two'} separatorColor="#E8DFC8" />
+    );
+    // "entry two" is part of the same Text element as "entry one" — no divider above it
+    // Both pieces of the "also:" line render within one Text node
+    expect(getByText('noun', { exact: false })).toBeTruthy();
+    expect(getByText(' entry one;\nentry two', { exact: false })).toBeTruthy();
+  });
+
+  it('replaces \\r with \\n in a line before rendering so React Native shows a visual line break', () => {
+    const { getByText } = render(<GrammarText text={'line one\rfoo\rbar'} />);
+    expect(getByText('line one\nfoo\nbar')).toBeTruthy();
+  });
 });
 
 // Mirrors RN's StyleSheet.flatten without importing react-native directly,

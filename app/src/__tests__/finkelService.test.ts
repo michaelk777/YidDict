@@ -325,6 +325,267 @@ describe('parseFinkelHtml', () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // makhn a vayivrekh — phrase sub-entry in sibling <li> (no lexeme)
+  // -------------------------------------------------------------------------
+  const VAYIVREKH_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>vayivrekh(</span><span class='hebrew'>ויבֿרח</span>)  <span class="grammar">gender m,</span> <span class='definition'>escape, running away</span></li>
+<li><ul><li>    <span class='lexeme'>makhn a vayivrekh(</span><span class='hebrew'>ויבֿרח</span>) <span class='definition'>escape, run away</span></li></ul></li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  describe('vayivrekh — phrase sub-entry in sibling no-lexeme <li>', () => {
+    let entries: ReturnType<typeof parseFinkelHtml>;
+    beforeAll(() => { entries = parseFinkelHtml(VAYIVREKH_HTML); });
+
+    it('produces both vayivrekh and makhn a vayivrekh', () => {
+      expect(entries).toHaveLength(2);
+    });
+
+    it('first entry is vayivrekh with correct grammar and english', () => {
+      expect(entries[0].yiddishTransliterated).toBe('vayivrekh');
+      expect(entries[0].yiddishHebrew).toBe('ויבֿרח');
+      expect(entries[0].english).toBe('escape, running away');
+    });
+
+    it('second entry is makhn a vayivrekh as a phrase', () => {
+      const phrase = entries.find(e => e.yiddishTransliterated === 'makhn a vayivrekh');
+      expect(phrase).toBeDefined();
+      expect(phrase!.isPhrase).toBe(true);
+      expect(phrase!.english).toBe('escape, run away');
+      expect(phrase!.yiddishHebrew).toBe('ויבֿרח');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Alternative headword extraction
+  // -------------------------------------------------------------------------
+
+  const ONGELOYF_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>o'ngeloyf </span><span class="grammar">noun, plural in</span> -n,  <span class="grammar">gender n,</span> o'ngelaf <span class="grammar">noun, plural in</span> -n,  <span class="grammar">gender n,</span> tsunoyfloyf <span class="grammar">noun, plural in</span> -n,  <span class="grammar">gender n,</span> <span class='definition'>stampede; running to something</span></li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  const ANTLOYF_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>antloyf  </span><span class="grammar">gender m,</span> antloy'fenish <span class="grammar">noun, plural in</span> -n,  <span class="grammar">gender n,</span> <span class='definition'>running away</span></li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  describe("o'ngeloyf — three headwords sharing one definition", () => {
+    let entry: DictEntry;
+    beforeAll(() => { [entry] = parseFinkelHtml(ONGELOYF_HTML); });
+
+    it('produces exactly one entry', () => {
+      expect(parseFinkelHtml(ONGELOYF_HTML)).toHaveLength(1);
+    });
+
+    it('main headword is enriched with plural suffix', () => {
+      expect(entry.yiddishTransliterated).toBe("o'ngeloyf, -n");
+    });
+
+    it('partOfSpeech is noun', () => {
+      expect(entry.partOfSpeech).toBe('noun');
+    });
+
+    it('english is correct', () => {
+      expect(entry.english).toBe('stampede; running to something');
+    });
+
+    it('grammaticalInfo includes gender and also: line with bold marker and full grammar for each alt', () => {
+      expect(entry.grammaticalInfo).toContain('gender n');
+      expect(entry.grammaticalInfo).toContain(
+        "*also:* o'ngelaf, noun, plural in -n, gender n;\r" + "tsunoyfloyf, noun, plural in -n, gender n"
+      );
+    });
+
+    it('grammaticalInfo does not contain quoted alt headword names', () => {
+      expect(entry.grammaticalInfo).not.toMatch(/"o'ngelaf"/);
+      expect(entry.grammaticalInfo).not.toMatch(/"tsunoyfloyf"/);
+    });
+  });
+
+  describe("antloyf — two headwords with differing grammar", () => {
+    let entry: DictEntry;
+    beforeAll(() => { [entry] = parseFinkelHtml(ANTLOYF_HTML); });
+
+    it('main headword is antloyf with no plural enrichment', () => {
+      expect(entry.yiddishTransliterated).toBe('antloyf');
+    });
+
+    it('partOfSpeech reflects gender-only grammar of main headword', () => {
+      expect(entry.partOfSpeech).toBe('gender m');
+    });
+
+    it('english is correct', () => {
+      expect(entry.english).toBe('running away');
+    });
+
+    it("grammaticalInfo includes bold also: line for antloy'fenish with full grammar", () => {
+      expect(entry.grammaticalInfo).toContain("*also:* antloy'fenish, noun, plural in -n, gender n");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Empty-lexeme sub-sense merging
+  // -------------------------------------------------------------------------
+
+  const KOKH_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>kokh </span><span class="grammar">verb</span>, <span class="grammar">participle</span> ge...t, <span class='definition'>cook, bake</span>  <span class="grammar">adverbial complement </span>op, oys, on, ayn
+</li>
+<li><ul><li>     <span class='lexeme'></span><span class="grammar">adverbial complement </span>iber, <span class='definition'>consider, cogitate</span>
+</li>
+</ul></li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  const GROB_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>grob </span><span class="grammar">verb</span>, <span class="grammar">participle</span> gegrobn, <span class='definition'>dig</span>  <span class="grammar">adverbial complement </span>arayn
+</li>
+<li><ul>
+<li><span class='lexeme'></span><span class="grammar">adverbial complement </span>unter, <span class='definition'>slander</span></li>
+<li><span class='lexeme'></span><span class="grammar">adverbial complement </span>oyf, <span class='definition'>unearth</span></li>
+<li><span class='lexeme'>bagrob </span><span class="grammar">verb</span>, <span class="grammar">participle</span> bagrobn, <span class='definition'>bury</span></li>
+</ul></li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  // -------------------------------------------------------------------------
+  // Inline alt headwords: def → bare → def pattern
+  // -------------------------------------------------------------------------
+
+  const KIND_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>kind </span><span class="grammar">noun, plural in</span> -er,  <span class="grammar">gender n,</span> <span class='definition'>child</span> kindenyu <span class='definition'>dear child</span>
+</li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  const DALES_HTML = `<!DOCTYPE html>
+<html><body>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+<ul>
+<li><span class='lexeme'>dales(</span><span class='hebrew'>דלות</span>)  <span class="grammar">gender m,</span> <span class='definition'>poverty; pauper</span>  <span class="grammar">plural </span> daleysem(<span class='hebrew'>דליתים</span>), <span class='definition'>paupers</span>
+</li>
+</ul>
+<form accept-charset="UTF-8" method="post"><input name="word" type="text" /></form>
+</body></html>`;
+
+  describe('kind — inline alt headword (def → bare → def, no grammar on alt)', () => {
+    let entry: DictEntry;
+    beforeAll(() => { [entry] = parseFinkelHtml(KIND_HTML); });
+
+    it('produces one entry', () => {
+      expect(parseFinkelHtml(KIND_HTML)).toHaveLength(1);
+    });
+
+    it('primary english is "child"', () => {
+      expect(entry.english).toBe('child');
+    });
+
+    it('headword is enriched with plural suffix', () => {
+      expect(entry.yiddishTransliterated).toBe('kind, -er');
+    });
+
+    it('grammaticalInfo contains inline also: line for kindenyu', () => {
+      expect(entry.grammaticalInfo).toContain('*also:* kindenyu — dear child');
+    });
+
+    it('grammaticalInfo does not contain "child" in the grammar display', () => {
+      // "child" is the english, not a grammar annotation
+      expect(entry.grammaticalInfo).not.toContain('"child"');
+    });
+  });
+
+  describe('dales — dual-definition with plural form (no spurious also: line)', () => {
+    let entry: DictEntry;
+    beforeAll(() => { [entry] = parseFinkelHtml(DALES_HTML); });
+
+    it('produces one entry', () => {
+      expect(parseFinkelHtml(DALES_HTML)).toHaveLength(1);
+    });
+
+    it('primary english is the singular meaning', () => {
+      expect(entry.english).toBe('poverty; pauper');
+    });
+
+    it('headword is enriched with plural form', () => {
+      expect(entry.yiddishTransliterated).toBe('dales, daleysem');
+    });
+
+    it('Hebrew is enriched with plural Hebrew', () => {
+      expect(entry.yiddishHebrew).toBe('דלות, דליתים');
+    });
+
+    it('grammaticalInfo has no spurious also: line', () => {
+      expect(entry.grammaticalInfo).not.toContain('also:');
+    });
+  });
+
+  describe('kokh — empty-lexeme sub-sense merged into parent', () => {
+    let entries: DictEntry[];
+    beforeAll(() => { entries = parseFinkelHtml(KOKH_HTML); });
+
+    it('produces only one entry (no null-headword orphan)', () => {
+      expect(entries).toHaveLength(1);
+    });
+
+    it('main entry has correct headword and english', () => {
+      expect(entries[0].yiddishTransliterated).toBe('kokh, ge...t');
+      expect(entries[0].english).toBe('cook, bake');
+    });
+
+    it('main grammaticalInfo includes both adverbial complement lines', () => {
+      expect(entries[0].grammaticalInfo).toContain('adverbial complement "op, oys, on, ayn"');
+      expect(entries[0].grammaticalInfo).toContain('adverbial complement "iber" — consider, cogitate');
+    });
+  });
+
+  describe('grob — multiple empty-lexeme sub-senses merged into parent, sibling entries unaffected', () => {
+    let entries: DictEntry[];
+    beforeAll(() => { entries = parseFinkelHtml(GROB_HTML); });
+
+    it('produces two entries: grob and bagrob', () => {
+      expect(entries).toHaveLength(2);
+    });
+
+    it('grob entry has all three adverbial complement lines in grammaticalInfo', () => {
+      const grob = entries.find(e => e.yiddishTransliterated?.startsWith('grob'));
+      expect(grob).toBeDefined();
+      expect(grob!.grammaticalInfo).toContain('adverbial complement "arayn"');
+      expect(grob!.grammaticalInfo).toContain('adverbial complement "unter" — slander');
+      expect(grob!.grammaticalInfo).toContain('adverbial complement "oyf" — unearth');
+    });
+
+    it('bagrob is a separate entry with its own headword', () => {
+      const bagrob = entries.find(e => e.yiddishTransliterated?.startsWith('bagrob'));
+      expect(bagrob).toBeDefined();
+      expect(bagrob!.english).toBe('bury');
+    });
+  });
+
   describe('sheynkayt/sheynhayt — multi-entry <li> split', () => {
     let entries: ReturnType<typeof parseFinkelHtml>;
     beforeAll(() => { entries = parseFinkelHtml(SHEYNKAYT_SHEYNHAYT_HTML); });

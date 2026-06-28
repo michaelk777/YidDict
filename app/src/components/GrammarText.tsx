@@ -22,27 +22,32 @@ export function GrammarText({ text, style, separatorColor }: Props) {
   const lines = text.split('\n');
   return (
     <View>
-      {lines.map((line, lineIndex) => (
-        <Text
-          key={lineIndex}
-          style={[
-            style,
-            lineIndex > 0 && separatorColor
-              ? [styles.separated, { borderTopColor: separatorColor }]
-              : null,
-          ]}
-        >
-          {parseGrammarSegments(line).map((segment, segmentIndex) =>
-            segment.emphasized ? (
-              <Text key={segmentIndex} style={styles.emphasis}>
-                {segment.text}
-              </Text>
-            ) : (
-              segment.text
-            )
-          )}
-        </Text>
-      ))}
+      {lines.map((rawLine, lineIndex) => {
+        // \r within a line is an internal "soft" line break — it stays within
+        // one Text element (no hairline divider) and renders as a visual newline.
+        const line = rawLine.replace(/\r/g, '\n');
+        return (
+          <Text
+            key={lineIndex}
+            style={[
+              style,
+              lineIndex > 0 && separatorColor
+                ? [styles.separated, { borderTopColor: separatorColor }]
+                : null,
+            ]}
+          >
+            {parseGrammarSegments(line).map((segment, segmentIndex) =>
+              segment.emphasized ? (
+                <Text key={segmentIndex} style={styles.emphasis}>
+                  {segment.text}
+                </Text>
+              ) : (
+                segment.text
+              )
+            )}
+          </Text>
+        );
+      })}
     </View>
   );
 }

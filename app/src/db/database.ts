@@ -7,6 +7,17 @@ export async function initDatabase(): Promise<void> {
   db = await SQLite.openDatabaseAsync('yiddict.db');
   console.log('[YidDict] database: db opened successfully');
 
+  // Migrate cached_results UNIQUE constraint to include yiddish_transliterated.
+  // Entries that share yiddish_hebrew (e.g. a parent word and a phrase sub-entry)
+  // were previously deduplicated by the narrower constraint, silently dropping the
+  // phrase. Since cached_results is ephemeral, drop and recreate when outdated.
+  const cacheTableSql = await db.getFirstAsync<{ sql: string }>(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='cached_results'"
+  );
+  if (cacheTableSql && !cacheTableSql.sql.includes('UNIQUE(query, yiddish_hebrew, yiddish_transliterated')) {
+    await db.execAsync('DROP TABLE cached_results');
+  }
+
   console.log('[YidDict] database: creating tables');
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS saved_entries (
@@ -33,7 +44,7 @@ export async function initDatabase(): Promise<void> {
       source TEXT NOT NULL CHECK(source IN ('finkel', 'verterbukh', 'google_translate')),
       fetched_at INTEGER NOT NULL,
       is_phrase INTEGER NOT NULL DEFAULT 0,
-      UNIQUE(query, yiddish_hebrew, source)
+      UNIQUE(query, yiddish_hebrew, yiddish_transliterated, source)
     );
 
     CREATE TABLE IF NOT EXISTS user_settings (

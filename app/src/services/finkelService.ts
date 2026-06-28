@@ -138,6 +138,28 @@ function collectEntries(
 
     // Base transliterated: strip trailing '(' that Finkel appends before a Hebrew span.
     const baseTransliterated = lexemeSpan.text.replace(/\($/, '').trim() || null;
+
+    if (!baseTransliterated && out.length > 0) {
+      // Empty lexeme: a sub-sense of the preceding entry (e.g. same verb with a
+      // different adverbial complement yielding a distinct meaning). Merge its
+      // grammar + definition as an extra grammaticalInfo line on that entry.
+      const extraLine = extractEmptyLexemeInfo(li.childNodes);
+      if (extraLine) {
+        const prev = out[out.length - 1];
+        out[out.length - 1] = {
+          ...prev,
+          grammaticalInfo: prev.grammaticalInfo
+            ? `${prev.grammaticalInfo}\n${extraLine}`
+            : extraLine,
+        };
+      }
+      const inlineUl = (li.childNodes as Node[]).find(
+        n => (n as HTMLElement).tagName === 'UL'
+      ) as HTMLElement | undefined;
+      if (inlineUl) collectEntries(directLiChildren(inlineUl), isPhrase, out);
+      continue;
+    }
+
     // Base Hebrew: only the span that precedes the first grammar span.
     // Spans appearing after a grammar span are inflected forms captured via events.
     const baseHebrew = baseHebrewOf(li);
@@ -150,6 +172,24 @@ function collectEntries(
     ) as HTMLElement | undefined;
     if (inlineUl) collectEntries(directLiChildren(inlineUl), true, out);
   }
+}
+
+/**
+ * For an empty-lexeme <li>, builds a compact summary line to merge into
+ * the preceding entry's grammaticalInfo.
+ * Format: GRAMMAR_LINE: english_definition
+ */
+function extractEmptyLexemeInfo(nodes: Node[]): string | null {
+  const events = collectEvents(nodes);
+  const { grammarLines, english } = processSegmentEvents(events);
+  const grammarStr = grammarLines
+    .map(({ span, bare }) => formatGrammarLine(span, bare))
+    .filter(Boolean)
+    .join(', ');
+  if (!grammarStr && !english) return null;
+  if (!english) return grammarStr;
+  if (!grammarStr) return english;
+  return `${grammarStr} — ${english}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +298,7 @@ function processSegmentEvents(slice: Ev[]): {
   grammarLines: Array<{ span: string; bare: string; hebrew: string }>;
   english: string | null;
   sources: string[];
+  inlineAlts: Array<{ name: string; english: string }>;
 } {
   const lastDefIdx = slice.reduce((last, ev, i) => (ev.kind === 'def' ? i : last), -1);
   const grammarLines: Array<{ span: string; bare: string; hebrew: string }> = [];
@@ -266,6 +307,9 @@ function processSegmentEvents(slice: Ev[]): {
   let pendingHebrew = '';
   let english: string | null = null;
   const sources: string[] = [];
+  // Tracks a bare-text alt headword name seen after the main def is set.
+  let pendingInlineAltName: string | null = null;
+  const inlineAlts: Array<{ name: string; english: string }> = [];
 
   for (let i = 0; i < slice.length; i++) {
     const ev = slice[i];
@@ -275,12 +319,48 @@ function processSegmentEvents(slice: Ev[]): {
         pendingSpan = ev.text;
         pendingBare = '';
         pendingHebrew = '';
+        // A new grammar context means any pending inline alt name (bare text
+        // between defs) belongs to this new grammar, not to a headword variant.
+        pendingInlineAltName = null;
         break;
 
       case 'def':
-        if (pendingSpan !== null && i < lastDefIdx) {
-          // Secondary definition: append text to current grammar line's bare.
-          pendingBare += ev.text;
+        if (pendingInlineAltName !== null) {
+          // This def is the meaning of the pending inline alt headword.
+          inlineAlts.push({ name: pendingInlineAltName, english: ev.text });
+          pendingInlineAltName = null;
+          if (pendingSpan !== null) {
+            grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
+            pendingSpan = null;
+            pendingBare = '';
+            pendingHebrew = '';
+          }
+        } else if (pendingSpan !== null && i < lastDefIdx) {
+          // Potential secondary definition. Look ahead: if a non-empty bare word
+          // appears before the next def, this def is the main entry's primary
+          // meaning and the bare word is an inline alt headword (e.g. "kind →
+          // child; kindenyu → dear child"). Otherwise it is a true secondary
+          // sense description (e.g. "skeletal" under "adjectional form with -ish").
+          let hasBareBetweenDefs = false;
+          for (let k = i + 1; k < slice.length; k++) {
+            const next = slice[k];
+            if (next.kind === 'def') break;
+            if (next.kind === 'bare' && next.text.trim().replace(/[,\s]+$/, '').trim()) {
+              hasBareBetweenDefs = true;
+              break;
+            }
+          }
+          if (hasBareBetweenDefs) {
+            // Close grammar context; treat this def as the primary English meaning.
+            grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
+            pendingSpan = null;
+            pendingBare = '';
+            pendingHebrew = '';
+            if (english === null) english = ev.text || null;
+          } else {
+            // True secondary def: append text to current grammar line's bare.
+            pendingBare += ev.text;
+          }
         } else {
           if (pendingSpan !== null) {
             grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
@@ -293,7 +373,14 @@ function processSegmentEvents(slice: Ev[]): {
         break;
 
       case 'bare':
-        if (pendingSpan !== null) pendingBare += ev.text;
+        if (pendingSpan !== null) {
+          pendingBare += ev.text;
+        } else if (english !== null) {
+          // Grammar context is closed and main def is already set — a non-empty
+          // bare word here is the name of an inline alt headword.
+          const altName = ev.text.trim().replace(/[,\s]+$/, '').trim();
+          if (altName) pendingInlineAltName = altName;
+        }
         break;
 
       case 'hebrew':
@@ -310,7 +397,7 @@ function processSegmentEvents(slice: Ev[]): {
   }
   if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
 
-  return { grammarLines, english, sources };
+  return { grammarLines, english, sources, inlineAlts };
 }
 
 /**
@@ -330,6 +417,76 @@ function formatGrammarLine(span: string, bare: string): string {
 /** Strip trailing comma and whitespace from bare text. */
 function cleanBare(s: string): string {
   return s.trim().replace(/,\s*$/, '').trim();
+}
+
+/**
+ * Returns true if bare text following a grammar span looks like an alternative
+ * headword rather than a grammar value.
+ *
+ * In Finkel HTML, alternative headwords always appear as bare text immediately
+ * after a "gender X," span (gender m, gender f, gender n). Secondary definitions
+ * (English words like "skeletal") appear after other span types. Restricting to
+ * gender spans avoids misidentifying those as alt headwords.
+ */
+function isAltHeadwordBare(span: string, bare: string): boolean {
+  const cleaned = bare.trim().replace(/[,\s]+$/, '').trim();
+  if (!cleaned || !/^[a-zA-Z']/.test(cleaned)) return false;
+  return span.trimStart().startsWith('gender ');
+}
+
+/**
+ * Splits grammar lines into the main entry's lines and any alternative headwords
+ * whose names appeared as bare text between grammar spans.
+ *
+ * For each alternative headword line at index i:
+ *   - The span at i belongs to the preceding (main or prior alt) entry's grammar.
+ *   - The bare at i is the alternative headword's name.
+ *   - Grammar lines from i+1 up to the next alt index belong to that headword.
+ */
+function extractAltHeadwords(
+  grammarLines: Array<{ span: string; bare: string; hebrew: string }>
+): {
+  mainLines: Array<{ span: string; bare: string; hebrew: string }>;
+  altHeadwords: Array<{ name: string; grammarLines: Array<{ span: string; bare: string }> }>;
+} {
+  const altIndices = grammarLines.reduce<number[]>((acc, { span, bare }, i) =>
+    isAltHeadwordBare(span, bare) ? [...acc, i] : acc, []);
+
+  if (altIndices.length === 0) return { mainLines: grammarLines, altHeadwords: [] };
+
+  const firstAltIdx = altIndices[0];
+  const mainLines = grammarLines.slice(0, firstAltIdx + 1).map((line, i) =>
+    i === firstAltIdx ? { ...line, bare: '' } : line
+  );
+
+  const altHeadwords = altIndices.map((altIdx, wi) => {
+    const nextAltIdx = altIndices[wi + 1] ?? grammarLines.length;
+    const name = grammarLines[altIdx].bare.trim().replace(/[,\s]+$/, '').trim();
+    const lines: Array<{ span: string; bare: string }> = [];
+    for (let j = altIdx + 1; j < nextAltIdx; j++) {
+      lines.push({ span: grammarLines[j].span, bare: grammarLines[j].bare });
+    }
+    // The line at nextAltIdx (if another alt) contributes its span to this alt's grammar
+    // and its bare as the next alt's name — include span-only here.
+    if (nextAltIdx < grammarLines.length) {
+      lines.push({ span: grammarLines[nextAltIdx].span, bare: '' });
+    }
+    return { name, grammarLines: lines };
+  });
+
+  return { mainLines, altHeadwords };
+}
+
+/** Format one alt headword with its compact grammar (no quotes). */
+function formatAltHeadword(name: string, lines: Array<{ span: string; bare: string }>): string {
+  const parts = lines
+    .map(({ span, bare }) => {
+      const cleanSpan = span.replace(/,\s*$/, '').trim();
+      const cleanBare = bare.trim().replace(/[,\s]+$/, '').trim();
+      return cleanBare ? `${cleanSpan} ${cleanBare}` : cleanSpan;
+    })
+    .filter(Boolean);
+  return parts.length > 0 ? `${name}, ${parts.join(', ')}` : name;
 }
 
 function parseEntryChildren(
@@ -370,7 +527,8 @@ function buildEntryFromSegment(
   slice: Ev[],
   isPhrase: boolean
 ): DictEntry {
-  const { grammarLines, english, sources } = processSegmentEvents(slice);
+  const { grammarLines, english, sources, inlineAlts } = processSegmentEvents(slice);
+  const { mainLines, altHeadwords } = extractAltHeadwords(grammarLines);
 
   // Headword enrichment: find the first grammar line that matches a trigger.
   // Only the first match is applied. Track the index and the replacement text
@@ -385,8 +543,8 @@ function buildEntryFromSegment(
   let enrichedLineIndex = -1;
   let enrichedLineReplacement: string | null = null;
 
-  for (let i = 0; i < grammarLines.length; i++) {
-    const { span, bare, hebrew } = grammarLines[i];
+  for (let i = 0; i < mainLines.length; i++) {
+    const { span, bare, hebrew } = mainLines[i];
     const b = cleanBare(bare);
 
     if (span.includes('plural in') && b.startsWith('-')) {
@@ -436,13 +594,33 @@ function buildEntryFromSegment(
 
   // Format grammar lines. The enriched line is replaced by enrichedLineReplacement
   // (null = drop, string = use as the formatted line).
-  const formattedLines = grammarLines
+  const formattedLines = mainLines
     .map(({ span, bare }, i) =>
       i !== enrichedLineIndex ? formatGrammarLine(span, bare) : enrichedLineReplacement
     )
     .filter((l): l is string => l !== null && l !== '');
 
-  const lines = [...formattedLines, ...sources].filter(Boolean);
+  // Alt headwords are joined with \r as the internal separator. \r is not a
+  // \n so text.split('\n') in GrammarText keeps the entire "also:" block as
+  // one Text element; GrammarText then substitutes \r → \n before rendering
+  // so React Native shows each alt on its own visual line with no hairline
+  // divider between them.
+  const alsoLine = altHeadwords.length > 0
+    ? `*also:* ${altHeadwords.map(ah => formatAltHeadword(ah.name, ah.grammarLines)).join(';\r')}`
+    : null;
+
+  // Inline alts come from def→bare→def patterns (e.g. "kind" → "child" / "kindenyu" → "dear child").
+  // Format: *also:* name — definition (no grammar, since these forms have none in Finkel HTML).
+  const inlineAltLine = inlineAlts.length > 0
+    ? `*also:* ${inlineAlts.map(a => `${a.name} — ${a.english}`).join(';\r')}`
+    : null;
+
+  const lines = [
+    ...formattedLines,
+    ...(alsoLine ? [alsoLine] : []),
+    ...(inlineAltLine ? [inlineAltLine] : []),
+    ...sources,
+  ].filter(Boolean);
   const grammaticalInfo = lines.length > 0 ? lines.join('\n') : null;
   const partOfSpeech = formattedLines.length > 0 ? formattedLines[0] : null;
 
