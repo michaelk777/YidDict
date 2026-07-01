@@ -50,5 +50,4 @@ Finkel and Verterbukh handle YIVO input directly.
 - **No formal rate limit** documented; fine for single-user mobile app
 - **Machine translation quality**: suitable as a fallback source — no
   grammatical metadata (POS, conjugation info, transliteration)
-- **Integration test note**: Use mocked axios in unit tests; verify live
-  behavior manually before release and consider making non-mock axios in unit tests as well
+- **Integration test note**: Unit tests (`google-translate-service.test.ts`) use mocked axios for speed and reliability. Live integration tests are in `google-translate-service.live.test.ts` — run with `npm run test:live` before each release to verify the endpoint is reachable and the response format hasn't changed.

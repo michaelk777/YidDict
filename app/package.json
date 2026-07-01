@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:live": "jest --testPathPattern=\"\\.live\\.test\\.ts$\""
   },
   "jest": {
     "preset": "jest-expo",
@@ -26,6 +27,10 @@
       "src/**/*.{ts,tsx}",
       "App.tsx",
       "!src/**/*.d.ts"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "\\.live\\.test\\.[jt]sx?$"
     ],
     "moduleNameMapper": {
       "^expo/src/winter$": "<rootDir>/__mocks__/expo-winter.ts",
