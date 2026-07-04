@@ -1,12 +1,31 @@
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import { parse } from 'node-html-parser';
 
 const BASE_URL = 'https://verterbukh.org/vb';
-const CREDENTIALS_KEY = 'vb_credentials';
+const CREDENTIALS_KEY = 'verterbukh_credentials';
 
-export interface VbCredentials {
+export interface VerterbukhCredentials {
   username: string;
   password: string;
+}
+
+export interface VerterbukhQuota {
+  used: number;
+  total: number;
+}
+
+/**
+ * Parses "used X/Y" out of the .quota-box present on any authenticated
+ * Verterbukh response (login or search) — null when logged out or the
+ * markup doesn't match.
+ */
+export function parseVerterbukhQuota(html: string): VerterbukhQuota | null {
+  const quotaBox = parse(html).querySelector('.quota-box');
+  if (!quotaBox) return null;
+  const match = quotaBox.text.match(/used\s+(\d+)\/(\d+)/i);
+  if (!match) return null;
+  return { used: parseInt(match[1], 10), total: parseInt(match[2], 10) };
 }
 
 // ---------------------------------------------------------------------------
@@ -27,7 +46,7 @@ let credentialsPersisted = false;
 
 // Short-term session credentials held in memory only — never written to SecureStore
 // when keepLoggedIn is off. Cleared on logout or app restart.
-let inMemoryCredentials: VbCredentials | null = null;
+let inMemoryCredentials: VerterbukhCredentials | null = null;
 
 export function startSession(): void {
   sessionActiveThisInstance = true;
@@ -60,7 +79,7 @@ export async function initAuth(): Promise<void> {
  * Store credentials in memory only (short-term mode — never written to SecureStore).
  * Cleared automatically when the module reloads (app restart).
  */
-export function setInMemoryCredentials(credentials: VbCredentials | null): void {
+export function setInMemoryCredentials(credentials: VerterbukhCredentials | null): void {
   inMemoryCredentials = credentials;
 }
 
@@ -83,14 +102,14 @@ export function hasActiveSession(keepLoggedIn: boolean): boolean {
 // Credential storage
 // ---------------------------------------------------------------------------
 
-export async function saveCredentials(credentials: VbCredentials): Promise<void> {
+export async function saveCredentials(credentials: VerterbukhCredentials): Promise<void> {
   await SecureStore.setItemAsync(CREDENTIALS_KEY, JSON.stringify(credentials));
   credentialsPersisted = true;
 }
 
-export async function getCredentials(): Promise<VbCredentials | null> {
+export async function getCredentials(): Promise<VerterbukhCredentials | null> {
   const stored = await SecureStore.getItemAsync(CREDENTIALS_KEY);
-  if (stored) return JSON.parse(stored) as VbCredentials;
+  if (stored) return JSON.parse(stored) as VerterbukhCredentials;
   return inMemoryCredentials;
 }
 
@@ -107,9 +126,11 @@ export async function deleteCredentials(): Promise<void> {
  * POST login credentials to Verterbukh.
  * On success sets session-active state and the native cookie store captures
  * the session cookie automatically. Throws if the response still shows the
- * login form (wrong credentials or network issue).
+ * login form (wrong credentials or network issue). Returns the account's
+ * quota parsed from the login response itself, so the caller can display
+ * the token count immediately without waiting for a search.
  */
-export async function login(credentials: VbCredentials): Promise<void> {
+export async function login(credentials: VerterbukhCredentials): Promise<VerterbukhQuota | null> {
   const params = new URLSearchParams({
     html_login: '1',
     username: credentials.username,
@@ -119,7 +140,7 @@ export async function login(credentials: VbCredentials): Promise<void> {
     tsu: 'en',
   });
 
-  console.log('[YidDict] VerterbukAuth: attempting login');
+  console.log('[YidDict] VerterbukhAuth: attempting login');
 
   const response = await axios.post(BASE_URL, params.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -130,7 +151,8 @@ export async function login(credentials: VbCredentials): Promise<void> {
   }
 
   startSession();
-  console.log('[YidDict] VerterbukAuth: login successful');
+  console.log('[YidDict] VerterbukhAuth: login successful');
+  return parseVerterbukhQuota(response.data);
 }
 
 /**
@@ -144,9 +166,9 @@ export async function logout(): Promise<void> {
   await deleteCredentials();
   try {
     await axios.get(BASE_URL, { params: { page: 'logout' } });
-    console.log('[YidDict] VerterbukAuth: server session invalidated');
+    console.log('[YidDict] VerterbukhAuth: server session invalidated');
   } catch {
-    console.log('[YidDict] VerterbukAuth: server logout failed (credentials still deleted locally)');
+    console.log('[YidDict] VerterbukhAuth: server logout failed (credentials still deleted locally)');
   }
 }
 

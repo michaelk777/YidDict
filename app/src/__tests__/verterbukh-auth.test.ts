@@ -17,12 +17,13 @@ import {
   login,
   logout,
   isLoggedOut,
+  parseVerterbukhQuota,
   ensureSession,
   startSession,
   endSession,
   hasActiveSession,
   __resetSessionState,
-  VbCredentials,
+  VerterbukhCredentials,
 } from '../services/verterbukh-auth';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,7 @@ const mockGet = axios.get as jest.Mock;
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const CREDS: VbCredentials = { username: 'testuser', password: 'testpass' };
+const CREDS: VerterbukhCredentials = { username: 'testuser', password: 'testpass' };
 
 const LOGGED_IN_HTML = `
   <div class="quota-box">
@@ -75,7 +76,7 @@ describe('saveCredentials', () => {
   it('serialises credentials to JSON and stores under the correct key', async () => {
     await saveCredentials(CREDS);
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      'vb_credentials',
+      'verterbukh_credentials',
       JSON.stringify(CREDS)
     );
   });
@@ -109,7 +110,7 @@ describe('deleteCredentials', () => {
   it('removes credentials from the store', async () => {
     await saveCredentials(CREDS);
     await deleteCredentials();
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('vb_credentials');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('verterbukh_credentials');
     expect(await getCredentials()).toBeNull();
   });
 });
@@ -129,6 +130,20 @@ describe('isLoggedOut', () => {
 
   it('returns false when quota-box is present and no login form', () => {
     expect(isLoggedOut(LOGGED_IN_HTML)).toBe(false);
+  });
+});
+
+describe('parseVerterbukhQuota', () => {
+  it('parses "used X/Y" out of the quota-box', () => {
+    expect(parseVerterbukhQuota(LOGGED_IN_HTML)).toEqual({ used: 0, total: 5 });
+  });
+
+  it('returns null when there is no quota-box', () => {
+    expect(parseVerterbukhQuota(LOGGED_OUT_HTML)).toBeNull();
+  });
+
+  it('returns null when the quota-box text does not match "used X/Y"', () => {
+    expect(parseVerterbukhQuota('<div class="quota-box">no number here</div>')).toBeNull();
   });
 });
 
@@ -155,9 +170,14 @@ describe('login', () => {
     expect(params.get('tsu')).toBe('en');
   });
 
-  it('resolves without throwing on a successful login', async () => {
+  it('returns the quota parsed from the login response itself, without throwing', async () => {
     mockPost.mockResolvedValue({ data: LOGGED_IN_HTML });
-    await expect(login(CREDS)).resolves.toBeUndefined();
+    await expect(login(CREDS)).resolves.toEqual({ used: 0, total: 5 });
+  });
+
+  it('returns null when the response has no quota box', async () => {
+    mockPost.mockResolvedValue({ data: '<div class="quota-box"></div>' });
+    await expect(login(CREDS)).resolves.toBeNull();
   });
 
   it('throws when the response still shows the login form', async () => {

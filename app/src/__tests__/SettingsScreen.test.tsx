@@ -63,8 +63,12 @@ jest.mock('../db/settingsDb', () => ({
   getHebrewToYivoWarned: jest.fn(),
   setHebrewToYivoWarned: jest.fn(),
   getVerterbukhQuota: jest.fn(),
-  getVbKeepLoggedIn: jest.fn(),
-  setVbKeepLoggedIn: jest.fn(),
+  saveVerterbukhQuota: jest.fn(),
+  clearVerterbukhQuota: jest.fn(),
+  getVerterbukhKeepLoggedIn: jest.fn(),
+  setVerterbukhKeepLoggedIn: jest.fn(),
+  getVerterbukhExhaustedAlert: jest.fn(),
+  setVerterbukhExhaustedAlert: jest.fn(),
 }));
 
 import { clearCache } from '../db/cacheDb';
@@ -101,8 +105,12 @@ import {
   getHebrewToYivoWarned,
   setHebrewToYivoWarned,
   getVerterbukhQuota,
-  getVbKeepLoggedIn,
-  setVbKeepLoggedIn,
+  saveVerterbukhQuota,
+  clearVerterbukhQuota,
+  getVerterbukhKeepLoggedIn,
+  setVerterbukhKeepLoggedIn,
+  getVerterbukhExhaustedAlert,
+  setVerterbukhExhaustedAlert,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
@@ -118,6 +126,10 @@ const mockSetLowTokenThreshold = setLowTokenThreshold as jest.Mock;
 const mockGetCacheTtlDays = getCacheTtlDays as jest.Mock;
 const mockSetCacheTtlDays = setCacheTtlDays as jest.Mock;
 const mockSetThemePreference = setThemePreference as jest.Mock;
+const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
+const mockSetVerterbukhExhaustedAlert = setVerterbukhExhaustedAlert as jest.Mock;
+const mockClearVerterbukhQuota = clearVerterbukhQuota as jest.Mock;
+const mockSaveVerterbukhQuota = saveVerterbukhQuota as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -145,8 +157,8 @@ beforeEach(() => {
   mockLogin.mockResolvedValue(undefined);
   (startSession as jest.Mock).mockImplementation(() => {});
   (hasActiveSession as jest.Mock).mockReturnValue(true);
-  (getVbKeepLoggedIn as jest.Mock).mockResolvedValue(false);
-  (setVbKeepLoggedIn as jest.Mock).mockResolvedValue(undefined);
+  (getVerterbukhKeepLoggedIn as jest.Mock).mockResolvedValue(false);
+  (setVerterbukhKeepLoggedIn as jest.Mock).mockResolvedValue(undefined);
   mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'google_translate']);
   mockSetSourceOrderSlot.mockResolvedValue(undefined);
   mockGetMaxSavedEntries.mockResolvedValue(500);
@@ -168,6 +180,10 @@ beforeEach(() => {
   (setHebrewToYivoWarned as jest.Mock).mockResolvedValue(undefined);
   (clearCache as jest.Mock).mockResolvedValue(undefined);
   (getVerterbukhQuota as jest.Mock).mockResolvedValue(null);
+  mockGetVerterbukhExhaustedAlert.mockResolvedValue(false);
+  mockSetVerterbukhExhaustedAlert.mockResolvedValue(undefined);
+  mockClearVerterbukhQuota.mockResolvedValue(undefined);
+  mockSaveVerterbukhQuota.mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -397,6 +413,36 @@ describe('SettingsScreen — numeric settings', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Verterbukh exhausted alert toggle
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — Verterbukh exhausted alert toggle', () => {
+  it('reflects the loaded setting value', async () => {
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-alert-toggle').props.value).toBe(true);
+    });
+  });
+
+  it('defaults to off when the setting is false', async () => {
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-alert-toggle').props.value).toBe(false);
+    });
+  });
+
+  it('calls setVerterbukhExhaustedAlert when toggled on', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('verterbukh-exhausted-alert-toggle'));
+    fireEvent(screen.getByTestId('verterbukh-exhausted-alert-toggle'), 'valueChange', true);
+    await waitFor(() => {
+      expect(mockSetVerterbukhExhaustedAlert).toHaveBeenCalledWith(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Verterbukh login — logged out state
 // ---------------------------------------------------------------------------
 
@@ -488,7 +534,7 @@ describe('SettingsScreen — login flow', () => {
   });
 
   it('calls login and saveCredentials (not setInMemoryCredentials) when keepLoggedIn is on', async () => {
-    (getVbKeepLoggedIn as jest.Mock).mockResolvedValue(true);
+    (getVerterbukhKeepLoggedIn as jest.Mock).mockResolvedValue(true);
     renderScreen();
     await waitFor(() => screen.getByTestId('username-input'));
 
@@ -542,6 +588,50 @@ describe('SettingsScreen — login flow', () => {
     });
     expect(mockLogin).not.toHaveBeenCalled();
   });
+
+  it('clears the stale quota on successful login when the response has no quota to show', async () => {
+    (getVerterbukhQuota as jest.Mock).mockResolvedValue({ used: 4, total: 5 });
+    renderScreen();
+    await waitFor(() => screen.getByTestId('username-input'));
+
+    fireEvent.changeText(screen.getByTestId('username-input'), 'newuser');
+    fireEvent.changeText(screen.getByTestId('password-input'), 'newpass');
+    fireEvent.press(screen.getByTestId('login-button'));
+
+    await waitFor(() => {
+      expect(mockClearVerterbukhQuota).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('saves and displays the new account\'s quota from the login response, without a search', async () => {
+    mockLogin.mockResolvedValue({ used: 2, total: 5 }); // fresh, parsed from the login response
+    renderScreen();
+    await waitFor(() => screen.getByTestId('username-input'));
+
+    fireEvent.changeText(screen.getByTestId('username-input'), 'newuser');
+    fireEvent.changeText(screen.getByTestId('password-input'), 'newpass');
+    fireEvent.press(screen.getByTestId('login-button'));
+
+    await waitFor(() => {
+      expect(mockSaveVerterbukhQuota).toHaveBeenCalledWith(2, 5);
+    });
+    expect(mockClearVerterbukhQuota).not.toHaveBeenCalled();
+  });
+
+  it('does not clear quota when login fails', async () => {
+    mockLogin.mockRejectedValue(new Error('Login failed'));
+    renderScreen();
+    await waitFor(() => screen.getByTestId('username-input'));
+
+    fireEvent.changeText(screen.getByTestId('username-input'), 'testuser');
+    fireEvent.changeText(screen.getByTestId('password-input'), 'wrongpass');
+    fireEvent.press(screen.getByTestId('login-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status-message')).toBeTruthy();
+    });
+    expect(mockClearVerterbukhQuota).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -563,6 +653,18 @@ describe('SettingsScreen — logout flow', () => {
       expect(mockLogout).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('login-button')).toBeTruthy();
       expect(screen.queryByTestId('logout-button')).toBeNull();
+    });
+  });
+
+  it('clears the quota on logout', async () => {
+    (getVerterbukhQuota as jest.Mock).mockResolvedValue({ used: 4, total: 5 });
+    renderScreen();
+    await waitFor(() => screen.getByTestId('logout-button'));
+
+    fireEvent.press(screen.getByTestId('logout-button'));
+
+    await waitFor(() => {
+      expect(mockClearVerterbukhQuota).toHaveBeenCalledTimes(1);
     });
   });
 });

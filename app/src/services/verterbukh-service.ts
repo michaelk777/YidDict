@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { parse } from 'node-html-parser';
-import { ensureSession, isLoggedOut } from './verterbukh-auth';
-import { getVbKeepLoggedIn } from '../db/settingsDb';
+import { ensureSession, isLoggedOut, parseVerterbukhQuota, VerterbukhQuota } from './verterbukh-auth';
+import { getVerterbukhKeepLoggedIn } from '../db/settingsDb';
 import { DictEntry } from '../types';
+
+export type { VerterbukhQuota } from './verterbukh-auth';
 
 const BASE_URL = 'https://verterbukh.org/vb';
 
@@ -14,22 +16,17 @@ const BASE_URL = 'https://verterbukh.org/vb';
 const RLI = '⁧';
 const PDI = '⁩';
 
-export interface VerterbukChoice {
+export interface VerterbukhChoice {
   label: string;           // YIVO label (Yiddish→English) or Hebrew text (English→Yiddish)
   superscript?: string;    // Homograph number from <span class='sup'>, e.g. "1", "2"
   hebrewLemma: string;     // Hebrew lemma — ln= parameter value, e.g. "לױפֿן"
   dir: 'from' | 'to';     // Direction to use for the follow-up ln-pinned request
 }
 
-export interface VerterbukQuota {
-  used: number;
-  total: number;
-}
-
-export interface VerterbukResult {
+export interface VerterbukhResult {
   entries: DictEntry[];
-  choices: VerterbukChoice[] | null; // null when no disambiguation needed
-  quota: VerterbukQuota | null;      // null when quota-box not present in response
+  choices: VerterbukhChoice[] | null; // null when no disambiguation needed
+  quota: VerterbukhQuota | null;      // null when quota-box not present in response
 }
 
 // ---------------------------------------------------------------------------
@@ -52,25 +49,25 @@ export async function lookupVerterbukh(
   query: string,
   ln?: string,
   forcedDir?: 'from' | 'to',
-): Promise<VerterbukResult> {
+): Promise<VerterbukhResult> {
   const primaryDir = forcedDir ?? 'from';
-  const keepLoggedIn = await getVbKeepLoggedIn();
+  const keepLoggedIn = await getVerterbukhKeepLoggedIn();
   const html = await fetchSearch(query, primaryDir, ln);
 
   if (isLoggedOut(html)) {
     // Session missing or expired — re-auth using stored credentials and retry once.
     // ensureSession throws if no credentials are saved, session expired, or the
     // user hasn't logged in during this app instance (keepLoggedIn=false gate).
-    console.log('[YidDict] VerterbukService: not logged in — authenticating');
+    console.log('[YidDict] VerterbukhService: not logged in — authenticating');
     await ensureSession(html, keepLoggedIn);
     const retryHtml = await fetchSearch(query, primaryDir, ln);
     if (isLoggedOut(retryHtml)) {
       throw new Error('Verterbukh authentication failed — check credentials in Settings');
     }
-    return parseVerterbukhhHtml(retryHtml);
+    return parseVerterbukhHtml(retryHtml);
   }
 
-  return parseVerterbukhhHtml(html);
+  return parseVerterbukhHtml(html);
 }
 
 async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Promise<string> {
@@ -84,7 +81,7 @@ async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Prom
   if (ln) params.ln = ln;
 
   const response = await axios.get(BASE_URL, { params });
-  console.log(`[YidDict] VerterbukService: fetched results for "${query}" dir=${dir}${ln ? ` (ln=${ln})` : ''}`);
+  console.log(`[YidDict] VerterbukhService: fetched results for "${query}" dir=${dir}${ln ? ` (ln=${ln})` : ''}`);
   return response.data as string;
 }
 
@@ -96,7 +93,7 @@ async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Prom
  * Parse Verterbukh response HTML into structured entries and disambiguation
  * choices. Exported for unit testing against saved HTML fixtures.
  */
-export function parseVerterbukhhHtml(html: string): VerterbukResult {
+export function parseVerterbukhHtml(html: string): VerterbukhResult {
   const root = parse(html);
 
   const entries: DictEntry[] = root.querySelectorAll('.def').map(parseDef);
@@ -104,7 +101,7 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
   // Choices — two HTML structures depending on search direction:
   //   dir=from (Yiddish→English): .choice_box .option a[href*="ln="] with YIVO labels
   //   dir=to   (English→Yiddish): <select class="rev-choices"> with Hebrew <option> text
-  let choices: VerterbukChoice[] | null = null;
+  let choices: VerterbukhChoice[] | null = null;
 
   const choiceBoxNodes = root.querySelectorAll('.choice_box .option');
   if (choiceBoxNodes.length > 0) {
@@ -136,16 +133,8 @@ export function parseVerterbukhhHtml(html: string): VerterbukResult {
     }
   }
 
-  // Quota — parse "used X/Y" from .quota-box (present when logged in)
-  let quota: VerterbukQuota | null = null;
-  const quotaBox = root.querySelector('.quota-box');
-  if (quotaBox) {
-    const match = quotaBox.text.match(/used\s+(\d+)\/(\d+)/i);
-    if (match) {
-      quota = { used: parseInt(match[1], 10), total: parseInt(match[2], 10) };
-      console.log(`[YidDict] VerterbukService: quota ${quota.used}/${quota.total}`);
-    }
-  }
+  const quota = parseVerterbukhQuota(html);
+  if (quota) console.log(`[YidDict] VerterbukhService: quota ${quota.used}/${quota.total}`);
 
   return { entries, choices, quota };
 }

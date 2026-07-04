@@ -78,8 +78,8 @@ export async function initDatabase(): Promise<void> {
 
   const defaults: [string, string][] = [
     ['source_order_1', 'finkel'],
-    ['source_order_2', 'verterbukh'],
-    ['source_order_3', 'google_translate'],
+    ['source_order_2', 'google_translate'],
+    ['source_order_3', 'none'],
     ['max_saved_entries', '500'],
     ['low_token_threshold', '90'],
     ['theme', 'system'],
@@ -90,6 +90,7 @@ export async function initDatabase(): Promise<void> {
     ['yivo_to_hebrew_warned', '0'],
     ['hebrew_to_yivo', '0'],
     ['hebrew_to_yivo_warned', '0'],
+    ['verterbukh_exhausted_alert', '0'],
   ];
 
   console.log('[YidDict] database: seeding default settings');

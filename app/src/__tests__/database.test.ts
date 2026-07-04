@@ -79,20 +79,20 @@ describe('database', () => {
       expect(call[1][1]).toBe('finkel');
     });
 
-    it('seeds source_order_2 as "verterbukh"', async () => {
+    it('seeds source_order_2 as "google_translate"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_2');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('verterbukh');
+      expect(call[1][1]).toBe('google_translate');
     });
 
-    it('seeds source_order_3 as "google_translate"', async () => {
+    it('seeds source_order_3 as "none" (verterbukh is not a default source until the user logs in)', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_3');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('google_translate');
+      expect(call[1][1]).toBe('none');
     });
 
     it('seeds max_saved_entries as "500"', async () => {
@@ -109,6 +109,14 @@ describe('database', () => {
       const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'theme');
       expect(call).toBeDefined();
       expect(call[1][1]).toBe('system');
+    });
+
+    it('seeds verterbukh_exhausted_alert as "0"', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'verterbukh_exhausted_alert');
+      expect(call).toBeDefined();
+      expect(call[1][1]).toBe('0');
     });
 
     it('uses INSERT OR IGNORE to avoid overwriting existing settings', async () => {

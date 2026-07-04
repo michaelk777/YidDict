@@ -167,19 +167,54 @@ export async function saveVerterbukhQuota(used: number, total: number): Promise<
   await setNumericSetting('verterbukh_quota_total', total);
 }
 
-export async function getVbKeepLoggedIn(): Promise<boolean> {
+/**
+ * Clears the last-known quota. Quota is account-specific, so this must be
+ * called on login and logout — otherwise switching accounts (or logging
+ * back out) would keep showing the previous account's token count until
+ * the next live search happens to overwrite it.
+ */
+export async function clearVerterbukhQuota(): Promise<void> {
+  await setNumericSetting('verterbukh_quota_used', -1);
+  await setNumericSetting('verterbukh_quota_total', -1);
+}
+
+export async function getVerterbukhExhaustedAlert(): Promise<boolean> {
   const db = getDatabase();
   const row = await db.getFirstAsync<{ value: string }>(
-    'SELECT value FROM user_settings WHERE key = ?', ['vb_keep_logged_in']
+    'SELECT value FROM user_settings WHERE key = ?', ['verterbukh_exhausted_alert']
   );
   return row?.value === '1';
 }
 
-export async function setVbKeepLoggedIn(v: boolean): Promise<void> {
+export async function setVerterbukhExhaustedAlert(v: boolean): Promise<void> {
   const db = getDatabase();
   await db.runAsync(
     'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
-    ['vb_keep_logged_in', v ? '1' : '0']
+    ['verterbukh_exhausted_alert', v ? '1' : '0']
+  );
+}
+
+export async function getMaxCacheEntries(): Promise<number> {
+  return getNumericSetting('max_cache_entries', 1000);
+}
+
+export async function setMaxCacheEntries(v: number): Promise<void> {
+  return setNumericSetting('max_cache_entries', v);
+}
+
+export async function getVerterbukhKeepLoggedIn(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['verterbukh_keep_logged_in']
+  );
+  return row?.value === '1';
+}
+
+export async function setVerterbukhKeepLoggedIn(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['verterbukh_keep_logged_in', v ? '1' : '0']
   );
 }
 

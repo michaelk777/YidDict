@@ -62,6 +62,7 @@ jest.mock('../db/settingsDb', () => ({
   getYivoToHebrew: jest.fn().mockResolvedValue(false),
   getHebrewToYivo: jest.fn().mockResolvedValue(false),
   saveVerterbukhQuota: jest.fn().mockResolvedValue(undefined),
+  getVerterbukhExhaustedAlert: jest.fn().mockResolvedValue(false),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 
@@ -71,7 +72,7 @@ import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { deleteEntriesByKey } from '../db/savedDb';
-import { getSourceOrder, getUseAllSources } from '../db/settingsDb';
+import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert } from '../db/settingsDb';
 import { useSaved } from '../context/SavedContext';
 
 const mockLookup = lookupFinkel as jest.Mock;
@@ -83,6 +84,7 @@ const mockSaveCache = saveToCache as jest.Mock;
 const mockDeleteEntriesByKey = deleteEntriesByKey as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
 const mockGetUseAllSources = getUseAllSources as jest.Mock;
+const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
 const mockUseSaved = useSaved as jest.Mock;
 
 // ---------------------------------------------------------------------------
@@ -518,11 +520,11 @@ describe('SearchScreen — source order', () => {
   });
 
   it('falls through to Verterbukh when Finkel returns nothing and user is logged in', async () => {
-    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishTransliterated: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false }], choices: null };
+    const verterbukhSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishTransliterated: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValue([]);            // Finkel returns nothing
-    mockLookupVerterbukh.mockResolvedValue(verterbukSample);
+    mockLookupVerterbukh.mockResolvedValue(verterbukhSample);
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -535,10 +537,10 @@ describe('SearchScreen — source order', () => {
   });
 
   it('shows Verterbukh badge when Verterbukh is the result source', async () => {
-    const verterbukSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishTransliterated: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, isPhrase: false }], choices: null };
+    const verterbukhSample = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishTransliterated: null, english: 'pretty', partOfSpeech: null, grammaticalInfo: null, isPhrase: false }], choices: null };
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
-    mockLookupVerterbukh.mockResolvedValue(verterbukSample);
+    mockLookupVerterbukh.mockResolvedValue(verterbukhSample);
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -551,7 +553,7 @@ describe('SearchScreen — source order', () => {
 });
 
 describe('SearchScreen — Verterbukh quota badge', () => {
-  const sampleVerterbukEntry = {
+  const sampleVerterbukhEntry = {
     entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishTransliterated: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false }],
     choices: null,
   };
@@ -562,7 +564,7 @@ describe('SearchScreen — Verterbukh quota badge', () => {
   });
 
   it('shows quota badge with used/total when Verterbukh returns quota', async () => {
-    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 3, total: 100 } });
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: { used: 3, total: 100 } });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -575,7 +577,7 @@ describe('SearchScreen — Verterbukh quota badge', () => {
   });
 
   it('does not show quota badge when quota is null', async () => {
-    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: null });
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: null });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -601,7 +603,7 @@ describe('SearchScreen — Verterbukh quota badge', () => {
   });
 
   it('clears quota badge when clear button is pressed', async () => {
-    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 3, total: 100 } });
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: { used: 3, total: 100 } });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -619,7 +621,7 @@ describe('SearchScreen — Verterbukh quota badge', () => {
     jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
 
     // 92 used out of 100 → 92% used > 90% threshold → triggers
-    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 92, total: 100 } });
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: { used: 92, total: 100 } });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -639,7 +641,7 @@ describe('SearchScreen — Verterbukh quota badge', () => {
     jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
 
     // 50 used out of 100 → 50% used → no alert
-    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukEntry, quota: { used: 50, total: 100 } });
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: { used: 50, total: 100 } });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -655,7 +657,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     { label: 'LOYFN', hebrewLemma: 'לױפֿן', dir: 'from' as const },
     { label: 'LOYFER', hebrewLemma: 'לױפֿער', dir: 'from' as const },
   ];
-  const sampleVerterbukEntry = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false }], choices: sampleChoices };
+  const sampleVerterbukhEntry = { entries: [{ source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false }], choices: sampleChoices };
 
   beforeEach(() => {
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
@@ -663,7 +665,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   });
 
   it('shows the auto-selected result and "Other options" panel when choices are returned', async () => {
-    mockLookupVerterbukh.mockResolvedValue(sampleVerterbukEntry);
+    mockLookupVerterbukh.mockResolvedValue(sampleVerterbukhEntry);
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
@@ -679,7 +681,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   });
 
   it('does not show "Other options" panel when no choices are returned', async () => {
-    mockLookupVerterbukh.mockResolvedValue({ entries: sampleVerterbukEntry.entries, choices: null });
+    mockLookupVerterbukh.mockResolvedValue({ entries: sampleVerterbukhEntry.entries, choices: null });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
@@ -719,7 +721,7 @@ describe('SearchScreen — Verterbukh other options', () => {
 
   it('fetches the selected other option and replaces results', async () => {
     mockLookupVerterbukh
-      .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
+      .mockResolvedValueOnce(sampleVerterbukhEntry) // initial search
       .mockResolvedValueOnce({ entries: [{ yiddishHebrew: 'לױפֿער', yiddishTransliterated: 'loyfer', english: 'runner', partOfSpeech: 'noun', grammaticalInfo: null, isPhrase: false }], choices: null }); // choice lookup
 
     renderScreen();
@@ -738,7 +740,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   });
 
   it('fetches choices live on a Verterbukh cache hit so the panel reappears on re-search', async () => {
-    const cachedVEntry = [{ ...sampleVerterbukEntry.entries[0], fromCache: true }];
+    const cachedVEntry = [{ ...sampleVerterbukhEntry.entries[0], fromCache: true }];
     mockGetCached.mockResolvedValue(cachedVEntry);
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
@@ -755,7 +757,7 @@ describe('SearchScreen — Verterbukh other options', () => {
   });
 
   it('other options panel appears above results (before FlatList), not below', async () => {
-    mockLookupVerterbukh.mockResolvedValue(sampleVerterbukEntry);
+    mockLookupVerterbukh.mockResolvedValue(sampleVerterbukhEntry);
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyf');
@@ -773,7 +775,7 @@ describe('SearchScreen — Verterbukh other options', () => {
     const chosenEntry = { source: 'verterbukh' as const, fromCache: false, yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run (verb)', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
     const finkelLoyfnEntry = { source: 'finkel' as const, fromCache: false, yiddishHebrew: null, yiddishTransliterated: 'loyfn', english: 'to run, jog', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
     mockLookupVerterbukh
-      .mockResolvedValueOnce(sampleVerterbukEntry) // initial search
+      .mockResolvedValueOnce(sampleVerterbukhEntry) // initial search
       .mockResolvedValueOnce({ entries: [chosenEntry], choices: null, quota: null }); // disambiguation lookup
     mockLookup.mockResolvedValue([finkelLoyfnEntry]); // Finkel lookup for 'loyfn'
 
@@ -797,13 +799,13 @@ describe('SearchScreen — Verterbukh other options', () => {
 });
 
 describe('SearchScreen — fallback note', () => {
-  const vEntry = { yiddishHebrew: 'שיין', yiddishTransliterated: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false };
+  const verterbukhEntry = { yiddishHebrew: 'שיין', yiddishTransliterated: 'sheyn', english: 'pretty', partOfSpeech: 'adj.', grammaticalInfo: null, isPhrase: false };
 
   it('shows a fallback note when the primary source returns nothing and a later source succeeds', async () => {
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValue([]);
-    mockLookupVerterbukh.mockResolvedValue({ entries: [vEntry], choices: null, quota: null });
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: null });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -828,7 +830,7 @@ describe('SearchScreen — fallback note', () => {
     expect(screen.queryByTestId('fallback-note')).toBeNull();
   });
 
-  it('does not show a fallback note when no source finds results', async () => {
+  it('shows a fallback note naming the source even when no source finds results', async () => {
     mockGetSourceOrder.mockResolvedValue(['finkel', 'none', 'none']);
     mockLookup.mockResolvedValue([]);
 
@@ -837,14 +839,14 @@ describe('SearchScreen — fallback note', () => {
     fireEvent.press(screen.getByTestId('search-button'));
 
     await waitFor(() => screen.getByTestId('no-results'));
-    expect(screen.queryByTestId('fallback-note')).toBeNull();
+    expect(screen.getByTestId('fallback-note').props.children).toBe('No results from Finkel');
   });
 
   it('clears the fallback note when a new search is started', async () => {
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValueOnce([]).mockResolvedValue(sampleEntries);
-    mockLookupVerterbukh.mockResolvedValue({ entries: [vEntry], choices: null, quota: null });
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: null });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -861,7 +863,7 @@ describe('SearchScreen — fallback note', () => {
     mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
     mockLookup.mockResolvedValue([]);
-    mockLookupVerterbukh.mockResolvedValue({ entries: [vEntry], choices: null, quota: null });
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: null });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
@@ -883,14 +885,13 @@ describe('SearchScreen — fallback note', () => {
     fireEvent.changeText(screen.getByTestId('search-input'), 'xyznotaword');
     fireEvent.press(screen.getByTestId('search-button'));
 
-    // All sources fail → empty state, no fallback note
     await waitFor(() => screen.getByTestId('no-results'));
-    expect(screen.queryByTestId('fallback-note')).toBeNull();
+    expect(screen.getByTestId('fallback-note').props.children).toBe('No results from Finkel · No results from Verterbukh');
   });
 });
 
 describe('SearchScreen — Verterbukh token exhaustion', () => {
-  const vEntry = { yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
+  const verterbukhEntry = { yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
   let mockAlert: jest.Mock;
 
   beforeEach(() => {
@@ -906,7 +907,7 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
 
   it('rechecks Verterbukh on every subsequent search after exhaustion', async () => {
     mockLookupVerterbukh.mockResolvedValue({
-      entries: [vEntry],
+      entries: [verterbukhEntry],
       choices: null,
       quota: { used: 5, total: 5 },
     });
@@ -934,8 +935,8 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
     // Search 2: tokens replenished — flag should clear
     // Search 3: Verterbukh called normally (flag cleared)
     mockLookupVerterbukh
-      .mockResolvedValueOnce({ entries: [vEntry], choices: null, quota: { used: 5, total: 5 } })
-      .mockResolvedValue({ entries: [vEntry], choices: null, quota: { used: 3, total: 100 } });
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 5, total: 5 } })
+      .mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 3, total: 100 } });
 
     renderScreen();
     fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
@@ -972,7 +973,7 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
     const choices = [{ label: 'LOYFN', hebrewLemma: 'לױפֿן', dir: 'from' as const }];
     // Search returns entries + choices, and uses the last token
     mockLookupVerterbukh.mockResolvedValueOnce({
-      entries: [vEntry],
+      entries: [verterbukhEntry],
       choices,
       quota: { used: 5, total: 5 },
     });
@@ -986,6 +987,219 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
 
     expect(mockAlert).toHaveBeenCalledWith('No Verterbukh Tokens', expect.any(String));
     expect(mockLookupVerterbukh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SearchScreen — Verterbukh exhausted warning banner', () => {
+  const verterbukhEntry = { yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
+
+  beforeEach(() => {
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('shows the banner when the setting is enabled and Verterbukh is exhausted', async () => {
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 5, total: 5 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-warning')).toBeTruthy();
+    });
+  });
+
+  it('does not show the banner when the setting is disabled', async () => {
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(false);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 5, total: 5 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    expect(screen.queryByTestId('verterbukh-exhausted-warning')).toBeNull();
+  });
+
+  it('hides the banner once tokens are replenished', async () => {
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookupVerterbukh
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 5, total: 5 } })
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 3, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-warning')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('verterbukh-exhausted-warning')).toBeNull();
+    });
+  });
+
+  it('shows the banner even when Verterbukh returns zero entries and no other source has results', async () => {
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null, quota: { used: 5, total: 5 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-warning')).toBeTruthy();
+    });
+  });
+
+  it('suppresses the generic "No results found" message when Verterbukh is the only source and exhausted', async () => {
+    // Source order (from beforeEach) is Verterbukh-only, so with the exhausted
+    // banner showing, the generic empty-state text would just repeat the same fact.
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null, quota: { used: 5, total: 5 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-warning')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('no-results')).toBeNull();
+  });
+
+  it('still shows "No results found" when other sources are also configured and empty', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookup.mockResolvedValue([]);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null, quota: { used: 5, total: 5 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-exhausted-warning')).toBeTruthy();
+      expect(screen.getByTestId('no-results')).toBeTruthy();
+    });
+  });
+
+  it('does not add a generic "No results from Verterbukh" note when Verterbukh is exhausted', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookup.mockResolvedValue([]);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [], choices: null, quota: { used: 5, total: 5 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('no-results')).toBeTruthy();
+    });
+    expect(screen.getByTestId('fallback-note').props.children).toBe('No results from Finkel');
+  });
+});
+
+describe('SearchScreen — Verterbukh logged-out warning banner', () => {
+  const verterbukhEntry = { yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
+  const finkelEntry = { source: 'finkel' as const, fromCache: false, yiddishHebrew: 'שיין', yiddishTransliterated: 'sheyn', english: 'pretty', partOfSpeech: 'adjective', grammaticalInfo: null, isPhrase: false };
+
+  beforeEach(() => {
+    mockGetCredentials.mockResolvedValue(null); // logged out
+  });
+
+  it('shows the banner when Verterbukh is the only configured source and the user is logged out', async () => {
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-logged-out-warning')).toBeTruthy();
+    });
+    expect(mockLookupVerterbukh).not.toHaveBeenCalled();
+  });
+
+  it('suppresses the generic "No results found" message when Verterbukh is the only source and logged out', async () => {
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-logged-out-warning')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('no-results')).toBeNull();
+  });
+
+  it('still shows "No results found" when other sources are also configured and empty (logged out)', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockLookup.mockResolvedValue([]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-logged-out-warning')).toBeTruthy();
+      expect(screen.getByTestId('no-results')).toBeTruthy();
+    });
+  });
+
+  it('does not show the banner when an earlier source already returned results (single-source mode)', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockLookup.mockResolvedValue([finkelEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+    expect(screen.queryByTestId('verterbukh-logged-out-warning')).toBeNull();
+    expect(mockLookupVerterbukh).not.toHaveBeenCalled();
+  });
+
+  it('shows the banner and still displays results from a later source (single-source mode)', async () => {
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'finkel', 'none']);
+    mockLookup.mockResolvedValue([finkelEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-logged-out-warning')).toBeTruthy();
+      expect(screen.getAllByTestId('entry-card').length).toBeGreaterThan(0);
+    });
+    expect(mockLookupVerterbukh).not.toHaveBeenCalled();
+  });
+
+  it('shows the banner and still returns other sources\' results in use-all-sources mode', async () => {
+    mockGetUseAllSources.mockResolvedValue(true);
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'verterbukh', 'none']);
+    mockLookup.mockResolvedValue([finkelEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-logged-out-warning')).toBeTruthy();
+      expect(screen.getAllByTestId('entry-card').length).toBeGreaterThan(0);
+    });
+    expect(mockLookupVerterbukh).not.toHaveBeenCalled();
   });
 });
 

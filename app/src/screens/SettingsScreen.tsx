@@ -50,8 +50,14 @@ import {
   getHebrewToYivoWarned,
   setHebrewToYivoWarned,
   getVerterbukhQuota,
-  getVbKeepLoggedIn,
-  setVbKeepLoggedIn,
+  saveVerterbukhQuota,
+  clearVerterbukhQuota,
+  getVerterbukhKeepLoggedIn,
+  setVerterbukhKeepLoggedIn,
+  getVerterbukhExhaustedAlert,
+  setVerterbukhExhaustedAlert,
+  getMaxCacheEntries,
+  setMaxCacheEntries,
 } from '../db/settingsDb';
 import { clearCache } from '../db/cacheDb';
 
@@ -77,7 +83,7 @@ export default function SettingsScreen() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Source order state
-  const [sourceOrder, setSourceOrder] = useState<SourceSlot[]>(['finkel', 'verterbukh', 'google_translate']);
+  const [sourceOrder, setSourceOrder] = useState<SourceSlot[]>(['finkel', 'google_translate', 'none']);
   const [pickerSlot, setPickerSlot] = useState<SlotIndex | null>(null);
   const [useAllSources, setUseAllSourcesState] = useState(false);
 
@@ -93,6 +99,9 @@ export default function SettingsScreen() {
   // Keep-logged-in preference
   const [keepLoggedIn, setKeepLoggedInState] = useState(false);
 
+  // Alert when Verterbukh is out of tokens
+  const [verterbukhExhaustedAlert, setVerterbukhExhaustedAlertState] = useState(false);
+
   // Last-known Verterbukh quota (persisted after each search)
   const [verterbukhQuota, setVerterbukhQuotaState] = useState<{ used: number; total: number } | null>(null);
 
@@ -102,17 +111,18 @@ export default function SettingsScreen() {
   // Load all settings on mount in parallel so toggles render with correct values immediately.
   useEffect(() => {
     async function loadSettings() {
-      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, quota] =
+      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, exhaustedAlert, quota] =
         await Promise.all([
           getCredentials().catch(() => null),
-          getSourceOrder().catch(() => ['finkel', 'verterbukh', 'google_translate'] as SourceSlot[]),
+          getSourceOrder().catch(() => ['finkel', 'google_translate', 'none'] as SourceSlot[]),
           getMaxSavedEntries().catch(() => 500),
           getLowTokenThreshold().catch(() => 90),
           getCacheTtlDays().catch(() => 90),
           getUseAllSources().catch(() => false),
           getYivoToHebrew().catch(() => false),
           getHebrewToYivo().catch(() => false),
-          getVbKeepLoggedIn().catch(() => false),
+          getVerterbukhKeepLoggedIn().catch(() => false),
+          getVerterbukhExhaustedAlert().catch(() => false),
           getVerterbukhQuota().catch(() => null),
         ]);
       if (creds) setSavedUsername(creds.username);
@@ -124,6 +134,7 @@ export default function SettingsScreen() {
       setYivoToHebrewState(yivoToHeb);
       setHebrewToYivoState(hebToYivo);
       setKeepLoggedInState(keepLI);
+      setVerterbukhExhaustedAlertState(exhaustedAlert);
       setVerterbukhQuotaState(quota);
       setSettingsLoaded(true);
     }
@@ -151,11 +162,21 @@ export default function SettingsScreen() {
 
     try {
       const creds = { username: trimmedUser, password: trimmedPass };
-      await login(creds);
+      const quota = await login(creds);
       if (keepLoggedIn) {
         await saveCredentials(creds);
       } else {
         setInMemoryCredentials(creds);
+      }
+      // Quota is account-specific — the login response itself includes this
+      // account's quota, so show it immediately rather than waiting for a
+      // search. Falls back to clearing any stale number if it wasn't present.
+      if (quota) {
+        setVerterbukhQuotaState(quota);
+        await saveVerterbukhQuota(quota.used, quota.total).catch(() => {});
+      } else {
+        setVerterbukhQuotaState(null);
+        await clearVerterbukhQuota().catch(() => {});
       }
       setSavedUsername(trimmedUser);
       setUsername('');
@@ -169,6 +190,8 @@ export default function SettingsScreen() {
 
   const handleLogout = useCallback(async () => {
     await logout();
+    setVerterbukhQuotaState(null);
+    await clearVerterbukhQuota().catch(() => {});
     setSavedUsername(null);
     setLoginStatus('idle');
     setStatusMessage(null);
@@ -181,7 +204,7 @@ export default function SettingsScreen() {
       startSession();
     }
     setKeepLoggedInState(value);
-    await setVbKeepLoggedIn(value).catch(() => {});
+    await setVerterbukhKeepLoggedIn(value).catch(() => {});
     if (value) {
       // Switching to keep-logged-in while an active short-term session exists:
       // persist in-memory credentials to SecureStore so they survive app restarts.
@@ -200,6 +223,11 @@ export default function SettingsScreen() {
       }
     }
   }, [savedUsername]);
+
+  const handleToggleVerterbukhExhaustedAlert = useCallback(async (value: boolean) => {
+    setVerterbukhExhaustedAlertState(value);
+    await setVerterbukhExhaustedAlert(value).catch(() => {});
+  }, []);
 
   const handleSaveMaxEntries = useCallback(async (value: number) => {
     setMaxSavedEntriesState(value);
@@ -452,6 +480,21 @@ export default function SettingsScreen() {
             trackColor={{ false: theme.textSecondary, true: theme.primary }}
             thumbColor="#FFFFFF"
             testID="keep-logged-in-toggle"
+          />
+        </View>
+        <View style={[s.toggleRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[s.toggleLabel, { color: theme.text }]}>Alert when out of tokens</Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
+              Show a warning under the search bar when Verterbukh is out of tokens and still selected as a source.
+            </Text>
+          </View>
+          <Switch
+            value={verterbukhExhaustedAlert}
+            onValueChange={handleToggleVerterbukhExhaustedAlert}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="verterbukh-exhausted-alert-toggle"
           />
         </View>
         <NumericSettingRow

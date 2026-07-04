@@ -7,7 +7,7 @@
 
 import axios from 'axios';
 import {
-  parseVerterbukhhHtml,
+  parseVerterbukhHtml,
   lookupVerterbukh,
 } from '../services/verterbukh-service';
 
@@ -24,9 +24,10 @@ jest.mock('axios');
 jest.mock('../services/verterbukh-auth', () => ({
   ensureSession: jest.fn(),
   isLoggedOut: jest.fn(),
+  parseVerterbukhQuota: jest.requireActual('../services/verterbukh-auth').parseVerterbukhQuota,
 }));
 jest.mock('../db/settingsDb', () => ({
-  getVbKeepLoggedIn: jest.fn().mockResolvedValue(false),
+  getVerterbukhKeepLoggedIn: jest.fn().mockResolvedValue(false),
 }));
 
 import { ensureSession, isLoggedOut } from '../services/verterbukh-auth';
@@ -263,35 +264,35 @@ beforeEach(() => {
 // Parser — noun
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — noun entry with plural folding (variant A: .gram.glossed same element)', () => {
+describe('parseVerterbukhHtml — noun entry with plural folding (variant A: .gram.glossed same element)', () => {
   it('strips the | stem separator and folds the plural suffix into the Hebrew headword with a dash', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_HTML);
     expect(entries[0].yiddishHebrew).toBe('פּאַסירל, -עך');
   });
 
   it('folds the transliterated plural suffix into yiddishTransliterated with a dash', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_HTML);
     expect(entries[0].yiddishTransliterated).toBe('PASIRL, -EKh');
   });
 
   it('extracts a terse part of speech straight from Verterbukh\'s transliterated grammar', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_HTML);
     expect(entries[0].partOfSpeech).toBe('n. neut.');
   });
 
   it('omits the folded plural from grammaticalInfo — no duplication with the headword', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_HTML);
     expect(entries[0].grammaticalInfo).toBe('n. neut.');
     expect(entries[0].grammaticalInfo).not.toContain('plural');
   });
 
   it('extracts the English definition', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_HTML);
     expect(entries[0].english).toBe('pass, permit');
   });
 
   it('returns null choices when no .choice_container is present', () => {
-    const { choices } = parseVerterbukhhHtml(NOUN_HTML);
+    const { choices } = parseVerterbukhHtml(NOUN_HTML);
     expect(choices).toBeNull();
   });
 });
@@ -300,31 +301,31 @@ describe('parseVerterbukhhHtml — noun entry with plural folding (variant A: .g
 // Parser — verb with past participle + usage phrase (live HTML 2026-06-06)
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — verb entry with past participle + phrase (avek-loyfn)', () => {
+describe('parseVerterbukhHtml — verb entry with past participle + phrase (avek-loyfn)', () => {
   it('strips | stem separators and folds the past participle into the Hebrew headword', () => {
-    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    const { entries } = parseVerterbukhHtml(AVEKLOYFN_HTML);
     expect(entries[0].yiddishHebrew).toBe("אַװע'קלױפֿן, איז אַװע'קגעלאָפֿן");
     expect(entries[0].yiddishHebrew).not.toContain('|');
   });
 
   it('folds the transliterated past participle (with auxiliary) into yiddishTransliterated', () => {
-    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    const { entries } = parseVerterbukhHtml(AVEKLOYFN_HTML);
     expect(entries[0].yiddishTransliterated).toBe("AVE'KLOYFN, IZ AVE'KGELOFN");
     expect(entries[0].yiddishTransliterated).not.toContain('|');
   });
 
   it('extracts a terse part of speech, omitting the participle now folded into the headword', () => {
-    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    const { entries } = parseVerterbukhHtml(AVEKLOYFN_HTML);
     expect(entries[0].partOfSpeech).toBe('v.');
   });
 
   it('extracts the main definition as the first .gloss', () => {
-    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    const { entries } = parseVerterbukhHtml(AVEKLOYFN_HTML);
     expect(entries[0].english).toBe('leave hastily; run away, flee');
   });
 
   it('folds the usage phrase into grammaticalInfo as "{Yiddish} - {transliterated} - {English}", with no POS label borrowed from the definition', () => {
-    const { entries } = parseVerterbukhhHtml(AVEKLOYFN_HTML);
+    const { entries } = parseVerterbukhHtml(AVEKLOYFN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       `v.\n${RLI}אַװעקלױפֿן צו${PDI} - AVEKLOYFN TSU - run/hurry to`
     );
@@ -337,9 +338,9 @@ describe('parseVerterbukhhHtml — verb entry with past participle + phrase (ave
 // marked with *...* (live HTML 2026-06-06 / 2026-06-10)
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own grammar annotation (shaynen)', () => {
+describe('parseVerterbukhHtml — verb entry whose phrase bakes in its own grammar annotation (shaynen)', () => {
   it('marks the inline ".gram" annotation with *...*, on both the Hebrew and transliterated phrase text', () => {
-    const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
+    const { entries } = parseVerterbukhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'v.\n' +
         `${RLI}שײַנען *דאַט*${PDI} - ShAYNEN *DAT* - Germ. seem/appear to s.o.\n` +
@@ -348,19 +349,19 @@ describe('parseVerterbukhhHtml — verb entry whose phrase bakes in its own gram
   });
 
   it('excludes the ".help" tooltip text ("dative") from the rendered annotation', () => {
-    const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
+    const { entries } = parseVerterbukhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).not.toContain('dative');
   });
 
   it('leaves a phrase with no inline annotation as plain text, with no asterisks added', () => {
-    const { entries } = parseVerterbukhhHtml(SHAYNEN_HTML);
+    const { entries } = parseVerterbukhHtml(SHAYNEN_HTML);
     expect(entries[0].grammaticalInfo).toContain(`${RLI}װי עס שײַנט${PDI} - VI ES ShAYNT -`);
   });
 });
 
-describe('parseVerterbukhhHtml — noun entry whose phrase bakes in a ".gram" annotation mid-phrase (marrow)', () => {
+describe('parseVerterbukhHtml — noun entry whose phrase bakes in a ".gram" annotation mid-phrase (marrow)', () => {
   it('marks the inline ".gram" annotation with *...* in the middle of the phrase, on both Hebrew and transliterated text', () => {
-    const { entries } = parseVerterbukhhHtml(MARROW_HTML);
+    const { entries } = parseVerterbukhHtml(MARROW_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'n. masc.\n' +
         `${RLI}(אַרױ'ס|)ציִ|ען בײַ/פֿון *דאַט* דעם מאַרך פֿון די בײנער${PDI} - ` +
@@ -369,14 +370,14 @@ describe('parseVerterbukhhHtml — noun entry whose phrase bakes in a ".gram" an
   });
 
   it('excludes the ".help" tooltip text ("dative") from the rendered annotation', () => {
-    const { entries } = parseVerterbukhhHtml(MARROW_HTML);
+    const { entries } = parseVerterbukhHtml(MARROW_HTML);
     expect(entries[0].grammaticalInfo).not.toContain('dative');
   });
 });
 
-describe('parseVerterbukhhHtml — verb entry whose phrase carries no grammar of its own (loyfn)', () => {
+describe('parseVerterbukhHtml — verb entry whose phrase carries no grammar of its own (loyfn)', () => {
   it('does not prefix the phrase line with the entry\'s part of speech (no carry-over)', () => {
-    const { entries } = parseVerterbukhhHtml(LOYFN_HTML);
+    const { entries } = parseVerterbukhHtml(LOYFN_HTML);
     expect(entries[0].partOfSpeech).toBe('v.');
     expect(entries[0].grammaticalInfo).toBe(
       'v.\n' +
@@ -390,25 +391,25 @@ describe('parseVerterbukhhHtml — verb entry whose phrase carries no grammar of
 // Parser — adjective with dual POS, comparative, and secondary sense (live HTML 2026-06-06)
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — adjective entry with dual POS + comparative + secondary sense (sheyn)', () => {
+describe('parseVerterbukhHtml — adjective entry with dual POS + comparative + secondary sense (sheyn)', () => {
   it('keeps the headword bare — comparatives are not folded in', () => {
-    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    const { entries } = parseVerterbukhHtml(SHEYN_HTML);
     expect(entries[0].yiddishHebrew).toBe('שײן');
     expect(entries[0].yiddishTransliterated).toBe('ShEYN');
   });
 
   it('preserves both POS/comparative alternatives instead of dropping one (dual-alternative bug fix)', () => {
-    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    const { entries } = parseVerterbukhHtml(SHEYN_HTML);
     expect(entries[0].partOfSpeech).toBe('adj./adv. comp. ShENER');
   });
 
   it('extracts the primary definition', () => {
-    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    const { entries } = parseVerterbukhHtml(SHEYN_HTML);
     expect(entries[0].english).toBe('beautiful, pretty, handsome; respectable, considerable');
   });
 
   it('folds the secondary adverb-only sense into grammaticalInfo as "{POS} - {gloss}"', () => {
-    const { entries } = parseVerterbukhhHtml(SHEYN_HTML);
+    const { entries } = parseVerterbukhHtml(SHEYN_HTML);
     expect(entries[0].grammaticalInfo).toBe(
       'adj./adv. comp. ShENER\nadv. - also good, well'
     );
@@ -419,36 +420,36 @@ describe('parseVerterbukhhHtml — adjective entry with dual POS + comparative +
 // Parser — noun entry variant B (nested .gram > .glossed, live HTML 2026-04-10)
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — noun entry with plural folding (variant B: .gram wraps .glossed)', () => {
+describe('parseVerterbukhHtml — noun entry with plural folding (variant B: .gram wraps .glossed)', () => {
   it('folds the plural suffix into the Hebrew headword with a dash', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_NESTED_HTML);
     expect(entries[0].yiddishHebrew).toBe("צײַ'געניש, -ן");
   });
 
   it('folds the transliterated plural suffix into yiddishTransliterated with a dash', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_NESTED_HTML);
     expect(entries[0].yiddishTransliterated).toBe("TSAY'GENISh, -N");
   });
 
   it('extracts terse POS from the nested .gram > .glossed structure', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_NESTED_HTML);
     expect(entries[0].partOfSpeech).toBe('n. neut.');
   });
 
   it('omits the folded plural from grammaticalInfo — no duplication with the headword', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_NESTED_HTML);
     expect(entries[0].grammaticalInfo).toBe('n. neut.');
     expect(entries[0].grammaticalInfo).not.toContain('plural');
   });
 
   it('extracts the English definition', () => {
-    const { entries } = parseVerterbukhhHtml(NOUN_NESTED_HTML);
+    const { entries } = parseVerterbukhHtml(NOUN_NESTED_HTML);
     expect(entries[0].english).toBe('certificate, diploma');
   });
 
   it('returns null yiddishTransliterated when no .translit div is present', () => {
     const noTranslit = `<div class="def"><div class="rtl"><span class="lemma">טעסט</span></div><div class="gloss">test</div></div>`;
-    const { entries } = parseVerterbukhhHtml(noTranslit);
+    const { entries } = parseVerterbukhHtml(noTranslit);
     expect(entries[0].yiddishTransliterated).toBeNull();
   });
 });
@@ -457,65 +458,65 @@ describe('parseVerterbukhhHtml — noun entry with plural folding (variant B: .g
 // Parser — disambiguation
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — Yiddish→English disambiguation (.choice_box)', () => {
+describe('parseVerterbukhHtml — Yiddish→English disambiguation (.choice_box)', () => {
   it('returns choices when .choice_container is present', () => {
-    const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(DISAMBIGUATION_HTML);
     expect(choices).not.toBeNull();
     expect(choices!.length).toBe(3); // "More..." node excluded by empty-hebrewLemma filter
   });
 
   it('extracts YIVO label for each choice', () => {
-    const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(DISAMBIGUATION_HTML);
     expect(choices!.map(c => c.label)).toEqual(['LOYF', 'LOYFN', 'AVEKLOYFN']);
   });
 
   it('extracts Hebrew lemma for each choice', () => {
-    const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(DISAMBIGUATION_HTML);
     expect(choices!.map(c => c.hebrewLemma)).toEqual(['לױף', 'לױפֿן', 'אַװעקלױפֿן']);
   });
 
   it('sets dir=from on each choice', () => {
-    const { choices } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(DISAMBIGUATION_HTML);
     expect(choices!.map(c => c.dir)).toEqual(['from', 'from', 'from']);
   });
 
   it('still returns the current entry alongside choices', () => {
-    const { entries } = parseVerterbukhhHtml(DISAMBIGUATION_HTML);
+    const { entries } = parseVerterbukhHtml(DISAMBIGUATION_HTML);
     expect(entries.length).toBe(1);
     expect(entries[0].yiddishHebrew).toBe('לױפֿן');
   });
 });
 
-describe('parseVerterbukhhHtml — English→Yiddish disambiguation (select.rev-choices)', () => {
+describe('parseVerterbukhHtml — English→Yiddish disambiguation (select.rev-choices)', () => {
   it('returns choices from rev-choices select', () => {
-    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(ENGLISH_DISAMBIGUATION_HTML);
     expect(choices).not.toBeNull();
     expect(choices!.length).toBe(4);
   });
 
   it('uses Hebrew option text as both label and hebrewLemma', () => {
-    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(ENGLISH_DISAMBIGUATION_HTML);
     expect(choices!.map(c => c.label)).toEqual(['אַדמיניסטרירן', 'קאַנדידירן', 'לױפֿן', 'רינען']);
     expect(choices!.map(c => c.hebrewLemma)).toEqual(['אַדמיניסטרירן', 'קאַנדידירן', 'לױפֿן', 'רינען']);
   });
 
   it('sets dir=to on each choice', () => {
-    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(ENGLISH_DISAMBIGUATION_HTML);
     expect(choices!.map(c => c.dir)).toEqual(['to', 'to', 'to', 'to']);
   });
 
   it('skips the blank placeholder option', () => {
-    const { choices } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    const { choices } = parseVerterbukhHtml(ENGLISH_DISAMBIGUATION_HTML);
     expect(choices!.every(c => c.hebrewLemma.length > 0)).toBe(true);
   });
 
   it('returns empty entries for a choices-only response', () => {
-    const { entries } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    const { entries } = parseVerterbukhHtml(ENGLISH_DISAMBIGUATION_HTML);
     expect(entries).toHaveLength(0);
   });
 
   it('parses quota from choices-only response', () => {
-    const { quota } = parseVerterbukhhHtml(ENGLISH_DISAMBIGUATION_HTML);
+    const { quota } = parseVerterbukhHtml(ENGLISH_DISAMBIGUATION_HTML);
     expect(quota).toEqual({ used: 36, total: 5005 });
   });
 });
@@ -524,14 +525,14 @@ describe('parseVerterbukhhHtml — English→Yiddish disambiguation (select.rev-
 // Parser — no results
 // ---------------------------------------------------------------------------
 
-describe('parseVerterbukhhHtml — no results', () => {
+describe('parseVerterbukhHtml — no results', () => {
   it('returns empty entries array when no .def blocks are present', () => {
-    const { entries } = parseVerterbukhhHtml(NO_RESULTS_HTML);
+    const { entries } = parseVerterbukhHtml(NO_RESULTS_HTML);
     expect(entries).toHaveLength(0);
   });
 
   it('returns null choices when no disambiguation is present', () => {
-    const { choices } = parseVerterbukhhHtml(NO_RESULTS_HTML);
+    const { choices } = parseVerterbukhHtml(NO_RESULTS_HTML);
     expect(choices).toBeNull();
   });
 });

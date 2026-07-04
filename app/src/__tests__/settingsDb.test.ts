@@ -17,6 +17,10 @@ import {
   getMaxSavedEntries,
   getLowTokenThreshold,
   getCacheTtlDays,
+  getVerterbukhExhaustedAlert,
+  setVerterbukhExhaustedAlert,
+  getVerterbukhQuota,
+  clearVerterbukhQuota,
   SourceSlot,
 } from '../db/settingsDb';
 import { getDatabase } from '../db/database';
@@ -145,6 +149,64 @@ describe('getCacheTtlDays()', () => {
   it('defaults to 90 when the key is absent', async () => {
     mockGetDatabase.mockReturnValue(makeMockDb());
     expect(await getCacheTtlDays()).toBe(90);
+  });
+});
+
+describe('getVerterbukhExhaustedAlert() / setVerterbukhExhaustedAlert()', () => {
+  it('defaults to false when the key is absent', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    expect(await getVerterbukhExhaustedAlert()).toBe(false);
+  });
+
+  it('returns true when the stored value is "1"', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ verterbukh_exhausted_alert: '1' }));
+    expect(await getVerterbukhExhaustedAlert()).toBe(true);
+  });
+
+  it('writes "1" for true and "0" for false', async () => {
+    const db = makeMockDb();
+    mockGetDatabase.mockReturnValue(db);
+    await setVerterbukhExhaustedAlert(true);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['verterbukh_exhausted_alert', '1']
+    );
+    await setVerterbukhExhaustedAlert(false);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['verterbukh_exhausted_alert', '0']
+    );
+  });
+});
+
+describe('clearVerterbukhQuota()', () => {
+  it('resets both stored values so getVerterbukhQuota() returns null again', async () => {
+    const db = makeMockDb({ verterbukh_quota_used: '4', verterbukh_quota_total: '5' });
+    mockGetDatabase.mockReturnValue(db);
+
+    await clearVerterbukhQuota();
+
+    expect(db.runAsync).toHaveBeenCalledWith(expect.any(String), ['verterbukh_quota_used', '-1']);
+    expect(db.runAsync).toHaveBeenCalledWith(expect.any(String), ['verterbukh_quota_total', '-1']);
+  });
+
+  it('getVerterbukhQuota() returns null after clearing', async () => {
+    const rows: Record<string, string> = { verterbukh_quota_used: '4', verterbukh_quota_total: '5' };
+    const db = {
+      getFirstAsync: jest.fn((_sql: string, params: string[]) => {
+        const key = params[0];
+        return Promise.resolve(key in rows ? { value: rows[key] } : null);
+      }),
+      runAsync: jest.fn((_sql: string, params: string[]) => {
+        rows[params[0]] = params[1];
+        return Promise.resolve({ lastInsertRowId: 1, changes: 1 });
+      }),
+    };
+    mockGetDatabase.mockReturnValue(db);
+
+    expect(await getVerterbukhQuota()).toEqual({ used: 4, total: 5 });
+    await clearVerterbukhQuota();
+    expect(await getVerterbukhQuota()).toBeNull();
   });
 });
 

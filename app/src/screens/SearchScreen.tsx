@@ -16,7 +16,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { DictEntry } from '../types';
 import { lookupFinkel } from '../services/finkelService';
-import { lookupVerterbukh, VerterbukChoice, VerterbukQuota } from '../services/verterbukh-service';
+import { lookupVerterbukh, VerterbukhChoice, VerterbukhQuota } from '../services/verterbukh-service';
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
@@ -26,7 +26,7 @@ import { detectInputScript } from '../utils/inputDetector';
 import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { hebrewToYivo } from '../utils/hebrewToYivo';
 
@@ -93,6 +93,30 @@ function hebrewHeadwordToYivo(hebrew: string): string | null {
   return hebrewToYivo(hebrew);
 }
 
+/**
+ * Applies the YIVO↔Hebrew auto-generation converters (per Settings toggles)
+ * to a batch of entries, filling in whichever headword field is missing.
+ */
+function applyConverter(
+  entries: DictEntry[],
+  yivoToHebrewEnabled: boolean,
+  hebrewToYivoEnabled: boolean,
+): DictEntry[] {
+  if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return entries;
+  return entries.map(e => {
+    let updated = e;
+    if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
+      const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
+      if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
+    }
+    if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
+      const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
+      if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
+    }
+    return updated;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -108,17 +132,21 @@ export default function SearchScreen() {
   const [resultSource, setResultSource] = useState<DictSource | null>(null);
   // Verterbukh "other options" — alternatives to the auto-selected result.
   // These can coexist with entries (server returns both in the same response).
-  const [otherOptions, setOtherOptions] = useState<VerterbukChoice[] | null>(null);
+  const [otherOptions, setOtherOptions] = useState<VerterbukhChoice[] | null>(null);
   const [cachedChoiceLemmas, setCachedChoiceLemmas] = useState<Set<string>>(new Set());
   const [showTryEnglish, setShowTryEnglish] = useState(false);
-  const [verterbukhQuota, setVerterbukhQuota] = useState<VerterbukQuota | null>(null);
+  const [verterbukhQuota, setVerterbukhQuota] = useState<VerterbukhQuota | null>(null);
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
+  const [showVerterbukhExhaustedWarning, setShowVerterbukhExhaustedWarning] = useState(false);
+  const [showVerterbukhLoggedOutWarning, setShowVerterbukhLoggedOutWarning] = useState(false);
+  // True when Verterbukh is the only configured source and either the exhausted-
+  // or logged-out-warning banner is showing — the banner already explains why
+  // there's nothing, so the generic "No results found" text would be redundant.
+  const [suppressNoResultsMessage, setSuppressNoResultsMessage] = useState(false);
   const { savedKeySet, refreshSaved } = useSaved();
 
   // Session-scoped exhaustion tracking. A useRef so updates don't trigger re-renders.
-  const verterbukExhausted = useRef(false);
-  const searchesSinceExhaustion = useRef(0);
-  const VERTERBUKH_RECHECK_AFTER = 1; // recheck Verterbukh on every search after exhaustion
+  const verterbukhExhausted = useRef(false);
 
   /**
    * Update quota state and manage exhaustion alerts.
@@ -126,22 +154,22 @@ export default function SearchScreen() {
    * - used < total after exhaustion: clear flag (tokens available again).
    * - used / total > 90%: low-token warning.
    */
-  const processQuota = useCallback((quota: VerterbukQuota | null, threshold: number) => {
+  const processQuota = useCallback((quota: VerterbukhQuota | null, threshold: number) => {
     if (!quota) return;
     setVerterbukhQuota(quota);
     saveVerterbukhQuota(quota.used, quota.total).catch(() => {});
     if (quota.used === quota.total) {
-      if (!verterbukExhausted.current) {
+      if (!verterbukhExhausted.current) {
         Alert.alert(
           'No Verterbukh Tokens',
-          'You have used all your Verterbukh lookups. Searches will use the next available source based on your settings until your tokens are replenished.',
+          'You have used all of your Verterbukh tokens and you will not see new results from this source until your tokens are replenished.',
         );
       }
-      verterbukExhausted.current = true;
-      searchesSinceExhaustion.current = 0;
+      verterbukhExhausted.current = true;
     } else {
-      if (verterbukExhausted.current) {
-        verterbukExhausted.current = false;
+      if (verterbukhExhausted.current) {
+        verterbukhExhausted.current = false;
+        setShowVerterbukhExhaustedWarning(false);
         console.log('[YidDict] SearchScreen: Verterbukh tokens available again — resuming normally');
       }
       if (quota.used / quota.total > threshold) {
@@ -167,6 +195,8 @@ export default function SearchScreen() {
     setCachedChoiceLemmas(new Set());
     setShowTryEnglish(false);
     setFallbackNote(null);
+    setShowVerterbukhLoggedOutWarning(false);
+    setSuppressNoResultsMessage(false);
 
     try {
       const script = detectInputScript(trimmed);
@@ -179,28 +209,13 @@ export default function SearchScreen() {
       const useAllSources = await getUseAllSources();
       const yivoToHebrewEnabled = await getYivoToHebrew();
       const hebrewToYivoEnabled = await getHebrewToYivo();
-
-      const applyConverter = (es: DictEntry[]): DictEntry[] => {
-        if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
-        return es.map(e => {
-          let updated = e;
-          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
-            const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
-            if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
-          }
-          if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
-            const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
-            if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
-          }
-          return updated;
-        });
-      };
+      const exhaustedAlertEnabled = await getVerterbukhExhaustedAlert();
 
       const order = await getSourceOrder();
       const creds = await getCredentials();
-      const verterbukhhLoggedIn = creds !== null;
+      const verterbukhLoggedIn = creds !== null;
       const notes: string[] = [];
-      let verterbukHasChoices = false;
+      let verterbukhHasChoices = false;
 
       // Helper: look up a single source and return its entries (cache-first).
       // Each returned entry has fromCache set on the entry itself.
@@ -224,7 +239,7 @@ export default function SearchScreen() {
             if (liveChoices && liveChoices.length > 0) {
               setOtherOptions(liveChoices);
               setCachedChoiceLemmas(existingLemmas);
-              verterbukHasChoices = true;
+              verterbukhHasChoices = true;
               if (!isHebrew) setShowTryEnglish(true);
             }
           }
@@ -237,21 +252,21 @@ export default function SearchScreen() {
           return results;
         }
         if (source === 'verterbukh') {
-          const vResult = await lookupVerterbukh(trimmed);
-          console.log(`[YidDict] SearchScreen: Verterbukh returned ${vResult.entries.length} entry(ies)`);
-          processQuota(vResult.quota, threshold);
-          if (vResult.choices && vResult.choices.length > 0) {
+          const verterbukhResult = await lookupVerterbukh(trimmed);
+          console.log(`[YidDict] SearchScreen: Verterbukh returned ${verterbukhResult.entries.length} entry(ies)`);
+          processQuota(verterbukhResult.quota, threshold);
+          if (verterbukhResult.choices && verterbukhResult.choices.length > 0) {
             // Disambiguation choices present — surface them; show "Try in English" for manual override
-            setOtherOptions(vResult.choices);
+            setOtherOptions(verterbukhResult.choices);
             setCachedChoiceLemmas(new Set()); // nothing cached yet on a fresh lookup
-            verterbukHasChoices = true;
+            verterbukhHasChoices = true;
             if (!isHebrew) setShowTryEnglish(true);
-            if (vResult.entries.length > 0) await saveToCache(trimmed, vResult.entries, 'verterbukh');
-            return vResult.entries;
+            if (verterbukhResult.entries.length > 0) await saveToCache(trimmed, verterbukhResult.entries, 'verterbukh');
+            return verterbukhResult.entries;
           }
-          if (vResult.entries.length > 0) {
-            await saveToCache(trimmed, vResult.entries, 'verterbukh');
-            return vResult.entries;
+          if (verterbukhResult.entries.length > 0) {
+            await saveToCache(trimmed, verterbukhResult.entries, 'verterbukh');
+            return verterbukhResult.entries;
           }
           // No entries and no choices from dir=from — auto-retry as English (Latin input only)
           if (!isHebrew) {
@@ -261,7 +276,7 @@ export default function SearchScreen() {
             if (toResult.choices && toResult.choices.length > 0) {
               setOtherOptions(toResult.choices);
               setCachedChoiceLemmas(new Set());
-              verterbukHasChoices = true;
+              verterbukhHasChoices = true;
             }
             if (toResult.entries.length > 0) await saveToCache(trimmed, toResult.entries, 'verterbukh');
             return toResult.entries;
@@ -277,47 +292,71 @@ export default function SearchScreen() {
         return [];
       };
 
-      const eligibleSources = order
-        .filter(slot => slot !== 'none')
-        .filter(slot => slot !== 'verterbukh' || verterbukhhLoggedIn)
-        .map(slot => {
-          if (slot === 'verterbukh' && verterbukExhausted.current) {
-            searchesSinceExhaustion.current = 0;
-          }
-          return slot as DictSource;
-        });
+      // Verterbukh stays eligible even while exhausted — quota is only ever revealed by
+      // actually querying it, so we keep checking every search until tokens replenish
+      // (processQuota clears the flag and the warning as soon as that happens).
+      // If the user is logged out, though, we can't query it at all — skip it inline
+      // (rather than pre-filtering) so we only flag "would have been used" when the
+      // search actually reaches Verterbukh's turn without an earlier source succeeding.
+      const attemptOrder = order.filter(slot => slot !== 'none') as DictSource[];
+      let verterbukhLoggedOut = false;
+      const shouldSkipVerterbukh = (source: DictSource): boolean => {
+        if (source !== 'verterbukh' || verterbukhLoggedIn) return false;
+        verterbukhLoggedOut = true;
+        return true;
+      };
+      // Applied at every exit point below, after the loop has actually run — so
+      // verterbukhExhausted.current reflects this search's quota response (set via
+      // processQuota inside lookupSource), not whatever it was before the search started.
+      const applyVerterbukhWarnings = () => {
+        const exhaustedWarning =
+          exhaustedAlertEnabled && order.includes('verterbukh') && verterbukhLoggedIn && verterbukhExhausted.current;
+        setShowVerterbukhExhaustedWarning(exhaustedWarning);
+        setShowVerterbukhLoggedOutWarning(verterbukhLoggedOut);
+        setSuppressNoResultsMessage(
+          attemptOrder.length === 1 &&
+          attemptOrder[0] === 'verterbukh' &&
+          (exhaustedWarning || verterbukhLoggedOut)
+        );
+      };
 
       if (useAllSources) {
         // Query all eligible sources and combine results
         const allEntries: DictEntry[] = [];
-        for (const source of eligibleSources) {
+        for (const source of attemptOrder) {
+          if (shouldSkipVerterbukh(source)) continue;
           const results = await lookupSource(source);
           allEntries.push(...results);
-          if (results.length === 0 && !(source === 'verterbukh' && verterbukHasChoices)) {
+          if (results.length === 0 && !(source === 'verterbukh' && (verterbukhHasChoices || verterbukhExhausted.current))) {
             notes.push(`No results from ${SOURCE_LABELS[source]}`);
           }
         }
         if (allEntries.length > 0) {
-          setEntries(applyConverter(allEntries));
+          setEntries(applyConverter(allEntries, yivoToHebrewEnabled, hebrewToYivoEnabled));
           setResultSource(null);
         }
         if (notes.length > 0) setFallbackNote(notes.join(' · '));
+        applyVerterbukhWarnings();
         console.log(`[YidDict] SearchScreen: use-all-sources returned ${allEntries.length} total entries`);
       } else {
         // Stop at the first source with results
-        for (const source of eligibleSources) {
+        for (const source of attemptOrder) {
+          if (shouldSkipVerterbukh(source)) continue;
           const results = await lookupSource(source);
           if (results.length > 0) {
-            setEntries(applyConverter(results));
+            setEntries(applyConverter(results, yivoToHebrewEnabled, hebrewToYivoEnabled));
             setResultSource(source);
             setFromCache(results[0].fromCache);
             if (notes.length > 0) setFallbackNote(notes.join(' · '));
+            applyVerterbukhWarnings();
             return;
           }
-          if (!(source === 'verterbukh' && verterbukHasChoices)) {
+          if (!(source === 'verterbukh' && (verterbukhHasChoices || verterbukhExhausted.current))) {
             notes.push(`No results from ${SOURCE_LABELS[source]}`);
           }
         }
+        if (notes.length > 0) setFallbackNote(notes.join(' · '));
+        applyVerterbukhWarnings();
         console.log('[YidDict] SearchScreen: all sources exhausted — no results');
       }
     } catch (err) {
@@ -328,10 +367,10 @@ export default function SearchScreen() {
     }
   }, [query, processQuota]);
 
-  const handleOtherOption = useCallback(async (choice: VerterbukChoice) => {
+  const handleOtherOption = useCallback(async (choice: VerterbukhChoice) => {
     const trimmed = query.trim();
 
-    if (verterbukExhausted.current) {
+    if (verterbukhExhausted.current) {
       Alert.alert(
         'No Verterbukh Tokens',
         'You have used all your Verterbukh lookups. Additional options are not available until your tokens are replenished.',
@@ -351,30 +390,14 @@ export default function SearchScreen() {
       const yivoToHebrewEnabled = await getYivoToHebrew();
       const hebrewToYivoEnabled = await getHebrewToYivo();
 
-      const applyConverter = (es: DictEntry[]): DictEntry[] => {
-        if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
-        return es.map(e => {
-          let updated = e;
-          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
-            const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
-            if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
-          }
-          if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
-            const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
-            if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
-          }
-          return updated;
-        });
-      };
-
       // Always look up Verterbukh with the specific disambiguation lemma, using the
       // direction that produced the choice (from=Yiddish→English, to=English→Yiddish).
-      const vResult = await lookupVerterbukh(trimmed, choice.hebrewLemma, choice.dir);
-      processQuota(vResult.quota, thresholdPct / 100);
-      if (vResult.entries.length > 0) {
+      const verterbukhResult = await lookupVerterbukh(trimmed, choice.hebrewLemma, choice.dir);
+      processQuota(verterbukhResult.quota, thresholdPct / 100);
+      if (verterbukhResult.entries.length > 0) {
         // Always store choice.hebrewLemma (including any /N homograph suffix) so each
         // homograph has a distinct cache key and existingLemmas greys correctly on re-search.
-        const entriesToSave = vResult.entries.map(e => ({
+        const entriesToSave = verterbukhResult.entries.map(e => ({
           ...e,
           yiddishHebrew: choice.hebrewLemma,
         }));
@@ -390,7 +413,7 @@ export default function SearchScreen() {
           ? splitHebrewLemma(choice.hebrewLemma).text
           : choice.label.toLowerCase();
         const isHebrew = choice.dir === 'to';
-        const allEntries: DictEntry[] = [...vResult.entries];
+        const allEntries: DictEntry[] = [...verterbukhResult.entries];
 
         for (const slot of order) {
           if (slot === 'none' || slot === 'verterbukh') continue;
@@ -410,10 +433,10 @@ export default function SearchScreen() {
             allEntries.push(...results);
           }
         }
-        setEntries(applyConverter(allEntries));
+        setEntries(applyConverter(allEntries, yivoToHebrewEnabled, hebrewToYivoEnabled));
         setResultSource(null);
       } else {
-        setEntries(applyConverter(vResult.entries));
+        setEntries(applyConverter(verterbukhResult.entries, yivoToHebrewEnabled, hebrewToYivoEnabled));
         setResultSource('verterbukh');
       }
     } catch {
@@ -437,32 +460,16 @@ export default function SearchScreen() {
       const yivoToHebrewEnabled = await getYivoToHebrew();
       const hebrewToYivoEnabled = await getHebrewToYivo();
 
-      const applyConverter = (es: DictEntry[]): DictEntry[] => {
-        if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return es;
-        return es.map(e => {
-          let updated = e;
-          if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
-            const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
-            if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
-          }
-          if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
-            const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
-            if (generated) updated = { ...updated, yiddishTransliterated: generated, transliteratedIsGenerated: true };
-          }
-          return updated;
-        });
-      };
-
-      const vResult = await lookupVerterbukh(trimmed, undefined, 'to');
-      processQuota(vResult.quota, thresholdPct / 100);
-      if (vResult.entries.length > 0) {
-        await saveToCache(trimmed, vResult.entries, 'verterbukh');
+      const verterbukhResult = await lookupVerterbukh(trimmed, undefined, 'to');
+      processQuota(verterbukhResult.quota, thresholdPct / 100);
+      if (verterbukhResult.entries.length > 0) {
+        await saveToCache(trimmed, verterbukhResult.entries, 'verterbukh');
       }
-      if (vResult.choices && vResult.choices.length > 0) setOtherOptions(vResult.choices);
+      if (verterbukhResult.choices && verterbukhResult.choices.length > 0) setOtherOptions(verterbukhResult.choices);
 
       // Re-fetch all cached Verterbukh entries so previously-selected "Other options"
       // entries (from dir=from) remain visible alongside any new dir=to results.
-      const allVerterbukh = await getCachedEntries(trimmed, 'verterbukh', cacheTtl) ?? vResult.entries;
+      const allVerterbukh = await getCachedEntries(trimmed, 'verterbukh', cacheTtl) ?? verterbukhResult.entries;
 
       if (useAllSourcesEnabled) {
         const order = await getSourceOrder();
@@ -481,10 +488,10 @@ export default function SearchScreen() {
             allEntries.push(...results);
           }
         }
-        setEntries(applyConverter(allEntries));
+        setEntries(applyConverter(allEntries, yivoToHebrewEnabled, hebrewToYivoEnabled));
         setResultSource(null);
       } else {
-        setEntries(applyConverter(allVerterbukh));
+        setEntries(applyConverter(allVerterbukh, yivoToHebrewEnabled, hebrewToYivoEnabled));
         setResultSource('verterbukh');
       }
     } catch {
@@ -537,6 +544,9 @@ export default function SearchScreen() {
     setShowTryEnglish(false);
     setVerterbukhQuota(null);
     setFallbackNote(null);
+    setShowVerterbukhExhaustedWarning(false);
+    setShowVerterbukhLoggedOutWarning(false);
+    setSuppressNoResultsMessage(false);
   }, []);
 
   const allSaved =
@@ -597,6 +607,20 @@ export default function SearchScreen() {
               <Text style={s.badgeText}>{verterbukhQuota.used}/{verterbukhQuota.total} tokens</Text>
             </View>
           </View>
+        ) : null}
+
+        {/* Verterbukh out-of-tokens warning — opt-in via Settings, shown while exhausted */}
+        {showVerterbukhExhaustedWarning && !isLoading ? (
+          <Text style={[s.verterbukhWarning, { color: theme.sourceVerterbukh }]} testID="verterbukh-exhausted-warning">
+            You have used all of your Verterbukh tokens and you will not see new results from this source until your tokens are replenished.
+          </Text>
+        ) : null}
+
+        {/* Verterbukh logged-out warning — shown when it's a configured source but not logged in */}
+        {showVerterbukhLoggedOutWarning && !isLoading ? (
+          <Text style={[s.verterbukhWarning, { color: theme.sourceVerterbukh }]} testID="verterbukh-logged-out-warning">
+            Verterbukh is logged out, please log in to use this dictionary or remove it from your search sources.
+          </Text>
         ) : null}
 
         {/* Fallback note — shown when results come from a non-primary source */}
@@ -687,7 +711,7 @@ export default function SearchScreen() {
               ) : null
             }
             ListEmptyComponent={
-              hasSearched ? (
+              hasSearched && !suppressNoResultsMessage ? (
                 <View testID="no-results">
                   <Text style={[s.emptyText, { color: theme.textSecondary }]}>
                     No results found. Try another word or stem.
@@ -709,9 +733,9 @@ export default function SearchScreen() {
 // ---------------------------------------------------------------------------
 
 interface OtherOptionsViewProps {
-  choices: VerterbukChoice[];
+  choices: VerterbukhChoice[];
   cachedLemmas: Set<string>;
-  onSelect: (choice: VerterbukChoice) => void;
+  onSelect: (choice: VerterbukhChoice) => void;
   theme: ReturnType<typeof useTheme>['theme'];
   s: ReturnType<typeof makeStyles>;
 }
@@ -969,6 +993,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     fallbackNote: {
       fontSize: 12,
       fontStyle: 'italic',
+      paddingHorizontal: 12,
+      paddingBottom: 6,
+    },
+    verterbukhWarning: {
+      fontSize: 12,
+      fontWeight: '600',
       paddingHorizontal: 12,
       paddingBottom: 6,
     },
