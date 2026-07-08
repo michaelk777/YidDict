@@ -26,7 +26,7 @@ import { detectInputScript } from '../utils/inputDetector';
 import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { hebrewToYivo } from '../utils/hebrewToYivo';
 
@@ -138,6 +138,7 @@ export default function SearchScreen() {
   const [verterbukhQuota, setVerterbukhQuota] = useState<VerterbukhQuota | null>(null);
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
   const [showVerterbukhExhaustedWarning, setShowVerterbukhExhaustedWarning] = useState(false);
+  const [showVerterbukhLowTokenWarning, setShowVerterbukhLowTokenWarning] = useState(false);
   const [showVerterbukhLoggedOutWarning, setShowVerterbukhLoggedOutWarning] = useState(false);
   // True when Verterbukh is the only configured source and either the exhausted-
   // or logged-out-warning banner is showing — the banner already explains why
@@ -145,16 +146,20 @@ export default function SearchScreen() {
   const [suppressNoResultsMessage, setSuppressNoResultsMessage] = useState(false);
   const { savedKeySet, refreshSaved } = useSaved();
 
-  // Session-scoped exhaustion tracking. A useRef so updates don't trigger re-renders.
+  // Session-scoped exhaustion/low-token tracking. useRefs so updates don't trigger re-renders.
   const verterbukhExhausted = useRef(false);
+  const verterbukhLowToken = useRef(false);
 
   /**
-   * Update quota state and manage exhaustion alerts.
-   * - used === total: set exhausted flag; alert once (first detection only).
+   * Update quota state and manage exhaustion/low-token alerts.
+   * - used === total: set exhausted flag; alert once (first detection only); clears low-token state.
    * - used < total after exhaustion: clear flag (tokens available again).
-   * - used / total > 90%: low-token warning.
+   * - used / total >= threshold: set low-token flag; alert once (first detection only).
+   * - used / total < threshold after being low: clear flag (back to healthy).
+   * lowTokenAlertEnabled gates the whole low-token feature (popup + banner), same as the
+   * exhausted-alert setting gates the exhausted banner.
    */
-  const processQuota = useCallback((quota: VerterbukhQuota | null, threshold: number) => {
+  const processQuota = useCallback((quota: VerterbukhQuota | null, threshold: number, lowTokenAlertEnabled: boolean) => {
     if (!quota) return;
     setVerterbukhQuota(quota);
     saveVerterbukhQuota(quota.used, quota.total).catch(() => {});
@@ -166,17 +171,25 @@ export default function SearchScreen() {
         );
       }
       verterbukhExhausted.current = true;
+      verterbukhLowToken.current = false;
+      setShowVerterbukhLowTokenWarning(false);
     } else {
       if (verterbukhExhausted.current) {
         verterbukhExhausted.current = false;
         setShowVerterbukhExhaustedWarning(false);
         console.log('[YidDict] SearchScreen: Verterbukh tokens available again — resuming normally');
       }
-      if (quota.used / quota.total > threshold) {
-        Alert.alert(
-          'Low Verterbukh Tokens',
-          `You have used ${quota.used} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'}. Consider purchasing more tokens soon.`,
-        );
+      const isLow = lowTokenAlertEnabled && quota.used / quota.total >= threshold;
+      if (isLow) {
+        if (!verterbukhLowToken.current) {
+          Alert.alert(
+            'Low Verterbukh Tokens',
+            `You have used ${quota.used} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'}. Consider purchasing more tokens soon.`,
+          );
+        }
+        verterbukhLowToken.current = true;
+      } else {
+        verterbukhLowToken.current = false;
       }
     }
   }, []);
@@ -210,6 +223,7 @@ export default function SearchScreen() {
       const yivoToHebrewEnabled = await getYivoToHebrew();
       const hebrewToYivoEnabled = await getHebrewToYivo();
       const exhaustedAlertEnabled = await getVerterbukhExhaustedAlert();
+      const lowTokenAlertEnabled = await getVerterbukhLowTokenAlert();
 
       const order = await getSourceOrder();
       const creds = await getCredentials();
@@ -228,12 +242,12 @@ export default function SearchScreen() {
             const existingLemmas = new Set(cached.map(e => e.yiddishHebrew).filter(Boolean) as string[]);
             // Always fetch choices live so the "Other search options" panel is available on re-search
             const freshResult = await lookupVerterbukh(trimmed);
-            processQuota(freshResult.quota, threshold);
+            processQuota(freshResult.quota, threshold, lowTokenAlertEnabled);
             let liveChoices = freshResult.choices;
             // dir=from returned no choices — try dir=to for Latin input (English→Yiddish)
             if ((!liveChoices || liveChoices.length === 0) && !isHebrew) {
               const toResult = await lookupVerterbukh(trimmed, undefined, 'to');
-              processQuota(toResult.quota, threshold);
+              processQuota(toResult.quota, threshold, lowTokenAlertEnabled);
               liveChoices = toResult.choices;
             }
             if (liveChoices && liveChoices.length > 0) {
@@ -254,7 +268,7 @@ export default function SearchScreen() {
         if (source === 'verterbukh') {
           const verterbukhResult = await lookupVerterbukh(trimmed);
           console.log(`[YidDict] SearchScreen: Verterbukh returned ${verterbukhResult.entries.length} entry(ies)`);
-          processQuota(verterbukhResult.quota, threshold);
+          processQuota(verterbukhResult.quota, threshold, lowTokenAlertEnabled);
           if (verterbukhResult.choices && verterbukhResult.choices.length > 0) {
             // Disambiguation choices present — surface them; show "Try in English" for manual override
             setOtherOptions(verterbukhResult.choices);
@@ -272,7 +286,7 @@ export default function SearchScreen() {
           if (!isHebrew) {
             const toResult = await lookupVerterbukh(trimmed, undefined, 'to');
             console.log(`[YidDict] SearchScreen: Verterbukh dir=to returned ${toResult.entries.length} entry(ies)`);
-            processQuota(toResult.quota, threshold);
+            processQuota(toResult.quota, threshold, lowTokenAlertEnabled);
             if (toResult.choices && toResult.choices.length > 0) {
               setOtherOptions(toResult.choices);
               setCachedChoiceLemmas(new Set());
@@ -312,6 +326,9 @@ export default function SearchScreen() {
         const exhaustedWarning =
           exhaustedAlertEnabled && order.includes('verterbukh') && verterbukhLoggedIn && verterbukhExhausted.current;
         setShowVerterbukhExhaustedWarning(exhaustedWarning);
+        setShowVerterbukhLowTokenWarning(
+          lowTokenAlertEnabled && order.includes('verterbukh') && verterbukhLoggedIn && verterbukhLowToken.current
+        );
         setShowVerterbukhLoggedOutWarning(verterbukhLoggedOut);
         setSuppressNoResultsMessage(
           attemptOrder.length === 1 &&
@@ -385,6 +402,7 @@ export default function SearchScreen() {
     try {
       console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
       const thresholdPct = await getLowTokenThreshold();
+      const lowTokenAlertEnabled = await getVerterbukhLowTokenAlert();
       const cacheTtl = await getCacheTtlDays();
       const useAllSourcesEnabled = await getUseAllSources();
       const yivoToHebrewEnabled = await getYivoToHebrew();
@@ -393,7 +411,7 @@ export default function SearchScreen() {
       // Always look up Verterbukh with the specific disambiguation lemma, using the
       // direction that produced the choice (from=Yiddish→English, to=English→Yiddish).
       const verterbukhResult = await lookupVerterbukh(trimmed, choice.hebrewLemma, choice.dir);
-      processQuota(verterbukhResult.quota, thresholdPct / 100);
+      processQuota(verterbukhResult.quota, thresholdPct / 100, lowTokenAlertEnabled);
       if (verterbukhResult.entries.length > 0) {
         // Always store choice.hebrewLemma (including any /N homograph suffix) so each
         // homograph has a distinct cache key and existingLemmas greys correctly on re-search.
@@ -455,13 +473,14 @@ export default function SearchScreen() {
     setFallbackNote(null);
     try {
       const thresholdPct = await getLowTokenThreshold();
+      const lowTokenAlertEnabled = await getVerterbukhLowTokenAlert();
       const cacheTtl = await getCacheTtlDays();
       const useAllSourcesEnabled = await getUseAllSources();
       const yivoToHebrewEnabled = await getYivoToHebrew();
       const hebrewToYivoEnabled = await getHebrewToYivo();
 
       const verterbukhResult = await lookupVerterbukh(trimmed, undefined, 'to');
-      processQuota(verterbukhResult.quota, thresholdPct / 100);
+      processQuota(verterbukhResult.quota, thresholdPct / 100, lowTokenAlertEnabled);
       if (verterbukhResult.entries.length > 0) {
         await saveToCache(trimmed, verterbukhResult.entries, 'verterbukh');
       }
@@ -545,6 +564,7 @@ export default function SearchScreen() {
     setVerterbukhQuota(null);
     setFallbackNote(null);
     setShowVerterbukhExhaustedWarning(false);
+    setShowVerterbukhLowTokenWarning(false);
     setShowVerterbukhLoggedOutWarning(false);
     setSuppressNoResultsMessage(false);
   }, []);
@@ -613,6 +633,13 @@ export default function SearchScreen() {
         {showVerterbukhExhaustedWarning && !isLoading ? (
           <Text style={[s.verterbukhWarning, { color: theme.sourceVerterbukh }]} testID="verterbukh-exhausted-warning">
             You have used all of your Verterbukh tokens and you will not see new results from this source until your tokens are replenished.
+          </Text>
+        ) : null}
+
+        {/* Verterbukh low-token warning — opt-in via Settings, shown while usage is at/above the threshold */}
+        {showVerterbukhLowTokenWarning && !isLoading && verterbukhQuota ? (
+          <Text style={[s.verterbukhWarning, { color: theme.sourceVerterbukh }]} testID="verterbukh-low-token-warning">
+            You're running low on Verterbukh tokens — {Math.round((1 - verterbukhQuota.used / verterbukhQuota.total) * 100)}% remaining. Consider purchasing more soon.
           </Text>
         ) : null}
 

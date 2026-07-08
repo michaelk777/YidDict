@@ -56,6 +56,8 @@ import {
   setVerterbukhKeepLoggedIn,
   getVerterbukhExhaustedAlert,
   setVerterbukhExhaustedAlert,
+  getVerterbukhLowTokenAlert,
+  setVerterbukhLowTokenAlert,
   getMaxCacheEntries,
   setMaxCacheEntries,
 } from '../db/settingsDb';
@@ -99,8 +101,9 @@ export default function SettingsScreen() {
   // Keep-logged-in preference
   const [keepLoggedIn, setKeepLoggedInState] = useState(false);
 
-  // Alert when Verterbukh is out of tokens
-  const [verterbukhExhaustedAlert, setVerterbukhExhaustedAlertState] = useState(false);
+  // Alert when Verterbukh is out of tokens / running low on tokens
+  const [verterbukhExhaustedAlert, setVerterbukhExhaustedAlertState] = useState(true);
+  const [verterbukhLowTokenAlert, setVerterbukhLowTokenAlertState] = useState(true);
 
   // Last-known Verterbukh quota (persisted after each search)
   const [verterbukhQuota, setVerterbukhQuotaState] = useState<{ used: number; total: number } | null>(null);
@@ -111,7 +114,7 @@ export default function SettingsScreen() {
   // Load all settings on mount in parallel so toggles render with correct values immediately.
   useEffect(() => {
     async function loadSettings() {
-      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, exhaustedAlert, quota] =
+      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, exhaustedAlert, lowTokenAlert, quota] =
         await Promise.all([
           getCredentials().catch(() => null),
           getSourceOrder().catch(() => ['finkel', 'google_translate', 'none'] as SourceSlot[]),
@@ -122,7 +125,8 @@ export default function SettingsScreen() {
           getYivoToHebrew().catch(() => false),
           getHebrewToYivo().catch(() => false),
           getVerterbukhKeepLoggedIn().catch(() => false),
-          getVerterbukhExhaustedAlert().catch(() => false),
+          getVerterbukhExhaustedAlert().catch(() => true),
+          getVerterbukhLowTokenAlert().catch(() => true),
           getVerterbukhQuota().catch(() => null),
         ]);
       if (creds) setSavedUsername(creds.username);
@@ -135,6 +139,7 @@ export default function SettingsScreen() {
       setHebrewToYivoState(hebToYivo);
       setKeepLoggedInState(keepLI);
       setVerterbukhExhaustedAlertState(exhaustedAlert);
+      setVerterbukhLowTokenAlertState(lowTokenAlert);
       setVerterbukhQuotaState(quota);
       setSettingsLoaded(true);
     }
@@ -227,6 +232,11 @@ export default function SettingsScreen() {
   const handleToggleVerterbukhExhaustedAlert = useCallback(async (value: boolean) => {
     setVerterbukhExhaustedAlertState(value);
     await setVerterbukhExhaustedAlert(value).catch(() => {});
+  }, []);
+
+  const handleToggleVerterbukhLowTokenAlert = useCallback(async (value: boolean) => {
+    setVerterbukhLowTokenAlertState(value);
+    await setVerterbukhLowTokenAlert(value).catch(() => {});
   }, []);
 
   const handleSaveMaxEntries = useCallback(async (value: number) => {
@@ -497,8 +507,23 @@ export default function SettingsScreen() {
             testID="verterbukh-exhausted-alert-toggle"
           />
         </View>
+        <View style={[s.toggleRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[s.toggleLabel, { color: theme.text }]}>Alert when low on tokens</Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
+              Show a warning under the search bar when Verterbukh usage reaches the threshold below.
+            </Text>
+          </View>
+          <Switch
+            value={verterbukhLowTokenAlert}
+            onValueChange={handleToggleVerterbukhLowTokenAlert}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="verterbukh-low-token-alert-toggle"
+          />
+        </View>
         <NumericSettingRow
-          label="Token usage alert"
+          label="Low-token threshold"
           value={lowTokenThreshold}
           suffix="%"
           min={1}

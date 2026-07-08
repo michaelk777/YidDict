@@ -69,6 +69,8 @@ jest.mock('../db/settingsDb', () => ({
   setVerterbukhKeepLoggedIn: jest.fn(),
   getVerterbukhExhaustedAlert: jest.fn(),
   setVerterbukhExhaustedAlert: jest.fn(),
+  getVerterbukhLowTokenAlert: jest.fn(),
+  setVerterbukhLowTokenAlert: jest.fn(),
 }));
 
 import { clearCache } from '../db/cacheDb';
@@ -111,6 +113,8 @@ import {
   setVerterbukhKeepLoggedIn,
   getVerterbukhExhaustedAlert,
   setVerterbukhExhaustedAlert,
+  getVerterbukhLowTokenAlert,
+  setVerterbukhLowTokenAlert,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
@@ -128,6 +132,8 @@ const mockSetCacheTtlDays = setCacheTtlDays as jest.Mock;
 const mockSetThemePreference = setThemePreference as jest.Mock;
 const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
 const mockSetVerterbukhExhaustedAlert = setVerterbukhExhaustedAlert as jest.Mock;
+const mockGetVerterbukhLowTokenAlert = getVerterbukhLowTokenAlert as jest.Mock;
+const mockSetVerterbukhLowTokenAlert = setVerterbukhLowTokenAlert as jest.Mock;
 const mockClearVerterbukhQuota = clearVerterbukhQuota as jest.Mock;
 const mockSaveVerterbukhQuota = saveVerterbukhQuota as jest.Mock;
 
@@ -182,6 +188,8 @@ beforeEach(() => {
   (getVerterbukhQuota as jest.Mock).mockResolvedValue(null);
   mockGetVerterbukhExhaustedAlert.mockResolvedValue(false);
   mockSetVerterbukhExhaustedAlert.mockResolvedValue(undefined);
+  mockGetVerterbukhLowTokenAlert.mockResolvedValue(true);
+  mockSetVerterbukhLowTokenAlert.mockResolvedValue(undefined);
   mockClearVerterbukhQuota.mockResolvedValue(undefined);
   mockSaveVerterbukhQuota.mockResolvedValue(undefined);
 });
@@ -438,6 +446,37 @@ describe('SettingsScreen — Verterbukh exhausted alert toggle', () => {
     fireEvent(screen.getByTestId('verterbukh-exhausted-alert-toggle'), 'valueChange', true);
     await waitFor(() => {
       expect(mockSetVerterbukhExhaustedAlert).toHaveBeenCalledWith(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Verterbukh low-token alert toggle
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — Verterbukh low-token alert toggle', () => {
+  it('reflects the loaded setting value', async () => {
+    mockGetVerterbukhLowTokenAlert.mockResolvedValue(true);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-alert-toggle').props.value).toBe(true);
+    });
+  });
+
+  it('reflects off when the setting is false', async () => {
+    mockGetVerterbukhLowTokenAlert.mockResolvedValue(false);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-alert-toggle').props.value).toBe(false);
+    });
+  });
+
+  it('calls setVerterbukhLowTokenAlert when toggled off', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('verterbukh-low-token-alert-toggle'));
+    fireEvent(screen.getByTestId('verterbukh-low-token-alert-toggle'), 'valueChange', false);
+    await waitFor(() => {
+      expect(mockSetVerterbukhLowTokenAlert).toHaveBeenCalledWith(false);
     });
   });
 });

@@ -63,6 +63,7 @@ jest.mock('../db/settingsDb', () => ({
   getHebrewToYivo: jest.fn().mockResolvedValue(false),
   saveVerterbukhQuota: jest.fn().mockResolvedValue(undefined),
   getVerterbukhExhaustedAlert: jest.fn().mockResolvedValue(false),
+  getVerterbukhLowTokenAlert: jest.fn().mockResolvedValue(true),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 
@@ -72,7 +73,7 @@ import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { deleteEntriesByKey } from '../db/savedDb';
-import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert } from '../db/settingsDb';
+import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert } from '../db/settingsDb';
 import { useSaved } from '../context/SavedContext';
 
 const mockLookup = lookupFinkel as jest.Mock;
@@ -85,6 +86,7 @@ const mockDeleteEntriesByKey = deleteEntriesByKey as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
 const mockGetUseAllSources = getUseAllSources as jest.Mock;
 const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
+const mockGetVerterbukhLowTokenAlert = getVerterbukhLowTokenAlert as jest.Mock;
 const mockUseSaved = useSaved as jest.Mock;
 
 // ---------------------------------------------------------------------------
@@ -650,6 +652,168 @@ describe('SearchScreen — Verterbukh quota badge', () => {
     await waitFor(() => screen.getByTestId('quota-badge'));
     expect(mockAlert).not.toHaveBeenCalledWith('Low Verterbukh Tokens', expect.any(String));
   });
+
+  it('fires Alert when used tokens exactly equal the threshold percentage', async () => {
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    // 90 used out of 100 → exactly 90% used, threshold is 90% → must trigger (>= not >)
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: { used: 90, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('quota-badge'));
+    expect(mockAlert).toHaveBeenCalledWith(
+      'Low Verterbukh Tokens',
+      expect.stringContaining('90'),
+    );
+  });
+
+  it('fires the popup only once while usage stays at/above the threshold across repeated searches', async () => {
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    mockLookupVerterbukh
+      .mockResolvedValueOnce({ ...sampleVerterbukhEntry, quota: { used: 92, total: 100 } })
+      .mockResolvedValueOnce({ ...sampleVerterbukhEntry, quota: { used: 95, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getByTestId('quota-badge'));
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => expect(screen.getByText('95/100 tokens')).toBeTruthy());
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire the low-token popup when the alert setting is disabled', async () => {
+    mockGetVerterbukhLowTokenAlert.mockResolvedValue(false);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    mockLookupVerterbukh.mockResolvedValue({ ...sampleVerterbukhEntry, quota: { used: 92, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('quota-badge'));
+    expect(mockAlert).not.toHaveBeenCalledWith('Low Verterbukh Tokens', expect.any(String));
+  });
+});
+
+describe('SearchScreen — Verterbukh low-token warning banner', () => {
+  const verterbukhEntry = { yiddishHebrew: 'לױפֿן', yiddishTransliterated: 'loyfn', english: 'run', partOfSpeech: 'verb', grammaticalInfo: null, isPhrase: false };
+
+  beforeEach(() => {
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
+    mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    mockGetVerterbukhLowTokenAlert.mockResolvedValue(true);
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('shows the banner with percent remaining when the setting is enabled and usage is at/above the threshold', async () => {
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 92, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
+      expect(screen.getByText(/8% remaining/)).toBeTruthy();
+    });
+  });
+
+  it('computes percent remaining correctly for non-round quotas', async () => {
+    // 12 used of 13 → 1/13 remaining ≈ 7.7% → rounds to 8%
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 12, total: 13 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
+      expect(screen.getByText(/8% remaining/)).toBeTruthy();
+    });
+  });
+
+  it('computes percent remaining correctly for large quotas', async () => {
+    // 950 used of 1000 → 5% remaining
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 950, total: 1000 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
+      expect(screen.getByText(/5% remaining/)).toBeTruthy();
+    });
+  });
+
+  it('does not show the banner when the setting is disabled', async () => {
+    mockGetVerterbukhLowTokenAlert.mockResolvedValue(false);
+    mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 92, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+
+    expect(screen.queryByTestId('verterbukh-low-token-warning')).toBeNull();
+  });
+
+  it('hides the banner once usage drops back below the threshold', async () => {
+    mockLookupVerterbukh
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 92, total: 100 } })
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 10, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('verterbukh-low-token-warning')).toBeNull();
+    });
+  });
+
+  it('shows the exhausted banner, not the low-token banner, once tokens hit 100% usage', async () => {
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(true);
+    mockLookupVerterbukh
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 92, total: 100 } })
+      .mockResolvedValueOnce({ entries: [verterbukhEntry], choices: null, quota: { used: 100, total: 100 } });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'loyfn');
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('verterbukh-low-token-warning')).toBeNull();
+      expect(screen.getByTestId('verterbukh-exhausted-warning')).toBeTruthy();
+    });
+  });
 });
 
 describe('SearchScreen — Verterbukh other options', () => {
@@ -899,6 +1063,7 @@ describe('SearchScreen — Verterbukh token exhaustion', () => {
     jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
     mockGetSourceOrder.mockResolvedValue(['verterbukh', 'none', 'none']);
     mockGetCredentials.mockResolvedValue({ username: 'u', password: 'p' });
+    mockGetVerterbukhExhaustedAlert.mockResolvedValue(false);
   });
 
   afterEach(() => {

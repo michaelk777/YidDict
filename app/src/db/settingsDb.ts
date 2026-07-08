@@ -183,7 +183,7 @@ export async function getVerterbukhExhaustedAlert(): Promise<boolean> {
   const row = await db.getFirstAsync<{ value: string }>(
     'SELECT value FROM user_settings WHERE key = ?', ['verterbukh_exhausted_alert']
   );
-  return row?.value === '1';
+  return row?.value !== '0';
 }
 
 export async function setVerterbukhExhaustedAlert(v: boolean): Promise<void> {
@@ -191,6 +191,22 @@ export async function setVerterbukhExhaustedAlert(v: boolean): Promise<void> {
   await db.runAsync(
     'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
     ['verterbukh_exhausted_alert', v ? '1' : '0']
+  );
+}
+
+export async function getVerterbukhLowTokenAlert(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['verterbukh_low_token_alert']
+  );
+  return row?.value !== '0';
+}
+
+export async function setVerterbukhLowTokenAlert(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['verterbukh_low_token_alert', v ? '1' : '0']
   );
 }
 

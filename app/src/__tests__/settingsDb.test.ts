@@ -19,6 +19,8 @@ import {
   getCacheTtlDays,
   getVerterbukhExhaustedAlert,
   setVerterbukhExhaustedAlert,
+  getVerterbukhLowTokenAlert,
+  setVerterbukhLowTokenAlert,
   getVerterbukhQuota,
   clearVerterbukhQuota,
   SourceSlot,
@@ -153,14 +155,19 @@ describe('getCacheTtlDays()', () => {
 });
 
 describe('getVerterbukhExhaustedAlert() / setVerterbukhExhaustedAlert()', () => {
-  it('defaults to false when the key is absent', async () => {
+  it('defaults to true when the key is absent', async () => {
     mockGetDatabase.mockReturnValue(makeMockDb());
-    expect(await getVerterbukhExhaustedAlert()).toBe(false);
+    expect(await getVerterbukhExhaustedAlert()).toBe(true);
   });
 
   it('returns true when the stored value is "1"', async () => {
     mockGetDatabase.mockReturnValue(makeMockDb({ verterbukh_exhausted_alert: '1' }));
     expect(await getVerterbukhExhaustedAlert()).toBe(true);
+  });
+
+  it('returns false when the stored value is "0"', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ verterbukh_exhausted_alert: '0' }));
+    expect(await getVerterbukhExhaustedAlert()).toBe(false);
   });
 
   it('writes "1" for true and "0" for false', async () => {
@@ -175,6 +182,38 @@ describe('getVerterbukhExhaustedAlert() / setVerterbukhExhaustedAlert()', () => 
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.any(String),
       ['verterbukh_exhausted_alert', '0']
+    );
+  });
+});
+
+describe('getVerterbukhLowTokenAlert() / setVerterbukhLowTokenAlert()', () => {
+  it('defaults to true when the key is absent', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    expect(await getVerterbukhLowTokenAlert()).toBe(true);
+  });
+
+  it('returns true when the stored value is "1"', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ verterbukh_low_token_alert: '1' }));
+    expect(await getVerterbukhLowTokenAlert()).toBe(true);
+  });
+
+  it('returns false when the stored value is "0"', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ verterbukh_low_token_alert: '0' }));
+    expect(await getVerterbukhLowTokenAlert()).toBe(false);
+  });
+
+  it('writes "1" for true and "0" for false', async () => {
+    const db = makeMockDb();
+    mockGetDatabase.mockReturnValue(db);
+    await setVerterbukhLowTokenAlert(true);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['verterbukh_low_token_alert', '1']
+    );
+    await setVerterbukhLowTokenAlert(false);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['verterbukh_low_token_alert', '0']
     );
   });
 });
