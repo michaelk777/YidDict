@@ -133,6 +133,40 @@ describe('SavedScreen — entries', () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText('2 saved')).toBeTruthy());
   });
+
+  it('does not show the Google Translate attribution badge on non-Google entries', async () => {
+    renderScreen();
+    await waitFor(() => screen.getAllByTestId('saved-entry-row'));
+    expect(screen.queryByTestId('google-translate-attribution')).toBeNull();
+  });
+});
+
+describe('SavedScreen — Google Translate attribution', () => {
+  it('shows the attribution badge on Google Translate entries only', async () => {
+    mockGetSavedEntries.mockResolvedValue([
+      ...sampleEntries,
+      {
+        id: 3,
+        query: 'pretty',
+        yiddishHebrew: 'שיין',
+        yiddishTransliterated: null,
+        english: 'pretty',
+        partOfSpeech: null,
+        grammaticalInfo: null,
+        source: 'google_translate',
+        savedAt: 3000000,
+        isPhrase: false,
+        hebrewIsGenerated: false,
+        transliteratedIsGenerated: false,
+      },
+    ]);
+
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getAllByTestId('saved-entry-row').length).toBe(3);
+    });
+    expect(screen.getAllByTestId('google-translate-attribution').length).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

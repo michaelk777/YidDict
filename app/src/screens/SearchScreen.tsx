@@ -25,6 +25,7 @@ import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
+import { GoogleTranslateAttribution } from '../components/GoogleTranslateAttribution';
 import { Ionicons } from '@expo/vector-icons';
 import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
@@ -184,7 +185,7 @@ export default function SearchScreen() {
         if (!verterbukhLowToken.current) {
           Alert.alert(
             'Low Verterbukh Tokens',
-            `You have used ${quota.used} of ${quota.total} Verterbukh lookup${quota.total === 1 ? '' : 's'}. Consider purchasing more tokens soon.`,
+            `You have used ${quota.used} of ${quota.total} Verterbukh tokens. Consider purchasing more tokens soon.`,
           );
         }
         verterbukhLowToken.current = true;
@@ -639,7 +640,7 @@ export default function SearchScreen() {
         {/* Verterbukh low-token warning — opt-in via Settings, shown while usage is at/above the threshold */}
         {showVerterbukhLowTokenWarning && !isLoading && verterbukhQuota ? (
           <Text style={[s.verterbukhWarning, { color: theme.sourceVerterbukh }]} testID="verterbukh-low-token-warning">
-            You're running low on Verterbukh tokens — {Math.round((1 - verterbukhQuota.used / verterbukhQuota.total) * 100)}% remaining. Consider purchasing more soon.
+            You're running low on Verterbukh tokens — {Math.round((verterbukhQuota.used / verterbukhQuota.total) * 100)}% of tokens used. Consider purchasing more soon.
           </Text>
         ) : null}
 
@@ -927,14 +928,17 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
         />
       ) : null}
 
-      {/* Row 5: source + cache tags */}
+      {/* Row 5: source + cache tags, Google attribution badge on the right when applicable */}
       <View style={s.entryMeta}>
-        <Text style={[s.entrySourceLabel, { color: sourceColor }]}>
-          {SOURCE_LABELS[entry.source]}
-        </Text>
-        {entry.fromCache ? (
-          <Text style={[s.entryCachedLabel, { color: theme.textSecondary }]}>Cached</Text>
-        ) : null}
+        <View style={s.entryMetaLeft}>
+          <Text style={[s.entrySourceLabel, { color: sourceColor }]}>
+            {SOURCE_LABELS[entry.source]}
+          </Text>
+          {entry.fromCache ? (
+            <Text style={[s.entryCachedLabel, { color: theme.textSecondary }]}>Cached</Text>
+          ) : null}
+        </View>
+        {entry.source === 'google_translate' ? <GoogleTranslateAttribution /> : null}
       </View>
     </View>
   );
@@ -1169,8 +1173,13 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     entryMeta: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      justifyContent: 'space-between',
       marginTop: 6,
+    },
+    entryMetaLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
     entrySourceLabel: {
       fontSize: 11,

@@ -722,7 +722,7 @@ describe('SearchScreen — Verterbukh low-token warning banner', () => {
     jest.restoreAllMocks();
   });
 
-  it('shows the banner with percent remaining when the setting is enabled and usage is at/above the threshold', async () => {
+  it('shows the banner with percent used when the setting is enabled and usage is at/above the threshold', async () => {
     mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 92, total: 100 } });
 
     renderScreen();
@@ -731,12 +731,12 @@ describe('SearchScreen — Verterbukh low-token warning banner', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
-      expect(screen.getByText(/8% remaining/)).toBeTruthy();
+      expect(screen.getByText(/92% of tokens used/)).toBeTruthy();
     });
   });
 
-  it('computes percent remaining correctly for non-round quotas', async () => {
-    // 12 used of 13 → 1/13 remaining ≈ 7.7% → rounds to 8%
+  it('computes percent used correctly for non-round quotas', async () => {
+    // 12 used of 13 → 12/13 ≈ 92.3% → rounds to 92%
     mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 12, total: 13 } });
 
     renderScreen();
@@ -745,12 +745,12 @@ describe('SearchScreen — Verterbukh low-token warning banner', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
-      expect(screen.getByText(/8% remaining/)).toBeTruthy();
+      expect(screen.getByText(/92% of tokens used/)).toBeTruthy();
     });
   });
 
-  it('computes percent remaining correctly for large quotas', async () => {
-    // 950 used of 1000 → 5% remaining
+  it('computes percent used correctly for large quotas', async () => {
+    // 950 used of 1000 → 95% used
     mockLookupVerterbukh.mockResolvedValue({ entries: [verterbukhEntry], choices: null, quota: { used: 950, total: 1000 } });
 
     renderScreen();
@@ -759,7 +759,7 @@ describe('SearchScreen — Verterbukh low-token warning banner', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('verterbukh-low-token-warning')).toBeTruthy();
-      expect(screen.getByText(/5% remaining/)).toBeTruthy();
+      expect(screen.getByText(/95% of tokens used/)).toBeTruthy();
     });
   });
 
@@ -1420,6 +1420,31 @@ describe('SearchScreen — Google Translate source', () => {
       expect(screen.getAllByTestId('entry-card').length).toBe(1);
       expect(screen.getByText('pretty')).toBeTruthy();
     });
+  });
+
+  it('shows the Google Translate attribution badge on Google Translate entries only', async () => {
+    mockLookupGoogleTranslate.mockResolvedValue([gtEntry]);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'pretty');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('google-translate-attribution').length).toBe(1);
+    });
+  });
+
+  it('does not show the Google Translate attribution badge on non-Google entries', async () => {
+    mockGetSourceOrder.mockResolvedValue(['finkel', 'none', 'none']);
+    mockGetCached.mockResolvedValue(null);
+    mockLookup.mockResolvedValue(sampleEntries);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('entry-card'));
+    expect(screen.queryByTestId('google-translate-attribution')).toBeNull();
   });
 
   it('falls through to Google Translate when Finkel returns nothing', async () => {

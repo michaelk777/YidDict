@@ -18,6 +18,7 @@ import { useSaved } from '../context/SavedContext';
 import { DictSource, SOURCE_LABELS } from '../db/settingsDb';
 import { formatHebrewLemma, splitHebrewLemma, toSuperscript } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
+import { GoogleTranslateAttribution } from '../components/GoogleTranslateAttribution';
 import {
   SavedEntry,
   deleteEntry,
@@ -242,11 +243,12 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
           />
         ) : null}
 
-        {/* Row 5: source tags */}
+        {/* Row 5: source tags, Google attribution badge on the right when applicable */}
         <View style={s.rowMeta}>
           <Text style={[s.sourceName, { color: sourceColor }]}>
             {SOURCE_LABELS[entry.source as DictSource]}
           </Text>
+          {entry.source === 'google_translate' ? <GoogleTranslateAttribution /> : null}
         </View>
       </View>
     </View>
@@ -353,6 +355,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     rowMeta: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       marginTop: 4,
     },
     grammar: {
