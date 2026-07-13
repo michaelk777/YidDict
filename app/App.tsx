@@ -7,7 +7,8 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { SavedProvider } from './src/context/SavedContext';
 import { initDatabase } from './src/db/database';
 import { initAuth } from './src/services/verterbukh-auth';
-import { getThemePreference } from './src/db/settingsDb';
+import { getThemePreference, getCacheTtlDays } from './src/db/settingsDb';
+import { purgeExpiredCache } from './src/db/cacheDb';
 import AppNavigator from './src/navigation/AppNavigator';
 
 function Root() {
@@ -22,6 +23,8 @@ function Root() {
         await initAuth();
         const saved = await getThemePreference();
         setColorScheme(saved);
+        const cacheTtlDays = await getCacheTtlDays();
+        await purgeExpiredCache(cacheTtlDays).catch(() => {});
         setDbReady(true);
       })
       .catch((err: unknown) => {

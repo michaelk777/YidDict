@@ -84,7 +84,6 @@ export async function initDatabase(): Promise<void> {
     ['low_token_threshold', '90'],
     ['theme', 'system'],
     ['cache_ttl_days', '90'],
-    ['max_cache_entries', '1000'],
     ['use_all_sources', '0'],
     ['yivo_to_hebrew', '0'],
     ['yivo_to_hebrew_warned', '0'],

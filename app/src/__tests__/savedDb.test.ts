@@ -5,11 +5,13 @@ import { getDatabase } from '../db/database';
 import { __mockDb } from '../../__mocks__/expo-sqlite';
 import {
   getSavedEntries,
+  getSavedEntriesCount,
   getSavedKeySet,
   saveEntry,
   saveEntries,
   deleteEntry,
   clearSaved,
+  trimSaved,
   buildFullGrammar,
   generateCsv,
   generateTsv,
@@ -206,6 +208,50 @@ describe('clearSaved', () => {
     await clearSaved();
     const [sql] = __mockDb.runAsync.mock.calls[0];
     expect(sql).toMatch(/DELETE FROM saved_entries$/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSavedEntriesCount
+// ---------------------------------------------------------------------------
+
+describe('getSavedEntriesCount', () => {
+  it('returns the count from saved_entries', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 42 });
+    const count = await getSavedEntriesCount();
+    expect(count).toBe(42);
+    const [sql] = __mockDb.getFirstAsync.mock.calls[0];
+    expect(sql).toMatch(/SELECT COUNT\(\*\) as count FROM saved_entries/i);
+  });
+
+  it('returns 0 when the query yields no row', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce(null);
+    const count = await getSavedEntriesCount();
+    expect(count).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// trimSaved
+// ---------------------------------------------------------------------------
+
+describe('trimSaved', () => {
+  it('deletes the oldest excess rows when over the limit', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 505 });
+    await trimSaved(500);
+    const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
+      .filter(([sql]) => (sql as string).includes('DELETE'));
+    expect(deleteCalls.length).toBe(1);
+    expect(deleteCalls[0][0]).toMatch(/ORDER BY saved_at ASC/i);
+    expect(deleteCalls[0][1]).toContain(5);
+  });
+
+  it('does nothing when under the limit', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 10 });
+    await trimSaved(500);
+    const deleteCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
+      .filter(([sql]) => (sql as string).includes('DELETE'));
+    expect(deleteCalls.length).toBe(0);
   });
 });
 

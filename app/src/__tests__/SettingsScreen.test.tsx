@@ -27,6 +27,17 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../db/cacheDb', () => ({
   clearCache: jest.fn(),
+  purgeExpiredCache: jest.fn(),
+  countExpiringCache: jest.fn(),
+}));
+
+jest.mock('../db/savedDb', () => ({
+  getSavedEntriesCount: jest.fn(),
+  trimSaved: jest.fn(),
+}));
+
+jest.mock('../context/SavedContext', () => ({
+  useSaved: jest.fn(),
 }));
 
 jest.mock('../services/verterbukh-auth', () => ({
@@ -73,7 +84,9 @@ jest.mock('../db/settingsDb', () => ({
   setVerterbukhLowTokenAlert: jest.fn(),
 }));
 
-import { clearCache } from '../db/cacheDb';
+import { clearCache, purgeExpiredCache, countExpiringCache } from '../db/cacheDb';
+import { getSavedEntriesCount, trimSaved } from '../db/savedDb';
+import { useSaved } from '../context/SavedContext';
 
 import {
   getCredentials,
@@ -129,6 +142,12 @@ const mockGetLowTokenThreshold = getLowTokenThreshold as jest.Mock;
 const mockSetLowTokenThreshold = setLowTokenThreshold as jest.Mock;
 const mockGetCacheTtlDays = getCacheTtlDays as jest.Mock;
 const mockSetCacheTtlDays = setCacheTtlDays as jest.Mock;
+const mockPurgeExpiredCache = purgeExpiredCache as jest.Mock;
+const mockCountExpiringCache = countExpiringCache as jest.Mock;
+const mockGetSavedEntriesCount = getSavedEntriesCount as jest.Mock;
+const mockTrimSaved = trimSaved as jest.Mock;
+const mockUseSaved = useSaved as jest.Mock;
+const mockRefreshSaved = jest.fn().mockResolvedValue(undefined);
 const mockSetThemePreference = setThemePreference as jest.Mock;
 const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
 const mockSetVerterbukhExhaustedAlert = setVerterbukhExhaustedAlert as jest.Mock;
@@ -185,6 +204,11 @@ beforeEach(() => {
   (getHebrewToYivoWarned as jest.Mock).mockResolvedValue(false);
   (setHebrewToYivoWarned as jest.Mock).mockResolvedValue(undefined);
   (clearCache as jest.Mock).mockResolvedValue(undefined);
+  mockPurgeExpiredCache.mockResolvedValue(undefined);
+  mockCountExpiringCache.mockResolvedValue(0);
+  mockGetSavedEntriesCount.mockResolvedValue(0);
+  mockTrimSaved.mockResolvedValue(undefined);
+  mockUseSaved.mockReturnValue({ refreshSaved: mockRefreshSaved });
   (getVerterbukhQuota as jest.Mock).mockResolvedValue(null);
   mockGetVerterbukhExhaustedAlert.mockResolvedValue(false);
   mockSetVerterbukhExhaustedAlert.mockResolvedValue(undefined);
@@ -356,6 +380,71 @@ describe('SettingsScreen — numeric settings', () => {
     await waitFor(() => {
       expect(mockSetMaxSavedEntries).toHaveBeenCalledWith(800);
     });
+    expect(mockTrimSaved).toHaveBeenCalledWith(800);
+    expect(mockRefreshSaved).toHaveBeenCalled();
+  });
+
+  it('does not show a confirmation alert when lowering the max below the current saved count', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockGetSavedEntriesCount.mockResolvedValue(50);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('max-saved-entries-input'));
+    fireEvent.changeText(screen.getByTestId('max-saved-entries-input'), '100');
+    fireEvent(screen.getByTestId('max-saved-entries-input'), 'blur');
+    await waitFor(() => expect(mockSetMaxSavedEntries).toHaveBeenCalledWith(100));
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows a confirmation alert with the exact delete count when lowering the max below the current saved count', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockGetSavedEntriesCount.mockResolvedValue(500);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('max-saved-entries-input'));
+    fireEvent.changeText(screen.getByTestId('max-saved-entries-input'), '100');
+    fireEvent(screen.getByTestId('max-saved-entries-input'), 'blur');
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Reduce Max Saved Entries?',
+        expect.stringContaining('400 oldest of your 500 saved entries'),
+        expect.any(Array)
+      );
+    });
+    expect(mockSetMaxSavedEntries).not.toHaveBeenCalled();
+  });
+
+  it('saves and trims when Continue is chosen after lowering the max', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockGetSavedEntriesCount.mockResolvedValue(500);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('max-saved-entries-input'));
+    fireEvent.changeText(screen.getByTestId('max-saved-entries-input'), '100');
+    fireEvent(screen.getByTestId('max-saved-entries-input'), 'blur');
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const continueBtn = buttons.find(b => b.text === 'Continue');
+    await continueBtn!.onPress!();
+    expect(mockSetMaxSavedEntries).toHaveBeenCalledWith(100);
+    expect(mockTrimSaved).toHaveBeenCalledWith(100);
+    expect(mockRefreshSaved).toHaveBeenCalled();
+  });
+
+  it('reverts the input and does not save, trim, or refresh when Cancel is chosen after lowering the max', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockGetSavedEntriesCount.mockResolvedValue(500);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('max-saved-entries-input'));
+    fireEvent.changeText(screen.getByTestId('max-saved-entries-input'), '100');
+    fireEvent(screen.getByTestId('max-saved-entries-input'), 'blur');
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const cancelBtn = buttons.find(b => b.text === 'Cancel');
+    await cancelBtn!.onPress!();
+    await waitFor(() => {
+      expect(screen.getByTestId('max-saved-entries-input').props.value).toBe('500');
+    });
+    expect(mockSetMaxSavedEntries).not.toHaveBeenCalled();
+    expect(mockTrimSaved).not.toHaveBeenCalled();
+    expect(mockRefreshSaved).not.toHaveBeenCalled();
   });
 
   it('saves low-token threshold on blur with a valid value', async () => {
@@ -406,6 +495,78 @@ describe('SettingsScreen — numeric settings', () => {
     await waitFor(() => {
       expect(mockSetCacheTtlDays).toHaveBeenCalledWith(180);
     });
+    expect(mockPurgeExpiredCache).toHaveBeenCalledWith(180);
+  });
+
+  it('increasing the cache TTL does not show a confirmation alert', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '180');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => expect(mockSetCacheTtlDays).toHaveBeenCalledWith(180));
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not show a confirmation alert when decreasing the TTL would not expire anything', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockCountExpiringCache.mockResolvedValue(0);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '30');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => expect(mockSetCacheTtlDays).toHaveBeenCalledWith(30));
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows a confirmation alert with the exact expiring count when decreasing the TTL', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockCountExpiringCache.mockResolvedValue(42);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '30');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Reduce Cache Duration?',
+        expect.stringContaining('42 cached results'),
+        expect.any(Array)
+      );
+    });
+    expect(mockSetCacheTtlDays).not.toHaveBeenCalled();
+  });
+
+  it('saves and purges the cache when Continue is chosen after decreasing the TTL', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockCountExpiringCache.mockResolvedValue(42);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '30');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const continueBtn = buttons.find(b => b.text === 'Continue');
+    await continueBtn!.onPress!();
+    expect(mockSetCacheTtlDays).toHaveBeenCalledWith(30);
+    expect(mockPurgeExpiredCache).toHaveBeenCalledWith(30);
+  });
+
+  it('reverts the input and does not save when Cancel is chosen after decreasing the TTL', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockCountExpiringCache.mockResolvedValue(42);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('cache-ttl-days-input'));
+    fireEvent.changeText(screen.getByTestId('cache-ttl-days-input'), '30');
+    fireEvent(screen.getByTestId('cache-ttl-days-input'), 'blur');
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    const cancelBtn = buttons.find(b => b.text === 'Cancel');
+    await cancelBtn!.onPress!();
+    await waitFor(() => {
+      expect(screen.getByTestId('cache-ttl-days-input').props.value).toBe('90');
+    });
+    expect(mockSetCacheTtlDays).not.toHaveBeenCalled();
+    expect(mockPurgeExpiredCache).not.toHaveBeenCalled();
   });
 
   it('reverts cache TTL on out-of-range input', async () => {

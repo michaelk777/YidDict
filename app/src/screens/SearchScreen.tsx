@@ -20,14 +20,14 @@ import { lookupVerterbukh, VerterbukhChoice, VerterbukhQuota } from '../services
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
-import { saveEntry, saveEntries, deleteEntriesByKey } from '../db/savedDb';
+import { saveEntry, saveEntries, deleteEntriesByKey, getSavedEntriesCount } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
 import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
 import { GoogleTranslateAttribution } from '../components/GoogleTranslateAttribution';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { hebrewToYivo } from '../utils/hebrewToYivo';
 
@@ -150,6 +150,32 @@ export default function SearchScreen() {
   // Session-scoped exhaustion/low-token tracking. useRefs so updates don't trigger re-renders.
   const verterbukhExhausted = useRef(false);
   const verterbukhLowToken = useRef(false);
+  const approachingMaxSaved = useRef(false);
+
+  /**
+   * Warn once (per crossing) when saved entries first reach >= 90% of max_saved_entries.
+   * Mirrors the Verterbukh low-token alert's session-scoped "alert once" pattern.
+   */
+  const checkApproachingMaxSaved = useCallback(async () => {
+    const [count, max] = await Promise.all([
+      getSavedEntriesCount().catch(() => 0),
+      getMaxSavedEntries().catch(() => 500),
+    ]);
+    if (max <= 0) return;
+    const ratio = count / max;
+    if (ratio >= 0.9) {
+      if (!approachingMaxSaved.current) {
+        const pct = Math.floor(ratio * 100);
+        Alert.alert(
+          'Approaching Max Saved Entries',
+          `Warning, you have reached ${pct}% of your max save entries. If possible, consider increasing your maximum saved entries or manually removing entries or you may soon lose some of your earliest saved entries.`,
+        );
+      }
+      approachingMaxSaved.current = true;
+    } else {
+      approachingMaxSaved.current = false;
+    }
+  }, []);
 
   /**
    * Update quota state and manage exhaustion/low-token alerts.
@@ -527,9 +553,10 @@ export default function SearchScreen() {
       await deleteEntriesByKey([entry], source);
     } else {
       await saveEntry(query.trim(), entry, source);
+      await checkApproachingMaxSaved();
     }
     await refreshSaved();
-  }, [query, savedKeySet, refreshSaved]);
+  }, [query, savedKeySet, refreshSaved, checkApproachingMaxSaved]);
 
   const handleSaveAll = useCallback(async () => {
     if (entries.length === 0) return;
@@ -550,8 +577,11 @@ export default function SearchScreen() {
         await saveEntries(query.trim(), srcEntries, src);
       }
     }
+    if (!isAllSaved) {
+      await checkApproachingMaxSaved();
+    }
     await refreshSaved();
-  }, [query, entries, savedKeySet, refreshSaved]);
+  }, [query, entries, savedKeySet, refreshSaved, checkApproachingMaxSaved]);
 
   const handleClear = useCallback(() => {
     setQuery('');

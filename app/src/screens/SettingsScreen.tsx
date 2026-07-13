@@ -14,6 +14,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useSaved } from '../context/SavedContext';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getCredentials,
@@ -58,10 +59,9 @@ import {
   setVerterbukhExhaustedAlert,
   getVerterbukhLowTokenAlert,
   setVerterbukhLowTokenAlert,
-  getMaxCacheEntries,
-  setMaxCacheEntries,
 } from '../db/settingsDb';
-import { clearCache } from '../db/cacheDb';
+import { clearCache, purgeExpiredCache, countExpiringCache } from '../db/cacheDb';
+import { getSavedEntriesCount, trimSaved } from '../db/savedDb';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,6 +75,7 @@ type LoginStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export default function SettingsScreen() {
   const { theme, schemeOverride, setColorScheme } = useTheme();
+  const { refreshSaved } = useSaved();
   const s = makeStyles(theme);
 
   // Verterbukh login state
@@ -239,20 +240,81 @@ export default function SettingsScreen() {
     await setVerterbukhLowTokenAlert(value).catch(() => {});
   }, []);
 
-  const handleSaveMaxEntries = useCallback(async (value: number) => {
-    setMaxSavedEntriesState(value);
-    await setMaxSavedEntries(value).catch(() => {});
-  }, []);
+  const handleSaveMaxEntries = useCallback(async (value: number): Promise<boolean> => {
+    const commitChange = async () => {
+      setMaxSavedEntriesState(value);
+      await setMaxSavedEntries(value).catch(() => {});
+      await trimSaved(value).catch(() => {});
+      await refreshSaved().catch(() => {});
+    };
+
+    const count = await getSavedEntriesCount().catch(() => 0);
+    const excess = count - value;
+    if (excess <= 0) {
+      await commitChange();
+      return true;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Reduce Max Saved Entries?',
+        `This will permanently delete the ${excess} oldest of your ${count} saved entries.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: async () => {
+              await commitChange();
+              resolve(true);
+            },
+          },
+        ]
+      );
+    });
+  }, [refreshSaved]);
 
   const handleSaveLowTokenThreshold = useCallback(async (value: number) => {
     setLowTokenThresholdState(value);
     await setLowTokenThreshold(value).catch(() => {});
   }, []);
 
-  const handleSaveCacheTtlDays = useCallback(async (value: number) => {
-    setCacheTtlDaysState(value);
-    await setCacheTtlDays(value).catch(() => {});
-  }, []);
+  const handleSaveCacheTtlDays = useCallback(async (value: number): Promise<boolean> => {
+    const commitChange = async () => {
+      setCacheTtlDaysState(value);
+      await setCacheTtlDays(value).catch(() => {});
+      await purgeExpiredCache(value).catch(() => {});
+    };
+
+    if (value >= cacheTtlDays) {
+      await commitChange();
+      return true;
+    }
+
+    const expiringCount = await countExpiringCache(value).catch(() => 0);
+    if (expiringCount <= 0) {
+      await commitChange();
+      return true;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Reduce Cache Duration?',
+        `This will permanently remove ${expiringCount} cached results older than the new limit.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: async () => {
+              await commitChange();
+              resolve(true);
+            },
+          },
+        ]
+      );
+    });
+  }, [cacheTtlDays]);
 
   const handleClearCache = useCallback(() => {
     Alert.alert(
@@ -667,7 +729,7 @@ interface NumericSettingRowProps {
   min: number;
   max: number;
   inputWidth?: number;
-  onSave: (n: number) => void;
+  onSave: (n: number) => void | Promise<boolean | void>;
   theme: ReturnType<typeof useTheme>['theme'];
   s: ReturnType<typeof makeStyles>;
   testID?: string;
@@ -681,10 +743,13 @@ function NumericSettingRow({ label, value, suffix, min, max, inputWidth, onSave,
     setText(String(value));
   }, [value]);
 
-  const commit = () => {
+  const commit = async () => {
     const n = parseInt(text, 10);
     if (!isNaN(n) && n >= min && n <= max) {
-      onSave(n);
+      const accepted = await onSave(n);
+      if (accepted === false) {
+        setText(String(value));
+      }
     } else {
       setText(String(value));
     }

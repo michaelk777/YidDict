@@ -48,6 +48,7 @@ jest.mock('../db/savedDb', () => ({
   saveEntry: jest.fn().mockResolvedValue(undefined),
   saveEntries: jest.fn().mockResolvedValue(undefined),
   deleteEntriesByKey: jest.fn().mockResolvedValue(undefined),
+  getSavedEntriesCount: jest.fn().mockResolvedValue(0),
 }));
 
 jest.mock('../context/SavedContext', () => ({
@@ -64,6 +65,7 @@ jest.mock('../db/settingsDb', () => ({
   saveVerterbukhQuota: jest.fn().mockResolvedValue(undefined),
   getVerterbukhExhaustedAlert: jest.fn().mockResolvedValue(false),
   getVerterbukhLowTokenAlert: jest.fn().mockResolvedValue(true),
+  getMaxSavedEntries: jest.fn().mockResolvedValue(500),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 
@@ -72,8 +74,8 @@ import { lookupVerterbukh } from '../services/verterbukh-service';
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
-import { deleteEntriesByKey } from '../db/savedDb';
-import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert } from '../db/settingsDb';
+import { deleteEntriesByKey, getSavedEntriesCount } from '../db/savedDb';
+import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries } from '../db/settingsDb';
 import { useSaved } from '../context/SavedContext';
 
 const mockLookup = lookupFinkel as jest.Mock;
@@ -87,6 +89,8 @@ const mockGetSourceOrder = getSourceOrder as jest.Mock;
 const mockGetUseAllSources = getUseAllSources as jest.Mock;
 const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
 const mockGetVerterbukhLowTokenAlert = getVerterbukhLowTokenAlert as jest.Mock;
+const mockGetSavedEntriesCount = getSavedEntriesCount as jest.Mock;
+const mockGetMaxSavedEntries = getMaxSavedEntries as jest.Mock;
 const mockUseSaved = useSaved as jest.Mock;
 
 // ---------------------------------------------------------------------------
@@ -704,6 +708,88 @@ describe('SearchScreen — Verterbukh quota badge', () => {
 
     await waitFor(() => screen.getByTestId('quota-badge'));
     expect(mockAlert).not.toHaveBeenCalledWith('Low Verterbukh Tokens', expect.any(String));
+  });
+});
+
+describe('SearchScreen — approaching max saved entries warning', () => {
+  beforeEach(() => {
+    mockLookup.mockResolvedValue(sampleEntries);
+  });
+
+  it('shows a warning when saved entries first reach >= 90% of the max after saving', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(90);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => {
+      expect(mockAlert).toHaveBeenCalledWith(
+        'Approaching Max Saved Entries',
+        expect.stringContaining('90%')
+      );
+    });
+  });
+
+  it('does not show the warning when saved entries remain below 90% of the max', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(50);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(mockGetSavedEntriesCount).toHaveBeenCalled());
+    expect(mockAlert).not.toHaveBeenCalledWith('Approaching Max Saved Entries', expect.any(String));
+  });
+
+  it('does not check the saved count when unsaving an entry', async () => {
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set(['שיין|pretty|finkel']),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: jest.fn().mockResolvedValue(undefined),
+    });
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(mockDeleteEntriesByKey).toHaveBeenCalled());
+    expect(mockGetSavedEntriesCount).not.toHaveBeenCalled();
+  });
+
+  it('only shows the warning once while staying at or above 90% across multiple saves', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(95);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+    await waitFor(() => expect(mockAlert).toHaveBeenCalledTimes(1));
+
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[1]);
+    await waitFor(() => expect(mockGetSavedEntriesCount).toHaveBeenCalledTimes(2));
+    expect(mockAlert).toHaveBeenCalledTimes(1);
   });
 });
 

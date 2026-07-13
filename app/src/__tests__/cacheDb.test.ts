@@ -10,7 +10,7 @@ jest.mock('../db/database');
 
 import { getDatabase } from '../db/database';
 import { __mockDb } from '../../__mocks__/expo-sqlite';
-import { getCachedEntries, saveToCache, clearCache } from '../db/cacheDb';
+import { getCachedEntries, saveToCache, clearCache, purgeExpiredCache, countExpiringCache } from '../db/cacheDb';
 import { DictEntry } from '../types';
 
 const mockGetDatabase = getDatabase as jest.Mock;
@@ -184,6 +184,47 @@ describe('clearCache', () => {
 
   it('does not touch any other table', async () => {
     await clearCache();
+    expect(__mockDb.runAsync).toHaveBeenCalledTimes(1);
+    const [sql] = __mockDb.runAsync.mock.calls[0];
+    expect((sql as string).toLowerCase()).not.toContain('saved_entries');
+  });
+});
+
+describe('countExpiringCache', () => {
+  it('returns the count of rows at or before the TTL cutoff', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce({ count: 42 });
+    const before = Date.now();
+    const count = await countExpiringCache(30);
+    const after = Date.now();
+    expect(count).toBe(42);
+    const [sql, params] = __mockDb.getFirstAsync.mock.calls[0];
+    expect(sql).toMatch(/SELECT COUNT\(\*\) as count FROM cached_results WHERE fetched_at <= \?/i);
+    const cutoff = (params as number[])[0];
+    expect(cutoff).toBeGreaterThanOrEqual(before - 30 * 24 * 60 * 60 * 1000);
+    expect(cutoff).toBeLessThanOrEqual(after - 30 * 24 * 60 * 60 * 1000);
+  });
+
+  it('returns 0 when the query yields no row', async () => {
+    __mockDb.getFirstAsync.mockResolvedValueOnce(null);
+    const count = await countExpiringCache(30);
+    expect(count).toBe(0);
+  });
+});
+
+describe('purgeExpiredCache', () => {
+  it('deletes only rows with fetched_at at or before the TTL cutoff', async () => {
+    const before = Date.now();
+    await purgeExpiredCache(30);
+    const after = Date.now();
+    const [sql, params] = __mockDb.runAsync.mock.calls[0];
+    expect(sql).toMatch(/DELETE FROM cached_results WHERE fetched_at <= \?/i);
+    const cutoff = (params as number[])[0];
+    expect(cutoff).toBeGreaterThanOrEqual(before - 30 * 24 * 60 * 60 * 1000);
+    expect(cutoff).toBeLessThanOrEqual(after - 30 * 24 * 60 * 60 * 1000);
+  });
+
+  it('does not touch any other table', async () => {
+    await purgeExpiredCache(90);
     expect(__mockDb.runAsync).toHaveBeenCalledTimes(1);
     const [sql] = __mockDb.runAsync.mock.calls[0];
     expect((sql as string).toLowerCase()).not.toContain('saved_entries');

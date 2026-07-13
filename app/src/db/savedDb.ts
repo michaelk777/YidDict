@@ -52,6 +52,14 @@ export async function getSavedEntries(): Promise<SavedEntry[]> {
  * Key format: `${yiddishHebrew ?? ''}|${english ?? ''}|${source}`.
  * Used by SearchScreen to show filled/outline bookmark per result.
  */
+export async function getSavedEntriesCount(): Promise<number> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM saved_entries'
+  );
+  return row?.count ?? 0;
+}
+
 export async function getSavedKeySet(): Promise<Set<string>> {
   console.log('[YidDict] savedDb: getSavedKeySet');
   const db = getDatabase();
@@ -196,7 +204,7 @@ export function generateTsv(entries: SavedEntry[]): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function trimSaved(maxEntries: number): Promise<void> {
+export async function trimSaved(maxEntries: number): Promise<void> {
   const db = getDatabase();
   const row = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM saved_entries'

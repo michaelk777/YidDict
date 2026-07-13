@@ -45,14 +45,14 @@ export async function getCachedEntries(
 
 /**
  * Saves DictEntry results to the cache. One row per entry.
- * After saving, trims the cache to maxCacheEntries (default 1000) by
+ * After saving, trims the cache to maxCacheEntries (default 5000) by
  * deleting the oldest rows first.
  */
 export async function saveToCache(
   query: string,
   entries: DictEntry[],
   source: DictSource,
-  { maxCacheEntries = 1000 }: { maxCacheEntries?: number } = {}
+  { maxCacheEntries = 5000 }: { maxCacheEntries?: number } = {}
 ): Promise<void> {
   console.log(`[YidDict] cacheDb: saveToCache query="${query}" source="${source}" entries=${entries.length}`);
   const db = getDatabase();
@@ -79,6 +79,32 @@ export async function saveToCache(
   }
   console.log(`[YidDict] cacheDb: saved ${entries.length} entr(ies) to cache`);
   await trimCache(maxCacheEntries);
+}
+
+/**
+ * Returns the number of cached_results rows older than cacheTtlDays — i.e.
+ * how many rows purgeExpiredCache(cacheTtlDays) would remove right now.
+ */
+export async function countExpiringCache(cacheTtlDays: number): Promise<number> {
+  const db = getDatabase();
+  const cutoff = Date.now() - cacheTtlDays * 24 * 60 * 60 * 1000;
+  const row = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM cached_results WHERE fetched_at <= ?', [cutoff]
+  );
+  return row?.count ?? 0;
+}
+
+/**
+ * Deletes cached_results rows older than cacheTtlDays. Run on app launch and
+ * whenever the user changes the cache TTL setting, so entries that fall
+ * outside the (possibly new, shorter) window are purged immediately rather
+ * than lingering as unrefreshable rows.
+ */
+export async function purgeExpiredCache(cacheTtlDays: number): Promise<void> {
+  const db = getDatabase();
+  const cutoff = Date.now() - cacheTtlDays * 24 * 60 * 60 * 1000;
+  const result = await db.runAsync('DELETE FROM cached_results WHERE fetched_at <= ?', [cutoff]);
+  console.log(`[YidDict] cacheDb: purgeExpiredCache ttl=${cacheTtlDays}d — removed ${result.changes} row(s)`);
 }
 
 /**

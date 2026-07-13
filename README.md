@@ -10,7 +10,7 @@ A cross-platform mobile dictionary app for bidirectional Yiddish ↔ English loo
   - **Finkel's dictionary** — `cs.engr.uky.edu/~raphael/yiddish`
   - **Verterbukh** — `verterbukh.org`
   - **Google Translate**
-- Offline access via local SQLite cache (max 1000 entries)
+- Offline access via local SQLite cache (max 5000 entries)
 - Save entries with one tap (default max 500 entries configurable in Settings); export to CSV or TSV (UTF-8 BOM)
 - Configurable search source order, Verterbukh access, and low-token alert threshold configurable in Settings
 - Light and dark mode

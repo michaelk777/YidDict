@@ -32,6 +32,11 @@ jest.mock('../db/database', () => ({
 }));
 jest.mock('../db/settingsDb', () => ({
   getThemePreference: jest.fn().mockResolvedValue('system'),
+  getCacheTtlDays: jest.fn().mockResolvedValue(90),
+}));
+
+jest.mock('../db/cacheDb', () => ({
+  purgeExpiredCache: jest.fn().mockResolvedValue(undefined),
 }));
 
 // SavedProvider is mounted after DB init — stub it so it doesn't call getSavedEntries
@@ -40,9 +45,13 @@ jest.mock('../context/SavedContext', () => ({
 }));
 
 import { initDatabase } from '../db/database';
+import { getCacheTtlDays } from '../db/settingsDb';
+import { purgeExpiredCache } from '../db/cacheDb';
 import App from '../../App';
 
 const mockInitDatabase = initDatabase as jest.Mock;
+const mockGetCacheTtlDays = getCacheTtlDays as jest.Mock;
+const mockPurgeExpiredCache = purgeExpiredCache as jest.Mock;
 
 describe('App', () => {
   beforeEach(() => {
@@ -88,6 +97,13 @@ describe('App', () => {
     mockInitDatabase.mockResolvedValue(undefined);
     render(<App />);
     await waitFor(() => expect(mockInitDatabase).toHaveBeenCalledTimes(1));
+  });
+
+  it('purges expired cache entries using the current TTL setting on launch', async () => {
+    mockInitDatabase.mockResolvedValue(undefined);
+    mockGetCacheTtlDays.mockResolvedValue(30);
+    render(<App />);
+    await waitFor(() => expect(mockPurgeExpiredCache).toHaveBeenCalledWith(30));
   });
 
   it('logs the error and stays on the loading screen if initDatabase rejects', async () => {

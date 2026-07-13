@@ -210,14 +210,6 @@ export async function setVerterbukhLowTokenAlert(v: boolean): Promise<void> {
   );
 }
 
-export async function getMaxCacheEntries(): Promise<number> {
-  return getNumericSetting('max_cache_entries', 1000);
-}
-
-export async function setMaxCacheEntries(v: number): Promise<void> {
-  return setNumericSetting('max_cache_entries', v);
-}
-
 export async function getVerterbukhKeepLoggedIn(): Promise<boolean> {
   const db = getDatabase();
   const row = await db.getFirstAsync<{ value: string }>(
