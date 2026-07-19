@@ -16,6 +16,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useSaved } from '../context/SavedContext';
 import { Ionicons } from '@expo/vector-icons';
+import { version as APP_VERSION } from '../../package.json';
 import {
   getCredentials,
   saveCredentials,
@@ -59,6 +60,8 @@ import {
   setVerterbukhExhaustedAlert,
   getVerterbukhLowTokenAlert,
   setVerterbukhLowTokenAlert,
+  getSaveTrimAlert,
+  setSaveTrimAlert,
 } from '../db/settingsDb';
 import { clearCache, purgeExpiredCache, countExpiringCache } from '../db/cacheDb';
 import { getSavedEntriesCount, trimSaved } from '../db/savedDb';
@@ -90,6 +93,9 @@ export default function SettingsScreen() {
   const [pickerSlot, setPickerSlot] = useState<SlotIndex | null>(null);
   const [useAllSources, setUseAllSourcesState] = useState(false);
 
+  // About modal
+  const [aboutVisible, setAboutVisible] = useState(false);
+
   // Numeric settings state
   const [maxSavedEntries, setMaxSavedEntriesState] = useState(500);
   const [lowTokenThreshold, setLowTokenThresholdState] = useState(90);
@@ -106,6 +112,9 @@ export default function SettingsScreen() {
   const [verterbukhExhaustedAlert, setVerterbukhExhaustedAlertState] = useState(true);
   const [verterbukhLowTokenAlert, setVerterbukhLowTokenAlertState] = useState(true);
 
+  // Alert before a save auto-trims older saved entries
+  const [saveTrimAlert, setSaveTrimAlertState] = useState(true);
+
   // Last-known Verterbukh quota (persisted after each search)
   const [verterbukhQuota, setVerterbukhQuotaState] = useState<{ used: number; total: number } | null>(null);
 
@@ -115,7 +124,7 @@ export default function SettingsScreen() {
   // Load all settings on mount in parallel so toggles render with correct values immediately.
   useEffect(() => {
     async function loadSettings() {
-      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, exhaustedAlert, lowTokenAlert, quota] =
+      const [creds, order, maxEntries, threshold, ttl, allSources, yivoToHeb, hebToYivo, keepLI, exhaustedAlert, lowTokenAlert, saveTrimAlertValue, quota] =
         await Promise.all([
           getCredentials().catch(() => null),
           getSourceOrder().catch(() => ['finkel', 'google_translate', 'none'] as SourceSlot[]),
@@ -128,6 +137,7 @@ export default function SettingsScreen() {
           getVerterbukhKeepLoggedIn().catch(() => false),
           getVerterbukhExhaustedAlert().catch(() => true),
           getVerterbukhLowTokenAlert().catch(() => true),
+          getSaveTrimAlert().catch(() => true),
           getVerterbukhQuota().catch(() => null),
         ]);
       if (creds) setSavedUsername(creds.username);
@@ -141,6 +151,7 @@ export default function SettingsScreen() {
       setKeepLoggedInState(keepLI);
       setVerterbukhExhaustedAlertState(exhaustedAlert);
       setVerterbukhLowTokenAlertState(lowTokenAlert);
+      setSaveTrimAlertState(saveTrimAlertValue);
       setVerterbukhQuotaState(quota);
       setSettingsLoaded(true);
     }
@@ -238,6 +249,11 @@ export default function SettingsScreen() {
   const handleToggleVerterbukhLowTokenAlert = useCallback(async (value: boolean) => {
     setVerterbukhLowTokenAlertState(value);
     await setVerterbukhLowTokenAlert(value).catch(() => {});
+  }, []);
+
+  const handleToggleSaveTrimAlert = useCallback(async (value: boolean) => {
+    setSaveTrimAlertState(value);
+    await setSaveTrimAlert(value).catch(() => {});
   }, []);
 
   const handleSaveMaxEntries = useCallback(async (value: number): Promise<boolean> => {
@@ -601,6 +617,21 @@ export default function SettingsScreen() {
       {/* Saved Entries */}
       <SectionHeader label="Saved Entries" theme={theme} />
       <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={s.toggleRow}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={[s.toggleLabel, { color: theme.text }]}>Alert before trimming on save</Text>
+            <Text style={[s.numericHint, { color: theme.textSecondary, marginTop: 2 }]}>
+              Show a warning before a save removes older entries when maximum saved entry volume is reached.
+            </Text>
+          </View>
+          <Switch
+            value={saveTrimAlert}
+            onValueChange={handleToggleSaveTrimAlert}
+            trackColor={{ false: theme.textSecondary, true: theme.primary }}
+            thumbColor="#FFFFFF"
+            testID="save-trim-alert-toggle"
+          />
+        </View>
         <NumericSettingRow
           label="Max saved entries"
           value={maxSavedEntries}
@@ -611,7 +642,6 @@ export default function SettingsScreen() {
           theme={theme}
           s={s}
           testID="max-saved-entries-input"
-          showDivider={false}
         />
       </View>
 
@@ -670,12 +700,6 @@ export default function SettingsScreen() {
         ))}
       </View>
 
-      <SectionHeader label="Language" theme={theme} />
-      <PlaceholderRow label="Language" theme={theme} />
-
-      <SectionHeader label="Security" theme={theme} />
-      <PlaceholderRow label="Security" theme={theme} />
-
       {/* Experimental */}
       <SectionHeader label="Experimental" theme={theme} />
       <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -714,9 +738,61 @@ export default function SettingsScreen() {
           />
         </View>
       </View>
+
+      {/* About */}
+      <SectionHeader label="About" theme={theme} />
+      <View style={[s.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <TouchableOpacity
+          style={s.aboutRow}
+          onPress={() => setAboutVisible(true)}
+          testID="about-row"
+        >
+          <Text style={[s.numericLabel, { color: theme.text }]}>About YidDict</Text>
+          <Text style={[sourceRowChevron, { color: theme.textSecondary }]}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* About modal */}
+      <Modal
+        visible={aboutVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAboutVisible(false)}
+        testID="about-modal"
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setAboutVisible(false)}>
+          <Pressable style={[s.aboutModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={s.aboutModalHeader}>
+              <Text style={[s.aboutModalTitle, { color: theme.text }]}>About YidDict</Text>
+              <TouchableOpacity
+                onPress={() => setAboutVisible(false)}
+                accessibilityLabel="Close"
+                testID="about-modal-close"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={22} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={s.aboutModalScroll}>
+              <Text style={[s.aboutModalVersion, { color: theme.textSecondary }]}>Version {APP_VERSION}</Text>
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>{ABOUT_TEXT}</Text>
+              <Text style={[s.aboutModalDisclaimer, { color: theme.textSecondary, borderTopColor: theme.border }]}>
+                {GOOGLE_TRANSLATE_DISCLAIMER}
+              </Text>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
+
+// Fill in with your own About copy — shown in the scrollable About modal above.
+const ABOUT_TEXT = '';
+
+// Required Google Translate attribution — verbatim per Google's terms of use.
+const GOOGLE_TRANSLATE_DISCLAIMER =
+  'THIS SERVICE MAY CONTAIN TRANSLATIONS POWERED BY GOOGLE. GOOGLE DISCLAIMS ALL WARRANTIES RELATED TO THE TRANSLATIONS, EXPRESS OR IMPLIED, INCLUDING ANY WARRANTIES OF ACCURACY, RELIABILITY, AND ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.';
 
 // ---------------------------------------------------------------------------
 // Numeric setting row
@@ -881,26 +957,6 @@ const sectionHeaderStyle: object = {
   marginTop: 24,
   marginBottom: 6,
   marginHorizontal: 16,
-};
-
-function PlaceholderRow({ label, theme }: { label: string; theme: ReturnType<typeof useTheme>['theme'] }) {
-  return (
-    <View style={[settingsRowStyle, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Text style={{ color: theme.textSecondary, fontSize: 15 }}>{label}</Text>
-      <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Coming soon  ›</Text>
-    </View>
-  );
-}
-
-const settingsRowStyle: object = {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingHorizontal: 16,
-  paddingVertical: 14,
-  marginHorizontal: 16,
-  borderRadius: 8,
-  borderWidth: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -1069,6 +1125,49 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     modalOptionSub: {
       fontSize: 11,
       marginTop: 2,
+    },
+    // About row + modal
+    aboutRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+    },
+    aboutModalCard: {
+      width: '85%',
+      maxHeight: '70%',
+      borderRadius: 12,
+      borderWidth: 1,
+      overflow: 'hidden',
+      padding: 16,
+    },
+    aboutModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    aboutModalTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    aboutModalScroll: {
+      flexGrow: 0,
+    },
+    aboutModalVersion: {
+      fontSize: 12,
+      marginBottom: 10,
+    },
+    aboutModalBody: {
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    aboutModalDisclaimer: {
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 16,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
     },
   });
 }

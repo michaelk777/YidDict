@@ -10,16 +10,17 @@ import { initAuth } from './src/services/verterbukh-auth';
 import { getThemePreference, getCacheTtlDays } from './src/db/settingsDb';
 import { purgeExpiredCache } from './src/db/cacheDb';
 import AppNavigator from './src/navigation/AppNavigator';
+import { log } from './src/utils/logger';
 
 function Root() {
   const [dbReady, setDbReady] = useState(false);
   const { colorScheme, theme, setColorScheme } = useTheme();
 
   useEffect(() => {
-    console.log('[YidDict] App: Root mounted, starting DB init');
+    log('[YidDict] App: Root mounted, starting DB init');
     initDatabase()
       .then(async () => {
-        console.log('[YidDict] App: DB init succeeded, rendering navigator');
+        log('[YidDict] App: DB init succeeded, rendering navigator');
         await initAuth();
         const saved = await getThemePreference();
         setColorScheme(saved);
@@ -34,7 +35,7 @@ function Root() {
   }, []);
 
   if (!dbReady) {
-    console.log('[YidDict] App: showing loading spinner (dbReady=false)');
+    log('[YidDict] App: showing loading spinner (dbReady=false)');
     return (
       <View style={[styles.loading, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.primary} />
@@ -42,7 +43,7 @@ function Root() {
     );
   }
 
-  console.log('[YidDict] App: rendering NavigationContainer');
+  log('[YidDict] App: rendering NavigationContainer');
   return (
     <>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />

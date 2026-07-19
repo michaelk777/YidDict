@@ -3,6 +3,7 @@ import { parse } from 'node-html-parser';
 import { ensureSession, isLoggedOut, parseVerterbukhQuota, VerterbukhQuota } from './verterbukh-auth';
 import { getVerterbukhKeepLoggedIn } from '../db/settingsDb';
 import { DictEntry } from '../types';
+import { log } from '../utils/logger';
 
 export type { VerterbukhQuota } from './verterbukh-auth';
 
@@ -58,7 +59,7 @@ export async function lookupVerterbukh(
     // Session missing or expired — re-auth using stored credentials and retry once.
     // ensureSession throws if no credentials are saved, session expired, or the
     // user hasn't logged in during this app instance (keepLoggedIn=false gate).
-    console.log('[YidDict] VerterbukhService: not logged in — authenticating');
+    log('[YidDict] VerterbukhService: not logged in — authenticating');
     await ensureSession(html, keepLoggedIn);
     const retryHtml = await fetchSearch(query, primaryDir, ln);
     if (isLoggedOut(retryHtml)) {
@@ -81,7 +82,7 @@ async function fetchSearch(query: string, dir: 'from' | 'to', ln?: string): Prom
   if (ln) params.ln = ln;
 
   const response = await axios.get(BASE_URL, { params });
-  console.log(`[YidDict] VerterbukhService: fetched results for "${query}" dir=${dir}${ln ? ` (ln=${ln})` : ''}`);
+  log(`[YidDict] VerterbukhService: fetched results for "${query}" dir=${dir}${ln ? ` (ln=${ln})` : ''}`);
   return response.data as string;
 }
 
@@ -134,7 +135,7 @@ export function parseVerterbukhHtml(html: string): VerterbukhResult {
   }
 
   const quota = parseVerterbukhQuota(html);
-  if (quota) console.log(`[YidDict] VerterbukhService: quota ${quota.used}/${quota.total}`);
+  if (quota) log(`[YidDict] VerterbukhService: quota ${quota.used}/${quota.total}`);
 
   return { entries, choices, quota };
 }

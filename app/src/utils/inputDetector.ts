@@ -1,5 +1,7 @@
 // Hebrew Unicode block (letters + points): U+0590–U+05FF
 // Hebrew Presentation Forms: U+FB1D–U+FB4F
+import { log } from './logger';
+
 const HEBREW_RE = /[\u0590-\u05FF\uFB1D-\uFB4F]/;
 
 /**
@@ -17,6 +19,6 @@ export type QueryScript = 'hebrew' | 'latin';
 
 export function detectInputScript(text: string): QueryScript {
   const script: QueryScript = HEBREW_RE.test(text.trim()) ? 'hebrew' : 'latin';
-  console.log(`[YidDict] inputDetector: detected script "${script}"`);
+  log(`[YidDict] inputDetector: detected script "${script}"`);
   return script;
 }

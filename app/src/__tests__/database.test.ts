@@ -111,12 +111,28 @@ describe('database', () => {
       expect(call[1][1]).toBe('system');
     });
 
-    it('seeds verterbukh_exhausted_alert as "0"', async () => {
+    it('seeds verterbukh_exhausted_alert as "1"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
       const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'verterbukh_exhausted_alert');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('0');
+      expect(call[1][1]).toBe('1');
+    });
+
+    it('seeds verterbukh_low_token_alert as "1"', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'verterbukh_low_token_alert');
+      expect(call).toBeDefined();
+      expect(call[1][1]).toBe('1');
+    });
+
+    it('seeds save_trim_alert as "1"', async () => {
+      const { initDatabase, mockDb } = freshModules();
+      await initDatabase();
+      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'save_trim_alert');
+      expect(call).toBeDefined();
+      expect(call[1][1]).toBe('1');
     });
 
     it('uses INSERT OR IGNORE to avoid overwriting existing settings', async () => {

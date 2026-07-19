@@ -15,10 +15,11 @@
  * alongside the true multi-letter digraphs, not as single-character lookups.
  *
  * Yiddish also has three dedicated ligature letters (tsvey-vovn װ, vov-yud
- * ױ, tsvey-yudn ײ) that are their own single code points, plus a ligature +
- * combining-pasekh sequence for pasekh-tsvey-yudn (ייַ) — these are matched
- * as their own SEQUENCES entries alongside the plain-letter forms, since
- * real-world Yiddish text (e.g. from Verterbukh) mixes both spellings.
+ * ױ, tsvey-yudn ײ) that are their own single code points, plus ligature +
+ * combining-diacritic sequences for pasekh-tsvey-yudn (ייַ, "ay") and
+ * tsvey-yudn-plus-khirik (ייִ, "yi") — these are matched as their own
+ * SEQUENCES entries alongside the plain-letter forms, since real-world
+ * Yiddish text (e.g. from Verterbukh) mixes both spellings.
  */
 
 // Sequence rules — longest Hebrew code-point sequences first to prevent
@@ -26,6 +27,7 @@
 // "ey" sequence it starts with).
 const SEQUENCES: [string, string][] = [
   ['דזש', 'dzh'],   // dzh cluster (rare in native Yiddish)
+  ['ייִ', 'yi'],   // tsvey-yudn + khirik — variant spelled with two plain yud letters
   ['ייַ', 'ay'],   // pasekh-tsvey-yudn — variant spelled with two plain yud letters
   ['יי',  'ey'],    // tsvey-yudn — variant spelled with two plain yud letters
   ['וי',  'oy'],    // vov-yud
@@ -37,6 +39,7 @@ const SEQUENCES: [string, string][] = [
   ['אָ',  'o'],     // komets-alef
   ['פֿ',  'f'],     // fe with rafe
   ['פּ',  'p'],     // pe with dagesh
+  ['ײִ', 'yi'],  // tsvey-yudn ligature + khirik — variant spelled with the dedicated ligature letter (ײ)
   ['ײַ', 'ay'],  // pasekh-tsvey-yudn — variant spelled with the dedicated tsvey-yudn ligature letter (ײ)
   ['ײ',  'ey'],    // tsvey-yudn — variant spelled with the dedicated ligature letter
   ['װ',  'v'],     // tsvey-vovn — variant spelled with the dedicated ligature letter
@@ -104,11 +107,18 @@ function convertToken(token: string): string {
       }
     }
     if (!matched) {
-      if (token[i] === 'י') {
+      if (token[i] === 'א' && (token[i + 1] === 'י' || token[i + 1] === 'ײ')) {
+        // Shtumer alef (bare, no vowel diacritic) before a yud or the tsvey-yudn
+        // ligature — used in Yiddish orthography purely to mark the following
+        // letter as vowel-initial rather than a consonant glide; it is silent,
+        // e.g. איר ("ir").
+      } else if (token[i] === 'י') {
         // Bare yud is ambiguous between the "i" vowel and "y" glide. Word-initial
-        // yud is almost always the glide (e.g. "yidish", "yontev"); elsewhere
-        // it's almost always the vowel.
-        letters.push(i === 0 ? 'y' : 'i');
+        // yud followed directly by one of the vowel letters (אעו) is the glide,
+        // e.g. יאָר ("yor"); otherwise (including elsewhere in the word) it's
+        // the vowel, e.g. יד ("id").
+        const nextIsVowelLetter = i === 0 && (token[i + 1] === 'א' || token[i + 1] === 'ע' || token[i + 1] === 'ו');
+        letters.push(nextIsVowelLetter ? 'y' : 'i');
       } else {
         // Unknown character (ellipsis, apostrophe, digit, etc.) — pass through
         // so that abbreviation patterns survive conversion intact.

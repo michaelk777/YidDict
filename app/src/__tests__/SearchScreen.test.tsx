@@ -66,6 +66,7 @@ jest.mock('../db/settingsDb', () => ({
   getVerterbukhExhaustedAlert: jest.fn().mockResolvedValue(false),
   getVerterbukhLowTokenAlert: jest.fn().mockResolvedValue(true),
   getMaxSavedEntries: jest.fn().mockResolvedValue(500),
+  getSaveTrimAlert: jest.fn().mockResolvedValue(true),
   SOURCE_LABELS: jest.requireActual('../db/settingsDb').SOURCE_LABELS,
 }));
 
@@ -74,8 +75,8 @@ import { lookupVerterbukh } from '../services/verterbukh-service';
 import { lookupGoogleTranslate } from '../services/google-translate-service';
 import { getCredentials } from '../services/verterbukh-auth';
 import { getCachedEntries, saveToCache } from '../db/cacheDb';
-import { deleteEntriesByKey, getSavedEntriesCount } from '../db/savedDb';
-import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries } from '../db/settingsDb';
+import { deleteEntriesByKey, getSavedEntriesCount, saveEntry, saveEntries } from '../db/savedDb';
+import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries, getSaveTrimAlert } from '../db/settingsDb';
 import { useSaved } from '../context/SavedContext';
 
 const mockLookup = lookupFinkel as jest.Mock;
@@ -85,12 +86,15 @@ const mockGetCredentials = getCredentials as jest.Mock;
 const mockGetCached = getCachedEntries as jest.Mock;
 const mockSaveCache = saveToCache as jest.Mock;
 const mockDeleteEntriesByKey = deleteEntriesByKey as jest.Mock;
+const mockSaveEntry = saveEntry as jest.Mock;
+const mockSaveEntries = saveEntries as jest.Mock;
 const mockGetSourceOrder = getSourceOrder as jest.Mock;
 const mockGetUseAllSources = getUseAllSources as jest.Mock;
 const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock;
 const mockGetVerterbukhLowTokenAlert = getVerterbukhLowTokenAlert as jest.Mock;
 const mockGetSavedEntriesCount = getSavedEntriesCount as jest.Mock;
 const mockGetMaxSavedEntries = getMaxSavedEntries as jest.Mock;
+const mockGetSaveTrimAlert = getSaveTrimAlert as jest.Mock;
 const mockUseSaved = useSaved as jest.Mock;
 
 // ---------------------------------------------------------------------------
@@ -790,6 +794,168 @@ describe('SearchScreen — approaching max saved entries warning', () => {
     fireEvent.press(screen.getAllByTestId('save-entry-button')[1]);
     await waitFor(() => expect(mockGetSavedEntriesCount).toHaveBeenCalledTimes(2));
     expect(mockAlert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SearchScreen — save-trim confirmation', () => {
+  beforeEach(() => {
+    mockLookup.mockResolvedValue(sampleEntries);
+    mockGetSaveTrimAlert.mockResolvedValue(true);
+  });
+
+  it('confirms before a single save that would trim older entries, and proceeds on Continue', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(100);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(
+      'Save Will Remove Older Entries',
+      expect.any(String),
+      expect.any(Array)
+    ));
+    expect(mockSaveEntry).not.toHaveBeenCalled();
+
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await act(async () => buttons.find(b => b.text === 'Continue')!.onPress!());
+    expect(mockSaveEntry).toHaveBeenCalled();
+  });
+
+  it('suppresses the separate "Approaching Max Saved Entries" popup right after a trim-confirm Continue', async () => {
+    // Still >= 90% after the save completes, which would normally also fire
+    // the unrelated approaching-max popup — it should be skipped here since
+    // the trim-confirm dialog already covered this save.
+    mockGetSavedEntriesCount.mockResolvedValue(100);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await act(async () => buttons.find(b => b.text === 'Continue')!.onPress!());
+
+    await waitFor(() => expect(mockSaveEntry).toHaveBeenCalled());
+    expect(mockGetSavedEntriesCount).toHaveBeenCalledTimes(1);
+    expect(alertSpy).not.toHaveBeenCalledWith('Approaching Max Saved Entries', expect.any(String));
+  });
+
+  it('does not save when Cancel is chosen', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(100);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await act(async () => buttons.find(b => b.text === 'Cancel')!.onPress!());
+    expect(mockSaveEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not confirm when the save would stay under the max', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(10);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(mockSaveEntry).toHaveBeenCalled());
+    expect(mockAlert).not.toHaveBeenCalled();
+  });
+
+  it('skips the confirmation entirely when the setting is disabled', async () => {
+    mockGetSaveTrimAlert.mockResolvedValue(false);
+    // Deliberately still over the max — the disabled setting should skip the
+    // confirmation check regardless (the count/max values below are only
+    // consulted by the unrelated "approaching max" warning, which uses its
+    // own settings and stays silent unless it crosses 90%).
+    mockGetSavedEntriesCount.mockResolvedValue(50);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(mockSaveEntry).toHaveBeenCalled());
+    expect(mockAlert).not.toHaveBeenCalled();
+  });
+
+  it('confirms before Save All using the total entry count, and proceeds on Continue', async () => {
+    mockGetSavedEntriesCount.mockResolvedValue(99);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert');
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('save-all-button'));
+    fireEvent.press(screen.getByTestId('save-all-button'));
+
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(
+      'Save Will Remove Older Entries',
+      expect.any(String),
+      expect.any(Array)
+    ));
+    expect(mockSaveEntries).not.toHaveBeenCalled();
+
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    await act(async () => buttons.find(b => b.text === 'Continue')!.onPress!());
+    expect(mockSaveEntries).toHaveBeenCalled();
+  });
+
+  it('does not confirm when unsaving via Save All', async () => {
+    const key = `${sampleEntries[0].yiddishHebrew ?? ''}|${sampleEntries[0].english ?? ''}|${sampleEntries[0].source}`;
+    const key2 = `${sampleEntries[1].yiddishHebrew ?? ''}|${sampleEntries[1].english ?? ''}|${sampleEntries[1].source}`;
+    mockUseSaved.mockReturnValue({
+      savedKeySet: new Set([key, key2]),
+      savedEntries: [],
+      isLoading: false,
+      refreshSaved: jest.fn().mockResolvedValue(undefined),
+    });
+    mockGetSavedEntriesCount.mockResolvedValue(99);
+    mockGetMaxSavedEntries.mockResolvedValue(100);
+    const mockAlert = jest.fn();
+    jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(mockAlert);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('save-all-button'));
+    fireEvent.press(screen.getByTestId('save-all-button'));
+
+    await waitFor(() => expect(mockDeleteEntriesByKey).toHaveBeenCalled());
+    expect(mockAlert).not.toHaveBeenCalled();
+    expect(mockGetSavedEntriesCount).not.toHaveBeenCalled();
   });
 });
 

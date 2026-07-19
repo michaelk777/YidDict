@@ -118,16 +118,77 @@ describe('hebrewToYivo()', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Bare yud: word-initial → glide "y"; elsewhere → vowel "i"
+  // Bare yud: word-initial + followed by a vowel letter (אעו) → glide "y";
+  // word-initial + followed by a consonant, or anywhere else → vowel "i"
   // ---------------------------------------------------------------------------
 
-  it('converts word-initial bare yud as the glide "y"', () => {
-    expect(hebrewToYivo('יד')).toBe('yd');
+  it('converts word-initial bare yud as the vowel "i" when not followed by a vowel letter', () => {
+    // "יד" — yud is followed by a consonant (dalet)
+    expect(hebrewToYivo('יד')).toBe('id');
+  });
+
+  it('converts word-initial bare yud as the glide "y" when followed by alef', () => {
+    expect(hebrewToYivo('יאָר')).toBe('yor');
+  });
+
+  it('converts word-initial bare yud as the glide "y" when followed by ayin', () => {
+    // "יעדער" (yeder, "each"/"every")
+    expect(hebrewToYivo('יעדער')).toBe('yeder');
+  });
+
+  it('converts word-initial bare yud as the glide "y" when followed by vov', () => {
+    expect(hebrewToYivo('יוד')).toBe('yud');
   });
 
   it('converts mid-word bare yud as the vowel "i"', () => {
     // "ליד" (song) — yud is the second letter, not word-initial
     expect(hebrewToYivo('ליד')).toBe('lid');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Shtumer alef (silent, undotted) before a yud or the tsvey-yudn ligature
+  // ---------------------------------------------------------------------------
+
+  it('drops a word-initial shtumer alef before a bare yud', () => {
+    // "איר" (ir, "you"/"her") — bare alef is silent, yud is the vowel "i"
+    expect(hebrewToYivo('איר')).toBe('ir');
+  });
+
+  it('drops a mid-word shtumer alef before the tsvey-yudn ligature', () => {
+    // "פֿאַראײניקטע" (fareynikte, "united") — alef between resh and the
+    // ligature is silent; from "פֿאַראײניקטע שטאַטן" (United States)
+    expect(hebrewToYivo('פֿאַראײניקטע')).toBe('fareynikte');
+  });
+
+  it('drops a shtumer alef before the tsvey-yudn ligature', () => {
+    // "אײן" (eyn, "one") — ligature spelling
+    expect(hebrewToYivo('אײן')).toBe('eyn');
+  });
+
+  it('drops a shtumer alef before the plain two-yud tsvey-yudn spelling', () => {
+    // "איין" (eyn, "one") — plain two-yud spelling of the same word
+    expect(hebrewToYivo('איין')).toBe('eyn');
+  });
+
+  it('does not drop a vowelled alef (pasekh-alef) before a yud', () => {
+    // Pasekh-alef already matches its own SEQUENCES entry ("a") before this
+    // token is ever reached, so it must not be silenced.
+    expect(hebrewToYivo('אַיר')).toBe('air');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tsvey-yudn + khirik → "yi" (distinct from the tsvey-yudn digraph "ey"
+  // and pasekh-tsvey-yudn "ay")
+  // ---------------------------------------------------------------------------
+
+  it('converts tsvey-yudn + khirik → yi (plain two-yud spelling)', () => {
+    // "ייִנגל" (yingl, boy) — not in the whole-word EXCEPTIONS dictionary,
+    // so this exercises the SEQUENCES rule rather than an exception lookup.
+    expect(hebrewToYivo('ייִנגל')).toBe('yingl');
+  });
+
+  it('converts tsvey-yudn + khirik → yi (ligature spelling)', () => {
+    expect(hebrewToYivo('ײִנגל')).toBe('yingl');
   });
 
   // ---------------------------------------------------------------------------

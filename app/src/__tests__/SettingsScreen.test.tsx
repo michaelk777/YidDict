@@ -82,6 +82,8 @@ jest.mock('../db/settingsDb', () => ({
   setVerterbukhExhaustedAlert: jest.fn(),
   getVerterbukhLowTokenAlert: jest.fn(),
   setVerterbukhLowTokenAlert: jest.fn(),
+  getSaveTrimAlert: jest.fn(),
+  setSaveTrimAlert: jest.fn(),
 }));
 
 import { clearCache, purgeExpiredCache, countExpiringCache } from '../db/cacheDb';
@@ -128,6 +130,8 @@ import {
   setVerterbukhExhaustedAlert,
   getVerterbukhLowTokenAlert,
   setVerterbukhLowTokenAlert,
+  getSaveTrimAlert,
+  setSaveTrimAlert,
 } from '../db/settingsDb';
 
 const mockGetCredentials = getCredentials as jest.Mock;
@@ -153,6 +157,8 @@ const mockGetVerterbukhExhaustedAlert = getVerterbukhExhaustedAlert as jest.Mock
 const mockSetVerterbukhExhaustedAlert = setVerterbukhExhaustedAlert as jest.Mock;
 const mockGetVerterbukhLowTokenAlert = getVerterbukhLowTokenAlert as jest.Mock;
 const mockSetVerterbukhLowTokenAlert = setVerterbukhLowTokenAlert as jest.Mock;
+const mockGetSaveTrimAlert = getSaveTrimAlert as jest.Mock;
+const mockSetSaveTrimAlert = setSaveTrimAlert as jest.Mock;
 const mockClearVerterbukhQuota = clearVerterbukhQuota as jest.Mock;
 const mockSaveVerterbukhQuota = saveVerterbukhQuota as jest.Mock;
 
@@ -214,6 +220,8 @@ beforeEach(() => {
   mockSetVerterbukhExhaustedAlert.mockResolvedValue(undefined);
   mockGetVerterbukhLowTokenAlert.mockResolvedValue(true);
   mockSetVerterbukhLowTokenAlert.mockResolvedValue(undefined);
+  mockGetSaveTrimAlert.mockResolvedValue(true);
+  mockSetSaveTrimAlert.mockResolvedValue(undefined);
   mockClearVerterbukhQuota.mockResolvedValue(undefined);
   mockSaveVerterbukhQuota.mockResolvedValue(undefined);
 });
@@ -230,16 +238,7 @@ describe('SettingsScreen — section headers', () => {
       expect(screen.getByText('SAVED ENTRIES')).toBeTruthy();
       expect(screen.getByText('VERTERBUKH SETTINGS')).toBeTruthy();
       expect(screen.getByText('APPEARANCE')).toBeTruthy();
-      expect(screen.getByText('LANGUAGE')).toBeTruthy();
-      expect(screen.getByText('SECURITY')).toBeTruthy();
-    });
-  });
-
-  it('shows "Coming soon" on the two remaining placeholder rows', async () => {
-    renderScreen();
-    await waitFor(() => {
-      const comingSoon = screen.getAllByText(/Coming soon/);
-      expect(comingSoon.length).toBe(2);
+      expect(screen.getByText('ABOUT')).toBeTruthy();
     });
   });
 });
@@ -643,6 +642,37 @@ describe('SettingsScreen — Verterbukh low-token alert toggle', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Save-trim alert toggle
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — save-trim alert toggle', () => {
+  it('reflects the loaded setting value', async () => {
+    mockGetSaveTrimAlert.mockResolvedValue(true);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('save-trim-alert-toggle').props.value).toBe(true);
+    });
+  });
+
+  it('reflects off when the setting is false', async () => {
+    mockGetSaveTrimAlert.mockResolvedValue(false);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('save-trim-alert-toggle').props.value).toBe(false);
+    });
+  });
+
+  it('calls setSaveTrimAlert when toggled off', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('save-trim-alert-toggle'));
+    fireEvent(screen.getByTestId('save-trim-alert-toggle'), 'valueChange', false);
+    await waitFor(() => {
+      expect(mockSetSaveTrimAlert).toHaveBeenCalledWith(false);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Verterbukh login — logged out state
 // ---------------------------------------------------------------------------
 
@@ -948,5 +978,41 @@ describe('SettingsScreen — clear cache', () => {
     // Cancel has no onPress — verifying clearCache was never invoked
     expect(cancelBtn?.onPress).toBeUndefined();
     expect(clearCache).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// About modal
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — About modal', () => {
+  it('is hidden until the About row is tapped', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('about-row'));
+    expect(screen.queryByTestId('about-modal-close')).toBeNull();
+  });
+
+  it('opens when the About row is tapped', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('about-row'));
+    fireEvent.press(screen.getByTestId('about-row'));
+    expect(screen.getByTestId('about-modal-close')).toBeTruthy();
+    // "About YidDict" now appears twice: the row label and the modal title
+    expect(screen.getAllByText('About YidDict').length).toBe(2);
+  });
+
+  it('shows the required Google Translate disclaimer', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('about-row'));
+    fireEvent.press(screen.getByTestId('about-row'));
+    expect(screen.getByText(/GOOGLE DISCLAIMS ALL WARRANTIES/)).toBeTruthy();
+  });
+
+  it('closes when the close button is pressed', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('about-row'));
+    fireEvent.press(screen.getByTestId('about-row'));
+    fireEvent.press(screen.getByTestId('about-modal-close'));
+    expect(screen.queryByTestId('about-modal-close')).toBeNull();
   });
 });

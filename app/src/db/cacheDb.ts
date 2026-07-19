@@ -1,5 +1,6 @@
 import { getDatabase } from './database';
 import { DictEntry } from '../types';
+import { log } from '../utils/logger';
 
 type DictSource = 'finkel' | 'verterbukh' | 'google_translate';
 
@@ -31,14 +32,14 @@ export async function getCachedEntries(
   source: DictSource,
   cacheTtlDays = 90
 ): Promise<DictEntry[] | null> {
-  console.log(`[YidDict] cacheDb: getCachedEntries query="${query}" source="${source}" ttl=${cacheTtlDays}d`);
+  log(`[YidDict] cacheDb: getCachedEntries query="${query}" source="${source}" ttl=${cacheTtlDays}d`);
   const db = getDatabase();
   const cutoff = Date.now() - cacheTtlDays * 24 * 60 * 60 * 1000;
   const rows = await db.getAllAsync<CachedResultRow>(
     'SELECT * FROM cached_results WHERE query = ? AND source = ? AND fetched_at > ? ORDER BY id ASC',
     [query, source, cutoff]
   );
-  console.log(`[YidDict] cacheDb: cache ${rows.length ? 'HIT' : 'MISS'} — ${rows.length} row(s)`);
+  log(`[YidDict] cacheDb: cache ${rows.length ? 'HIT' : 'MISS'} — ${rows.length} row(s)`);
   if (!rows.length) return null;
   return rows.map(rowToEntry);
 }
@@ -54,7 +55,7 @@ export async function saveToCache(
   source: DictSource,
   { maxCacheEntries = 5000 }: { maxCacheEntries?: number } = {}
 ): Promise<void> {
-  console.log(`[YidDict] cacheDb: saveToCache query="${query}" source="${source}" entries=${entries.length}`);
+  log(`[YidDict] cacheDb: saveToCache query="${query}" source="${source}" entries=${entries.length}`);
   const db = getDatabase();
   const now = Date.now();
   for (const entry of entries) {
@@ -77,7 +78,7 @@ export async function saveToCache(
       ]
     );
   }
-  console.log(`[YidDict] cacheDb: saved ${entries.length} entr(ies) to cache`);
+  log(`[YidDict] cacheDb: saved ${entries.length} entr(ies) to cache`);
   await trimCache(maxCacheEntries);
 }
 
@@ -104,7 +105,7 @@ export async function purgeExpiredCache(cacheTtlDays: number): Promise<void> {
   const db = getDatabase();
   const cutoff = Date.now() - cacheTtlDays * 24 * 60 * 60 * 1000;
   const result = await db.runAsync('DELETE FROM cached_results WHERE fetched_at <= ?', [cutoff]);
-  console.log(`[YidDict] cacheDb: purgeExpiredCache ttl=${cacheTtlDays}d — removed ${result.changes} row(s)`);
+  log(`[YidDict] cacheDb: purgeExpiredCache ttl=${cacheTtlDays}d — removed ${result.changes} row(s)`);
 }
 
 /**
@@ -112,10 +113,10 @@ export async function purgeExpiredCache(cacheTtlDays: number): Promise<void> {
  * After clearing, any new lookups will be fetched fresh and re-cached from day 1.
  */
 export async function clearCache(): Promise<void> {
-  console.log('[YidDict] cacheDb: clearCache — deleting all cached_results rows');
+  log('[YidDict] cacheDb: clearCache — deleting all cached_results rows');
   const db = getDatabase();
   await db.runAsync('DELETE FROM cached_results');
-  console.log('[YidDict] cacheDb: cache cleared');
+  log('[YidDict] cacheDb: cache cleared');
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +135,7 @@ async function trimCache(maxEntries: number): Promise<void> {
       'DELETE FROM cached_results WHERE id IN (SELECT id FROM cached_results ORDER BY fetched_at ASC LIMIT ?)',
       [excess]
     );
-    console.log(`[YidDict] cacheDb: trimmed ${excess} oldest entr(ies) from cache`);
+    log(`[YidDict] cacheDb: trimmed ${excess} oldest entr(ies) from cache`);
   }
 }
 

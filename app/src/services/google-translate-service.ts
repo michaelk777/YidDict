@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { DictEntry } from '../types';
+import { log } from '../utils/logger';
 
 const TRANSLATE_URL = 'https://translate.googleapis.com/translate_a/single';
 
@@ -24,7 +25,7 @@ export async function lookupGoogleTranslate(
   query: string,
   isHebrew: boolean,
 ): Promise<DictEntry[]> {
-  console.log(`[YidDict] googleTranslateService: lookup query="${query}" isHebrew=${isHebrew}`);
+  log(`[YidDict] googleTranslateService: lookup query="${query}" isHebrew=${isHebrew}`);
 
   if (isHebrew) {
     const result = await fetchTranslation(query, 'yi', 'en');
@@ -78,7 +79,7 @@ async function fetchTranslation(
       .map(seg => (seg[0] as string) ?? '')
       .join('')
       .trim();
-    console.log(`[YidDict] googleTranslateService: "${query}" (${sl}→${tl}) → "${translatedText}"`);
+    log(`[YidDict] googleTranslateService: "${query}" (${sl}→${tl}) → "${translatedText}"`);
     return { translatedText };
   } catch (err) {
     console.error('[YidDict] googleTranslateService: fetch error', err);

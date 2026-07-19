@@ -3,6 +3,7 @@ import { parse, HTMLElement, Node } from 'node-html-parser';
 import { stripNekudes } from '../utils/nekudes';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { DictEntry } from '../types';
+import { log } from '../utils/logger';
 
 const FINKEL_URL =
   'https://www.cs.engr.uky.edu/~raphael/yiddish/dictionary.cgi';
@@ -26,30 +27,30 @@ export async function lookupFinkel(
   isHebrew = false
 ): Promise<DictEntry[]> {
   const word = isHebrew ? stripNekudes(query) : query;
-  console.log(`[YidDict] finkelService: lookupFinkel query="${word}" isHebrew=${isHebrew}`);
+  log(`[YidDict] finkelService: lookupFinkel query="${word}" isHebrew=${isHebrew}`);
 
   // Stage 1: fragment match
-  console.log('[YidDict] finkelService: stage 1 — POST word=<query>');
+  log('[YidDict] finkelService: stage 1 — POST word=<query>');
   const stage1 = await postToFinkel({ word });
-  console.log(`[YidDict] finkelService: stage 1 returned ${stage1.length} result(s)`);
+  log(`[YidDict] finkelService: stage 1 returned ${stage1.length} result(s)`);
   if (stage1.length > 0) return stage1;
 
   // Stage 2: inflected-form → stem lookup
-  console.log('[YidDict] finkelService: stage 1 empty, falling back to stage 2 — POST base=<query>');
+  log('[YidDict] finkelService: stage 1 empty, falling back to stage 2 — POST base=<query>');
   const stage2 = await postToFinkel({ base: word });
-  console.log(`[YidDict] finkelService: stage 2 returned ${stage2.length} result(s)`);
+  log(`[YidDict] finkelService: stage 2 returned ${stage2.length} result(s)`);
   return stage2;
 }
 
 async function postToFinkel(
   params: Record<string, string>
 ): Promise<DictEntry[]> {
-  console.log(`[YidDict] finkelService: POST to Finkel params=${JSON.stringify(params)}`);
+  log(`[YidDict] finkelService: POST to Finkel params=${JSON.stringify(params)}`);
   const body = new URLSearchParams(params).toString();
   const response = await axios.post<string>(FINKEL_URL, body, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
-  console.log('[YidDict] finkelService: Finkel responded, parsing HTML');
+  log('[YidDict] finkelService: Finkel responded, parsing HTML');
   return parseFinkelHtml(response.data);
 }
 
@@ -74,7 +75,7 @@ export function parseFinkelHtml(html: string): DictEntry[] {
 
   const entries: DictEntry[] = [];
   collectEntries(directLiChildren(resultUl), false, entries);
-  console.log(`[YidDict] finkelService: parseFinkelHtml found ${entries.length} entr(ies)`);
+  log(`[YidDict] finkelService: parseFinkelHtml found ${entries.length} entr(ies)`);
   return entries;
 }
 

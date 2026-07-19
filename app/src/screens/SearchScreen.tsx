@@ -27,9 +27,10 @@ import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/heb
 import { GrammarText } from '../components/GrammarText';
 import { GoogleTranslateAttribution } from '../components/GoogleTranslateAttribution';
 import { Ionicons } from '@expo/vector-icons';
-import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries } from '../db/settingsDb';
+import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCacheTtlDays, getUseAllSources, getYivoToHebrew, getHebrewToYivo, saveVerterbukhQuota, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries, getSaveTrimAlert } from '../db/settingsDb';
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { hebrewToYivo } from '../utils/hebrewToYivo';
+import { log } from '../utils/logger';
 
 /**
  * Convert an enriched YIVO transliterated headword to Hebrew script, preserving
@@ -151,6 +152,7 @@ export default function SearchScreen() {
   const verterbukhExhausted = useRef(false);
   const verterbukhLowToken = useRef(false);
   const approachingMaxSaved = useRef(false);
+  const trimAlertShownThisSave = useRef(false);
 
   /**
    * Warn once (per crossing) when saved entries first reach >= 90% of max_saved_entries.
@@ -204,7 +206,7 @@ export default function SearchScreen() {
       if (verterbukhExhausted.current) {
         verterbukhExhausted.current = false;
         setShowVerterbukhExhaustedWarning(false);
-        console.log('[YidDict] SearchScreen: Verterbukh tokens available again — resuming normally');
+        log('[YidDict] SearchScreen: Verterbukh tokens available again — resuming normally');
       }
       const isLow = lowTokenAlertEnabled && quota.used / quota.total >= threshold;
       if (isLow) {
@@ -241,7 +243,7 @@ export default function SearchScreen() {
     try {
       const script = detectInputScript(trimmed);
       const isHebrew = script === 'hebrew';
-      console.log(`[YidDict] SearchScreen: search initiated query="${trimmed}" script=${script}`);
+      log(`[YidDict] SearchScreen: search initiated query="${trimmed}" script=${script}`);
 
       const thresholdPct = await getLowTokenThreshold();
       const threshold = thresholdPct / 100;
@@ -263,7 +265,7 @@ export default function SearchScreen() {
       const lookupSource = async (source: DictSource): Promise<DictEntry[]> => {
         const cached = await getCachedEntries(trimmed, source, cacheTtl);
         if (cached && cached.length > 0) {
-          console.log(`[YidDict] SearchScreen: serving ${source} results from cache`);
+          log(`[YidDict] SearchScreen: serving ${source} results from cache`);
           if (source === 'verterbukh') {
             // Build lemma set from cached entries so choices that are already cached can be greyed out
             const existingLemmas = new Set(cached.map(e => e.yiddishHebrew).filter(Boolean) as string[]);
@@ -288,13 +290,13 @@ export default function SearchScreen() {
         }
         if (source === 'finkel') {
           const results = await lookupFinkel(trimmed, isHebrew);
-          console.log(`[YidDict] SearchScreen: Finkel returned ${results.length} result(s)`);
+          log(`[YidDict] SearchScreen: Finkel returned ${results.length} result(s)`);
           if (results.length > 0) await saveToCache(trimmed, results, 'finkel');
           return results;
         }
         if (source === 'verterbukh') {
           const verterbukhResult = await lookupVerterbukh(trimmed);
-          console.log(`[YidDict] SearchScreen: Verterbukh returned ${verterbukhResult.entries.length} entry(ies)`);
+          log(`[YidDict] SearchScreen: Verterbukh returned ${verterbukhResult.entries.length} entry(ies)`);
           processQuota(verterbukhResult.quota, threshold, lowTokenAlertEnabled);
           if (verterbukhResult.choices && verterbukhResult.choices.length > 0) {
             // Disambiguation choices present — surface them; show "Try in English" for manual override
@@ -312,7 +314,7 @@ export default function SearchScreen() {
           // No entries and no choices from dir=from — auto-retry as English (Latin input only)
           if (!isHebrew) {
             const toResult = await lookupVerterbukh(trimmed, undefined, 'to');
-            console.log(`[YidDict] SearchScreen: Verterbukh dir=to returned ${toResult.entries.length} entry(ies)`);
+            log(`[YidDict] SearchScreen: Verterbukh dir=to returned ${toResult.entries.length} entry(ies)`);
             processQuota(toResult.quota, threshold, lowTokenAlertEnabled);
             if (toResult.choices && toResult.choices.length > 0) {
               setOtherOptions(toResult.choices);
@@ -326,7 +328,7 @@ export default function SearchScreen() {
         }
         if (source === 'google_translate') {
           const results = await lookupGoogleTranslate(trimmed, isHebrew);
-          console.log(`[YidDict] SearchScreen: Google Translate returned ${results.length} result(s)`);
+          log(`[YidDict] SearchScreen: Google Translate returned ${results.length} result(s)`);
           if (results.length > 0) await saveToCache(trimmed, results, 'google_translate');
           return results;
         }
@@ -381,7 +383,7 @@ export default function SearchScreen() {
         }
         if (notes.length > 0) setFallbackNote(notes.join(' · '));
         applyVerterbukhWarnings();
-        console.log(`[YidDict] SearchScreen: use-all-sources returned ${allEntries.length} total entries`);
+        log(`[YidDict] SearchScreen: use-all-sources returned ${allEntries.length} total entries`);
       } else {
         // Stop at the first source with results
         for (const source of attemptOrder) {
@@ -401,7 +403,7 @@ export default function SearchScreen() {
         }
         if (notes.length > 0) setFallbackNote(notes.join(' · '));
         applyVerterbukhWarnings();
-        console.log('[YidDict] SearchScreen: all sources exhausted — no results');
+        log('[YidDict] SearchScreen: all sources exhausted — no results');
       }
     } catch (err) {
       setError('Could not reach the dictionary. Check your connection and try again.');
@@ -427,7 +429,7 @@ export default function SearchScreen() {
     setShowTryEnglish(false);
     setFallbackNote(null);
     try {
-      console.log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
+      log(`[YidDict] SearchScreen: other option selected "${choice.label}" (ln=${choice.hebrewLemma})`);
       const thresholdPct = await getLowTokenThreshold();
       const lowTokenAlertEnabled = await getVerterbukhLowTokenAlert();
       const cacheTtl = await getCacheTtlDays();
@@ -547,22 +549,62 @@ export default function SearchScreen() {
     }
   }, [query, processQuota]);
 
+  /**
+   * If saving `additionalCount` new entries would push the saved total over
+   * max_saved_entries — triggering saveEntry/saveEntries's existing silent
+   * auto-trim of the oldest entries — asks for confirmation first (Cancel/
+   * Continue), citing the exact number that would be removed. Gated by the
+   * save_trim_alert setting; resolves true immediately when it's off or when
+   * no trim would occur.
+   */
+  const confirmSaveTrim = useCallback(async (additionalCount: number): Promise<boolean> => {
+    trimAlertShownThisSave.current = false;
+    const alertEnabled = await getSaveTrimAlert().catch(() => true);
+    if (!alertEnabled) return true;
+    const [count, max] = await Promise.all([
+      getSavedEntriesCount().catch(() => 0),
+      getMaxSavedEntries().catch(() => 500),
+    ]);
+    const excess = count + additionalCount - max;
+    if (excess <= 0) return true;
+    // Recorded so the caller can skip the separate "Approaching Max Saved
+    // Entries" popup right after — this dialog already told the user their
+    // save is affecting the saved-entries ceiling, so that one would be redundant.
+    trimAlertShownThisSave.current = true;
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Save Will Remove Older Entries',
+        `Saving ${additionalCount === 1 ? 'this entry' : `these ${additionalCount} entries`} will push you over your max of ${max} saved entries, removing the ${excess} oldest to make room.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Continue', style: 'destructive', onPress: () => resolve(true) },
+        ]
+      );
+    });
+  }, []);
+
   const handleSaveEntry = useCallback(async (entry: DictEntry, source: DictSource) => {
     const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
     if (savedKeySet.has(key)) {
       await deleteEntriesByKey([entry], source);
     } else {
+      const proceed = await confirmSaveTrim(1);
+      if (!proceed) return;
       await saveEntry(query.trim(), entry, source);
-      await checkApproachingMaxSaved();
+      if (!trimAlertShownThisSave.current) await checkApproachingMaxSaved();
     }
     await refreshSaved();
-  }, [query, savedKeySet, refreshSaved, checkApproachingMaxSaved]);
+  }, [query, savedKeySet, refreshSaved, checkApproachingMaxSaved, confirmSaveTrim]);
 
   const handleSaveAll = useCallback(async () => {
     if (entries.length === 0) return;
     const isAllSaved = entries.every(e =>
       savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${e.source}`)
     );
+    if (!isAllSaved) {
+      const proceed = await confirmSaveTrim(entries.length);
+      if (!proceed) return;
+    }
     // Group entries by their own source field
     const bySource = new Map<DictSource, DictEntry[]>();
     for (const e of entries) {
@@ -577,11 +619,11 @@ export default function SearchScreen() {
         await saveEntries(query.trim(), srcEntries, src);
       }
     }
-    if (!isAllSaved) {
+    if (!isAllSaved && !trimAlertShownThisSave.current) {
       await checkApproachingMaxSaved();
     }
     await refreshSaved();
-  }, [query, entries, savedKeySet, refreshSaved, checkApproachingMaxSaved]);
+  }, [query, entries, savedKeySet, refreshSaved, checkApproachingMaxSaved, confirmSaveTrim]);
 
   const handleClear = useCallback(() => {
     setQuery('');

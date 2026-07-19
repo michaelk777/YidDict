@@ -1,11 +1,12 @@
 import * as SQLite from 'expo-sqlite';
+import { log } from '../utils/logger';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
 export async function initDatabase(): Promise<void> {
-  console.log('[YidDict] database: opening yiddict.db');
+  log('[YidDict] database: opening yiddict.db');
   db = await SQLite.openDatabaseAsync('yiddict.db');
-  console.log('[YidDict] database: db opened successfully');
+  log('[YidDict] database: db opened successfully');
 
   // Migrate cached_results UNIQUE constraint to include yiddish_transliterated.
   // Entries that share yiddish_hebrew (e.g. a parent word and a phrase sub-entry)
@@ -18,7 +19,7 @@ export async function initDatabase(): Promise<void> {
     await db.execAsync('DROP TABLE cached_results');
   }
 
-  console.log('[YidDict] database: creating tables');
+  log('[YidDict] database: creating tables');
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS saved_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +75,7 @@ export async function initDatabase(): Promise<void> {
     await db.execAsync('ALTER TABLE saved_entries ADD COLUMN transliterated_is_generated INTEGER NOT NULL DEFAULT 0');
   } catch { /* already exists (either from RENAME above or previous run) */ }
 
-  console.log('[YidDict] database: tables created');
+  log('[YidDict] database: tables created');
 
   const defaults: [string, string][] = [
     ['source_order_1', 'finkel'],
@@ -89,18 +90,20 @@ export async function initDatabase(): Promise<void> {
     ['yivo_to_hebrew_warned', '0'],
     ['hebrew_to_yivo', '0'],
     ['hebrew_to_yivo_warned', '0'],
-    ['verterbukh_exhausted_alert', '0'],
+    ['verterbukh_exhausted_alert', '1'],
+    ['verterbukh_low_token_alert', '1'],
+    ['save_trim_alert', '1'],
   ];
 
-  console.log('[YidDict] database: seeding default settings');
+  log('[YidDict] database: seeding default settings');
   for (const [key, value] of defaults) {
     await db.runAsync(
       'INSERT OR IGNORE INTO user_settings (key, value) VALUES (?, ?)',
       [key, value]
     );
-    console.log(`[YidDict] database: seeded "${key}" = "${value}"`);
+    log(`[YidDict] database: seeded "${key}" = "${value}"`);
   }
-  console.log('[YidDict] database: initDatabase complete');
+  log('[YidDict] database: initDatabase complete');
 }
 
 export function getDatabase(): SQLite.SQLiteDatabase {

@@ -1,4 +1,5 @@
 import { getDatabase } from './database';
+import { log } from '../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,7 +19,7 @@ export type SlotIndex = 1 | 2 | 3;
  * (finkel → verterbukh → google_translate) if the keys aren't in the DB.
  */
 export async function getSourceOrder(): Promise<SourceSlot[]> {
-  console.log('[YidDict] settingsDb: getSourceOrder');
+  log('[YidDict] settingsDb: getSourceOrder');
   const db = getDatabase();
   const order: SourceSlot[] = [];
   for (const slot of [1, 2, 3] as SlotIndex[]) {
@@ -28,7 +29,7 @@ export async function getSourceOrder(): Promise<SourceSlot[]> {
     );
     order.push((row?.value ?? 'none') as SourceSlot);
   }
-  console.log(`[YidDict] settingsDb: order = ${order.join(' → ')}`);
+  log(`[YidDict] settingsDb: order = ${order.join(' → ')}`);
   return order;
 }
 
@@ -37,7 +38,7 @@ export async function getSourceOrder(): Promise<SourceSlot[]> {
  * Uses INSERT OR REPLACE so the key is created on first write if needed.
  */
 export async function setSourceOrderSlot(slot: SlotIndex, value: SourceSlot): Promise<void> {
-  console.log(`[YidDict] settingsDb: setSourceOrderSlot slot=${slot} value="${value}"`);
+  log(`[YidDict] settingsDb: setSourceOrderSlot slot=${slot} value="${value}"`);
   const db = getDatabase();
   await db.runAsync(
     'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
@@ -50,7 +51,7 @@ export async function setSourceOrderSlot(slot: SlotIndex, value: SourceSlot): Pr
 // ---------------------------------------------------------------------------
 
 export async function getNumericSetting(key: string, defaultValue: number): Promise<number> {
-  console.log(`[YidDict] settingsDb: getNumericSetting key="${key}"`);
+  log(`[YidDict] settingsDb: getNumericSetting key="${key}"`);
   const db = getDatabase();
   const row = await db.getFirstAsync<{ value: string }>(
     'SELECT value FROM user_settings WHERE key = ?', [key]
@@ -60,7 +61,7 @@ export async function getNumericSetting(key: string, defaultValue: number): Prom
 }
 
 export async function setNumericSetting(key: string, value: number): Promise<void> {
-  console.log(`[YidDict] settingsDb: setNumericSetting key="${key}" value=${value}`);
+  log(`[YidDict] settingsDb: setNumericSetting key="${key}" value=${value}`);
   const db = getDatabase();
   await db.runAsync(
     'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
@@ -70,6 +71,28 @@ export async function setNumericSetting(key: string, value: number): Promise<voi
 
 export const getMaxSavedEntries = (): Promise<number> => getNumericSetting('max_saved_entries', 500);
 export const setMaxSavedEntries = (v: number): Promise<void> => setNumericSetting('max_saved_entries', v);
+
+/**
+ * Gates the pre-save alert shown when saving new entries would push the
+ * saved count over max_saved_entries, triggering saveEntry/saveEntries's
+ * existing silent auto-trim of the oldest entries. On by default — mirrors
+ * the Verterbukh alert toggles' opt-out (not opt-in) pattern.
+ */
+export async function getSaveTrimAlert(): Promise<boolean> {
+  const db = getDatabase();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM user_settings WHERE key = ?', ['save_trim_alert']
+  );
+  return row?.value !== '0';
+}
+
+export async function setSaveTrimAlert(v: boolean): Promise<void> {
+  const db = getDatabase();
+  await db.runAsync(
+    'INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)',
+    ['save_trim_alert', v ? '1' : '0']
+  );
+}
 export const getLowTokenThreshold = (): Promise<number> => getNumericSetting('low_token_threshold', 90);
 export const setLowTokenThreshold = (v: number): Promise<void> => setNumericSetting('low_token_threshold', v);
 export const getCacheTtlDays = (): Promise<number> => getNumericSetting('cache_ttl_days', 90);

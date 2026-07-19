@@ -21,6 +21,8 @@ import {
   setVerterbukhExhaustedAlert,
   getVerterbukhLowTokenAlert,
   setVerterbukhLowTokenAlert,
+  getSaveTrimAlert,
+  setSaveTrimAlert,
   getVerterbukhQuota,
   clearVerterbukhQuota,
   SourceSlot,
@@ -214,6 +216,38 @@ describe('getVerterbukhLowTokenAlert() / setVerterbukhLowTokenAlert()', () => {
     expect(db.runAsync).toHaveBeenCalledWith(
       expect.any(String),
       ['verterbukh_low_token_alert', '0']
+    );
+  });
+});
+
+describe('getSaveTrimAlert() / setSaveTrimAlert()', () => {
+  it('defaults to true when the key is absent', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb());
+    expect(await getSaveTrimAlert()).toBe(true);
+  });
+
+  it('returns true when the stored value is "1"', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ save_trim_alert: '1' }));
+    expect(await getSaveTrimAlert()).toBe(true);
+  });
+
+  it('returns false when the stored value is "0"', async () => {
+    mockGetDatabase.mockReturnValue(makeMockDb({ save_trim_alert: '0' }));
+    expect(await getSaveTrimAlert()).toBe(false);
+  });
+
+  it('writes "1" for true and "0" for false', async () => {
+    const db = makeMockDb();
+    mockGetDatabase.mockReturnValue(db);
+    await setSaveTrimAlert(true);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['save_trim_alert', '1']
+    );
+    await setSaveTrimAlert(false);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      ['save_trim_alert', '0']
     );
   });
 });

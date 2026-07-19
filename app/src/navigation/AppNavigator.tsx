@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import SearchScreen from '../screens/SearchScreen';
 import SavedScreen from '../screens/SavedScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import { log } from '../utils/logger';
 
 type TabParamList = {
   Search: undefined;
@@ -24,7 +25,7 @@ const TAB_ICONS: Record<keyof TabParamList, { focused: IoniconName; unfocused: I
 
 export default function AppNavigator() {
   const { theme, colorScheme } = useTheme();
-  console.log(`[YidDict] AppNavigator: rendering (colorScheme=${colorScheme})`);
+  log(`[YidDict] AppNavigator: rendering (colorScheme=${colorScheme})`);
 
   return (
     <Tab.Navigator

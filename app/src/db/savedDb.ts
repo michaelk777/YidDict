@@ -1,6 +1,7 @@
 import { getDatabase } from './database';
 import { getMaxSavedEntries } from './settingsDb';
 import { DictEntry } from '../types';
+import { log } from '../utils/logger';
 
 type DictSource = 'finkel' | 'verterbukh' | 'google_translate';
 
@@ -39,7 +40,7 @@ export interface SavedEntry {
 // ---------------------------------------------------------------------------
 
 export async function getSavedEntries(): Promise<SavedEntry[]> {
-  console.log('[YidDict] savedDb: getSavedEntries');
+  log('[YidDict] savedDb: getSavedEntries');
   const db = getDatabase();
   const rows = await db.getAllAsync<SavedRow>(
     'SELECT * FROM saved_entries ORDER BY saved_at DESC'
@@ -61,7 +62,7 @@ export async function getSavedEntriesCount(): Promise<number> {
 }
 
 export async function getSavedKeySet(): Promise<Set<string>> {
-  console.log('[YidDict] savedDb: getSavedKeySet');
+  log('[YidDict] savedDb: getSavedKeySet');
   const db = getDatabase();
   const rows = await db.getAllAsync<Pick<SavedRow, 'yiddish_hebrew' | 'english' | 'source'>>(
     'SELECT yiddish_hebrew, english, source FROM saved_entries'
@@ -79,7 +80,7 @@ export async function saveEntry(
   source: DictSource,
   maxSavedEntries?: number
 ): Promise<void> {
-  console.log(`[YidDict] savedDb: saveEntry query="${query}" source="${source}"`);
+  log(`[YidDict] savedDb: saveEntry query="${query}" source="${source}"`);
   const max = maxSavedEntries ?? await getMaxSavedEntries();
   const db = getDatabase();
   await db.runAsync(
@@ -110,7 +111,7 @@ export async function saveEntries(
   source: DictSource,
   maxSavedEntries?: number
 ): Promise<void> {
-  console.log(`[YidDict] savedDb: saveEntries query="${query}" source="${source}" count=${entries.length}`);
+  log(`[YidDict] savedDb: saveEntries query="${query}" source="${source}" count=${entries.length}`);
   if (entries.length === 0) return;
   const max = maxSavedEntries ?? await getMaxSavedEntries();
   for (const entry of entries) {
@@ -123,7 +124,7 @@ export async function saveEntries(
 // ---------------------------------------------------------------------------
 
 export async function deleteEntry(id: number): Promise<void> {
-  console.log(`[YidDict] savedDb: deleteEntry id=${id}`);
+  log(`[YidDict] savedDb: deleteEntry id=${id}`);
   const db = getDatabase();
   await db.runAsync('DELETE FROM saved_entries WHERE id = ?', [id]);
 }
@@ -132,7 +133,7 @@ export async function deleteEntriesByKey(
   entries: DictEntry[],
   source: DictSource,
 ): Promise<void> {
-  console.log(`[YidDict] savedDb: deleteEntriesByKey source="${source}" count=${entries.length}`);
+  log(`[YidDict] savedDb: deleteEntriesByKey source="${source}" count=${entries.length}`);
   const db = getDatabase();
   for (const entry of entries) {
     await db.runAsync(
@@ -143,7 +144,7 @@ export async function deleteEntriesByKey(
 }
 
 export async function clearSaved(): Promise<void> {
-  console.log('[YidDict] savedDb: clearSaved');
+  log('[YidDict] savedDb: clearSaved');
   const db = getDatabase();
   await db.runAsync('DELETE FROM saved_entries');
 }
@@ -216,7 +217,7 @@ export async function trimSaved(maxEntries: number): Promise<void> {
       'DELETE FROM saved_entries WHERE id IN (SELECT id FROM saved_entries ORDER BY saved_at ASC LIMIT ?)',
       [excess]
     );
-    console.log(`[YidDict] savedDb: trimmed ${excess} oldest saved entr(ies)`);
+    log(`[YidDict] savedDb: trimmed ${excess} oldest saved entr(ies)`);
   }
 }
 

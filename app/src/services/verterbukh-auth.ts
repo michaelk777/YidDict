@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { parse } from 'node-html-parser';
+import { log } from '../utils/logger';
 
 const BASE_URL = 'https://verterbukh.org/vb';
 const CREDENTIALS_KEY = 'verterbukh_credentials';
@@ -140,7 +141,7 @@ export async function login(credentials: VerterbukhCredentials): Promise<Verterb
     tsu: 'en',
   });
 
-  console.log('[YidDict] VerterbukhAuth: attempting login');
+  log('[YidDict] VerterbukhAuth: attempting login');
 
   const response = await axios.post(BASE_URL, params.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -151,7 +152,7 @@ export async function login(credentials: VerterbukhCredentials): Promise<Verterb
   }
 
   startSession();
-  console.log('[YidDict] VerterbukhAuth: login successful');
+  log('[YidDict] VerterbukhAuth: login successful');
   return parseVerterbukhQuota(response.data);
 }
 
@@ -166,9 +167,9 @@ export async function logout(): Promise<void> {
   await deleteCredentials();
   try {
     await axios.get(BASE_URL, { params: { page: 'logout' } });
-    console.log('[YidDict] VerterbukhAuth: server session invalidated');
+    log('[YidDict] VerterbukhAuth: server session invalidated');
   } catch {
-    console.log('[YidDict] VerterbukhAuth: server logout failed (credentials still deleted locally)');
+    log('[YidDict] VerterbukhAuth: server logout failed (credentials still deleted locally)');
   }
 }
 
