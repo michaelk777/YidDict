@@ -12,6 +12,7 @@ import {
   Alert,
   Switch,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useSaved } from '../context/SavedContext';
@@ -419,6 +420,7 @@ export default function SettingsScreen() {
       style={{ backgroundColor: theme.background }}
       contentContainerStyle={s.scrollContent}
       testID="settings-root"
+      scrollEnabled={!aboutVisible}
     >
       {/* Search Source Order */}
       <SectionHeader label="Search Source Order" theme={theme} />
@@ -773,9 +775,63 @@ export default function SettingsScreen() {
                 <Ionicons name="close" size={22} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
-            <ScrollView style={s.aboutModalScroll}>
+            {/* removeClippedSubviews=false: Android's default clipping optimization was
+                mismeasuring rows inside this maxHeight-percentage + overflow:hidden card,
+                leaving scattered rows unresponsive to touch/scroll. */}
+            <ScrollView style={s.aboutModalScroll} removeClippedSubviews={false}>
               <Text style={[s.aboutModalVersion, { color: theme.textSecondary }]}>Version {APP_VERSION}</Text>
-              <Text style={[s.aboutModalBody, { color: theme.text }]}>{ABOUT_TEXT}</Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                YidDict is a cross-platform mobile dictionary app for bidirectional Yiddish ↔ English lookup. It aggregates from online language sources (at this time{' '}
+                <Text style={[s.aboutModalLink, { color: theme.primary }]} onPress={() => handleOpenLink(FINKEL_URL)}>
+                  Finkel
+                </Text>
+                ,{' '}
+                <Text style={[s.aboutModalLink, { color: theme.primary }]} onPress={() => handleOpenLink(VERTERBUKH_URL)}>
+                  Verterbukh
+                </Text>
+                {' '}and{' '}
+                <Text style={[s.aboutModalLink, { color: theme.primary }]} onPress={() => handleOpenLink(GOOGLE_TRANSLATE_URL)}>
+                  Google Translate
+                </Text>
+                ). This app supports English, Hebrew script and YIVO standard transliterated script.
+              </Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                This is meant to be an educational resource to help spread knowledge of the Yiddish language around the world and on the go, from your pocket and in your home.
+              </Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                There are several configurable features within the "Settings" tab that can be used to adjust sources, format and much more.
+              </Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                Note that, to use Verterbukh, you must have an account through their website, be logged in and have available tokens.
+              </Text>
+
+              <Text style={[s.aboutModalHeading, { color: theme.text }]}>Acknowledgements</Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                Thank you to Raphael (Refoyl) Finkel and the folks at Verterbukh for allowing the use of their amazing dictionaries. Without them, this app would not be possible.
+              </Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                Also thank you to the beta testers who reviewed this app, provided feedback and helped make it better than it ever could have been without them.
+              </Text>
+
+              <Text style={[s.aboutModalHeading, { color: theme.text }]}>Feedback</Text>
+
+              <Text style={[s.aboutModalBody, { color: theme.text }]}>
+                If you notice any issues or have a feature you'd like to see, please email{' '}
+                <Text style={[s.aboutModalLink, { color: theme.primary }]} onPress={() => handleOpenLink('mailto:yiddict@gmail.com')}>
+                  yiddict@gmail.com
+                </Text>
+                {' '}and we will try to address it as soon as possible.
+              </Text>
+
+              <Text style={[s.aboutModalSignoff, { color: theme.text }]}>Gey Gezunterheyt!</Text>
+              <Text style={[s.aboutModalSignoff, { color: theme.text }]}>גײ געזונטערהײט</Text>
+
               <Text style={[s.aboutModalDisclaimer, { color: theme.textSecondary, borderTopColor: theme.border }]}>
                 {GOOGLE_TRANSLATE_DISCLAIMER}
               </Text>
@@ -787,8 +843,14 @@ export default function SettingsScreen() {
   );
 }
 
-// Fill in with your own About copy — shown in the scrollable About modal above.
-const ABOUT_TEXT = '';
+// Dictionary source links shown in the About modal's intro paragraph.
+const FINKEL_URL = 'https://www.cs.engr.uky.edu/~raphael/yiddish/';
+const VERTERBUKH_URL = 'https://verterbukh.org';
+const GOOGLE_TRANSLATE_URL = 'https://translate.google.com';
+
+function handleOpenLink(url: string): void {
+  Linking.openURL(url).catch(() => {});
+}
 
 // Required Google Translate attribution — verbatim per Google's terms of use.
 const GOOGLE_TRANSLATE_DISCLAIMER =
@@ -1153,6 +1215,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     aboutModalScroll: {
       flexGrow: 0,
+      flexShrink: 1,
     },
     aboutModalVersion: {
       fontSize: 12,
@@ -1161,6 +1224,21 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     aboutModalBody: {
       fontSize: 14,
       lineHeight: 20,
+      marginBottom: 12,
+    },
+    aboutModalHeading: {
+      fontSize: 15,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
+    aboutModalLink: {
+      textDecorationLine: 'underline',
+    },
+    aboutModalSignoff: {
+      fontSize: 14,
+      fontStyle: 'italic',
+      textAlign: 'center',
+      marginBottom: 4,
     },
     aboutModalDisclaimer: {
       fontSize: 10,

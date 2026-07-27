@@ -1,7 +1,11 @@
 /**
  * google-translate-service.live.test.ts
  *
- * Live integration tests for the Google Translate endpoint.
+ * Live integration tests for the Google Translate endpoint. Run via
+ * `npm run test:live`, which points Jest at jest.live.config.js — a plain
+ * Node environment without Expo's polyfills, since axios's fetch-adapter
+ * probing collides with Expo's ReadableStream polyfill under jest-expo's
+ * default preset.
  * These make REAL network requests and are excluded from the normal test run.
  *
  * Run explicitly before each release with:
@@ -13,6 +17,11 @@
  */
 
 import { lookupGoogleTranslate } from '../services/google-translate-service';
+
+// The root __mocks__/axios.ts manual mock is auto-applied to every test file
+// by Jest (it's a node_modules package mock). Unmock it here so this suite
+// makes real network requests, as its whole purpose requires.
+jest.unmock('axios');
 
 jest.setTimeout(15000);
 

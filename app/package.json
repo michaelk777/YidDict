@@ -10,7 +10,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:live": "jest --testPathPattern=\"\\.live\\.test\\.ts$\""
+    "test:live": "jest --config jest.live.config.js"
   },
   "jest": {
     "preset": "jest-expo",

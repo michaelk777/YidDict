@@ -7,8 +7,8 @@
  */
 
 import React from 'react';
-import { Alert } from 'react-native';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { Alert, Linking } from 'react-native';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { ThemeProvider } from '../context/ThemeContext';
 import SettingsScreen from '../screens/SettingsScreen';
 
@@ -999,6 +999,36 @@ describe('SettingsScreen — About modal', () => {
     expect(screen.getByTestId('about-modal-close')).toBeTruthy();
     // "About YidDict" now appears twice: the row label and the modal title
     expect(screen.getAllByText('About YidDict').length).toBe(2);
+  });
+
+  it('shows the About body copy and Acknowledgements heading', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByTestId('about-row'));
+    fireEvent.press(screen.getByTestId('about-row'));
+    expect(screen.getByText(/YidDict is a cross-platform mobile dictionary app/)).toBeTruthy();
+    expect(screen.getByText('Acknowledgements')).toBeTruthy();
+    expect(screen.getByText('Feedback')).toBeTruthy();
+    expect(screen.getByText(/Gey Gezunterheyt!/)).toBeTruthy();
+  });
+
+  it('opens the Finkel, Verterbukh, Google Translate and email links', async () => {
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    renderScreen();
+    await waitFor(() => screen.getByTestId('about-row'));
+    fireEvent.press(screen.getByTestId('about-row'));
+    const modal = within(screen.getByTestId('about-modal'));
+
+    fireEvent.press(modal.getByText('Finkel'));
+    expect(Linking.openURL).toHaveBeenCalledWith('https://www.cs.engr.uky.edu/~raphael/yiddish/');
+
+    fireEvent.press(modal.getByText('Verterbukh'));
+    expect(Linking.openURL).toHaveBeenCalledWith('https://verterbukh.org');
+
+    fireEvent.press(modal.getByText('Google Translate'));
+    expect(Linking.openURL).toHaveBeenCalledWith('https://translate.google.com');
+
+    fireEvent.press(modal.getByText('yiddict@gmail.com'));
+    expect(Linking.openURL).toHaveBeenCalledWith('mailto:yiddict@gmail.com');
   });
 
   it('shows the required Google Translate disclaimer', async () => {
