@@ -45,6 +45,10 @@ const SEQUENCES: [string, string][] = [
   ['װ',  'v'],     // tsvey-vovn — variant spelled with the dedicated ligature letter
   ['ױ',  'oy'],    // vov-yud — variant spelled with the dedicated ligature letter
   ['בֿ',  'v'],     // veys (beys with rafe)
+  ['תּ',  't'],     // tof (sof with dagesh) — distinct from bare sof below
+  ['שׂ',  's'],     // sin (shin with sin-dot) — distinct from bare/shin-dot shin
+  ['שׁ',  'sh'],    // shin with explicit shin-dot — same reading as bare shin, but
+                    // matched here too so the dot itself doesn't leak through unconsumed
 ];
 
 // Single-letter rules. Langer (final) forms map to the same YIVO output as
@@ -69,9 +73,11 @@ const CHARS: Record<string, string> = {
   'ז': 'z',
   'כ': 'kh',  // khof
   'ך': 'kh',  // langer khof
+  'ח': 'kh',  // khes
   'צ': 'ts',  // tsadek
   'ץ': 'ts',  // langer tsadek
   'ש': 'sh',  // shin
+  'ת': 's',   // bare sof (undotted; matched only when the תּ SEQUENCES entry above doesn't apply)
   'א': 'a',   // bare alef (undotted; defaults to the more common pasekh-alef reading)
   'פ': 'f',   // bare pe (undotted; begadkefat default, matches langer fe / fe-with-rafe)
 };

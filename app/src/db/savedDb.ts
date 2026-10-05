@@ -18,6 +18,7 @@ interface SavedRow {
   is_phrase: number;
   hebrew_is_generated: number;
   transliterated_is_generated: number;
+  hebrew_is_partial: number;
 }
 
 export interface SavedEntry {
@@ -33,6 +34,7 @@ export interface SavedEntry {
   isPhrase: boolean;
   hebrewIsGenerated: boolean;
   transliteratedIsGenerated: boolean;
+  hebrewIsPartial: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,11 +85,15 @@ export async function saveEntry(
   log(`[YidDict] savedDb: saveEntry query="${query}" source="${source}"`);
   const max = maxSavedEntries ?? await getMaxSavedEntries();
   const db = getDatabase();
+  // OR IGNORE: a duplicate (same yiddish_hebrew + english + source as an
+  // existing row — see the idx_saved_entries_dedup index in database.ts)
+  // silently no-ops instead of throwing, so a fast double-tap on the save
+  // button can't create two rows for the same entry.
   await db.runAsync(
-    `INSERT INTO saved_entries
+    `INSERT OR IGNORE INTO saved_entries
        (query, yiddish_hebrew, yiddish_transliterated, english,
-        part_of_speech, grammatical_info, source, saved_at, is_phrase, hebrew_is_generated, transliterated_is_generated)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        part_of_speech, grammatical_info, source, saved_at, is_phrase, hebrew_is_generated, transliterated_is_generated, hebrew_is_partial)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       query,
       entry.yiddishHebrew,
@@ -100,6 +106,7 @@ export async function saveEntry(
       entry.isPhrase ? 1 : 0,
       entry.hebrewIsGenerated ? 1 : 0,
       entry.transliteratedIsGenerated ? 1 : 0,
+      entry.hebrewIsPartial ? 1 : 0,
     ]
   );
   await trimSaved(max);
@@ -235,5 +242,6 @@ function rowToSavedEntry(row: SavedRow): SavedEntry {
     isPhrase: row.is_phrase === 1,
     hebrewIsGenerated: row.hebrew_is_generated === 1,
     transliteratedIsGenerated: row.transliterated_is_generated === 1,
+    hebrewIsPartial: row.hebrew_is_partial === 1,
   };
 }

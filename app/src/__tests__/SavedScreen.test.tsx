@@ -40,6 +40,7 @@ const sampleEntries: SavedEntry[] = [
     isPhrase: false,
     hebrewIsGenerated: false,
     transliteratedIsGenerated: false,
+    hebrewIsPartial: false,
   },
   {
     id: 2,
@@ -54,6 +55,7 @@ const sampleEntries: SavedEntry[] = [
     isPhrase: false,
     hebrewIsGenerated: false,
     transliteratedIsGenerated: false,
+    hebrewIsPartial: false,
   },
 ];
 

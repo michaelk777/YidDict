@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { SavedEntry, getSavedEntries } from '../db/savedDb';
 
 interface SavedContextValue {
@@ -14,9 +14,15 @@ export function SavedProvider({ children }: { children: React.ReactNode }) {
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [savedKeySet, setSavedKeySet] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  // Only the very first load should show the loading state — refreshSaved()
+  // also gets called after every save/unsave anywhere in the app (Search tab
+  // included), and since React Navigation keeps this tab mounted in the
+  // background, flipping isLoading on every one of those would blow away the
+  // Saved tab's list/scroll position even when nobody's looking at it.
+  const hasLoadedOnce = useRef(false);
 
   const refreshSaved = useCallback(async () => {
-    setIsLoading(true);
+    if (!hasLoadedOnce.current) setIsLoading(true);
     try {
       const entries = await getSavedEntries();
       setSavedEntries(entries);
@@ -25,6 +31,7 @@ export function SavedProvider({ children }: { children: React.ReactNode }) {
       );
     } finally {
       setIsLoading(false);
+      hasLoadedOnce.current = true;
     }
   }, []);
 

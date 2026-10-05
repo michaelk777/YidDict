@@ -23,7 +23,7 @@ import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { saveEntry, saveEntries, deleteEntriesByKey, getSavedEntriesCount } from '../db/savedDb';
 import { useSaved } from '../context/SavedContext';
 import { detectInputScript } from '../utils/inputDetector';
-import { toSuperscript, splitHebrewLemma, formatHebrewLemma } from '../utils/hebrewDisplay';
+import { toSuperscript, splitHebrewLemma, formatHebrewLemma, markPartialHebrew } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
 import { GoogleTranslateAttribution } from '../components/GoogleTranslateAttribution';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,11 @@ import { getSourceOrder, DictSource, SOURCE_LABELS, getLowTokenThreshold, getCac
 import { yivoToHebrew } from '../utils/yivoToHebrew';
 import { hebrewToYivo } from '../utils/hebrewToYivo';
 import { log } from '../utils/logger';
+
+// Caps each entry card row's text at 85% of the card's width, leaving a
+// consistent reserved margin on the right so long headwords/phrases wrap
+// instead of overlapping the bookmark button.
+const ENTRY_TEXT_MAX_WIDTH = '85%';
 
 /**
  * Convert an enriched YIVO transliterated headword to Hebrew script, preserving
@@ -96,6 +101,37 @@ function hebrewHeadwordToYivo(hebrew: string): string | null {
 }
 
 /**
+ * Fills in Hebrew for a partial Finkel phrase by keeping the real Hebrew for
+ * hebrewCoveredWord and generating YIVO→Hebrew only for the surrounding
+ * text that has none — rather than discarding the real Hebrew entirely.
+ * Returns null (caller falls back to fully regenerating) if coveredWord
+ * can't be located within yiddishTransliterated.
+ */
+export function mergePartialHebrew(
+  yiddishTransliterated: string,
+  realHebrew: string,
+  coveredWord: string
+): string | null {
+  const idx = yiddishTransliterated.indexOf(coveredWord);
+  if (idx === -1) return null;
+
+  const prefixText = yiddishTransliterated.slice(0, idx).trim();
+  const suffixText = yiddishTransliterated.slice(idx + coveredWord.length);
+  const suffixTrimmed = suffixText.trim();
+  // Whether the suffix was hyphen-fused ("-erdish", no space needed when
+  // joining) or a separate word (" dem oygngreykh", needs a space).
+  const suffixNeedsSpace = /^\s/.test(suffixText);
+
+  const generatedPrefix = prefixText ? yivoToHebrew(prefixText) : null;
+  const generatedSuffix = suffixTrimmed ? yivoToHebrew(suffixTrimmed) : null;
+
+  let result = realHebrew;
+  if (generatedPrefix) result = `${generatedPrefix} ${result}`;
+  if (generatedSuffix) result = suffixNeedsSpace ? `${result} ${generatedSuffix}` : `${result}${generatedSuffix}`;
+  return result;
+}
+
+/**
  * Applies the YIVO↔Hebrew auto-generation converters (per Settings toggles)
  * to a batch of entries, filling in whichever headword field is missing.
  */
@@ -107,9 +143,30 @@ function applyConverter(
   if (!yivoToHebrewEnabled && !hebrewToYivoEnabled) return entries;
   return entries.map(e => {
     let updated = e;
-    if (yivoToHebrewEnabled && !updated.yiddishHebrew && updated.yiddishTransliterated) {
-      const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
-      if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
+    // Fill in Hebrew when it's missing entirely, or complete it when it only
+    // partially covers a Finkel phrase (hebrewIsPartial) — merging the real
+    // Hebrew with generated Hebrew for the uncovered part when possible,
+    // rather than discarding it and regenerating the whole phrase.
+    if (yivoToHebrewEnabled && updated.yiddishTransliterated) {
+      if (updated.hebrewIsPartial && updated.yiddishHebrew && updated.hebrewCoveredWord) {
+        const merged = mergePartialHebrew(
+          updated.yiddishTransliterated,
+          updated.yiddishHebrew,
+          updated.hebrewCoveredWord
+        );
+        if (merged) {
+          updated = {
+            ...updated,
+            yiddishHebrew: merged,
+            hebrewIsGenerated: true,
+            hebrewIsPartial: undefined,
+            hebrewCoveredWord: undefined,
+          };
+        }
+      } else if (!updated.yiddishHebrew) {
+        const generated = yivoHeadwordToHebrew(updated.yiddishTransliterated);
+        if (generated) updated = { ...updated, yiddishHebrew: generated, hebrewIsGenerated: true };
+      }
     }
     if (hebrewToYivoEnabled && !updated.yiddishTransliterated && updated.yiddishHebrew) {
       const generated = hebrewHeadwordToYivo(updated.yiddishHebrew);
@@ -146,6 +203,7 @@ export default function SearchScreen() {
   // or logged-out-warning banner is showing — the banner already explains why
   // there's nothing, so the generic "No results found" text would be redundant.
   const [suppressNoResultsMessage, setSuppressNoResultsMessage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const { savedKeySet, refreshSaved } = useSaved();
 
   // Session-scoped exhaustion/low-token tracking. useRefs so updates don't trigger re-renders.
@@ -153,6 +211,9 @@ export default function SearchScreen() {
   const verterbukhLowToken = useRef(false);
   const approachingMaxSaved = useRef(false);
   const trimAlertShownThisSave = useRef(false);
+  // In-flight guards against double-taps; refs so the check is synchronous.
+  const searchInFlight = useRef(false);
+  const saveInFlight = useRef(false);
 
   /**
    * Warn once (per crossing) when saved entries first reach >= 90% of max_saved_entries.
@@ -225,8 +286,9 @@ export default function SearchScreen() {
 
   const handleSearch = useCallback(async () => {
     const trimmed = query.trim();
-    if (!trimmed) return;
+    if (!trimmed || searchInFlight.current) return;
 
+    searchInFlight.current = true;
     setIsLoading(true);
     setError(null);
     setFromCache(false);
@@ -410,10 +472,12 @@ export default function SearchScreen() {
       console.error('[YidDict] SearchScreen lookup error:', err);
     } finally {
       setIsLoading(false);
+      searchInFlight.current = false;
     }
   }, [query, processQuota]);
 
   const handleOtherOption = useCallback(async (choice: VerterbukhChoice) => {
+    if (searchInFlight.current) return;
     const trimmed = query.trim();
 
     if (verterbukhExhausted.current) {
@@ -424,6 +488,7 @@ export default function SearchScreen() {
       return;
     }
 
+    searchInFlight.current = true;
     setIsLoading(true);
     setOtherOptions(null);
     setShowTryEnglish(false);
@@ -490,12 +555,15 @@ export default function SearchScreen() {
       setError('Could not retrieve that entry. Try again.');
     } finally {
       setIsLoading(false);
+      searchInFlight.current = false;
     }
   }, [query, processQuota]);
 
   const handleTryEnglish = useCallback(async () => {
+    if (searchInFlight.current) return;
     const trimmed = query.trim();
     if (!trimmed) return;
+    searchInFlight.current = true;
     setShowTryEnglish(false);
     setOtherOptions(null);
     setIsLoading(true);
@@ -546,6 +614,7 @@ export default function SearchScreen() {
       setError('Could not retrieve that entry. Try again.');
     } finally {
       setIsLoading(false);
+      searchInFlight.current = false;
     }
   }, [query, processQuota]);
 
@@ -584,45 +653,60 @@ export default function SearchScreen() {
   }, []);
 
   const handleSaveEntry = useCallback(async (entry: DictEntry, source: DictSource) => {
-    const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
-    if (savedKeySet.has(key)) {
-      await deleteEntriesByKey([entry], source);
-    } else {
-      const proceed = await confirmSaveTrim(1);
-      if (!proceed) return;
-      await saveEntry(query.trim(), entry, source);
-      if (!trimAlertShownThisSave.current) await checkApproachingMaxSaved();
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
+    setIsSaving(true);
+    try {
+      const key = `${entry.yiddishHebrew ?? ''}|${entry.english ?? ''}|${source}`;
+      if (savedKeySet.has(key)) {
+        await deleteEntriesByKey([entry], source);
+      } else {
+        const proceed = await confirmSaveTrim(1);
+        if (!proceed) return;
+        await saveEntry(query.trim(), entry, source);
+        if (!trimAlertShownThisSave.current) await checkApproachingMaxSaved();
+      }
+      await refreshSaved();
+    } finally {
+      setIsSaving(false);
+      saveInFlight.current = false;
     }
-    await refreshSaved();
   }, [query, savedKeySet, refreshSaved, checkApproachingMaxSaved, confirmSaveTrim]);
 
   const handleSaveAll = useCallback(async () => {
-    if (entries.length === 0) return;
-    const isAllSaved = entries.every(e =>
-      savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${e.source}`)
-    );
-    if (!isAllSaved) {
-      const proceed = await confirmSaveTrim(entries.length);
-      if (!proceed) return;
-    }
-    // Group entries by their own source field
-    const bySource = new Map<DictSource, DictEntry[]>();
-    for (const e of entries) {
-      const src = e.source as DictSource;
-      if (!bySource.has(src)) bySource.set(src, []);
-      bySource.get(src)!.push(e);
-    }
-    for (const [src, srcEntries] of bySource) {
-      if (isAllSaved) {
-        await deleteEntriesByKey(srcEntries, src);
-      } else {
-        await saveEntries(query.trim(), srcEntries, src);
+    if (entries.length === 0 || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setIsSaving(true);
+    try {
+      const isAllSaved = entries.every(e =>
+        savedKeySet.has(`${e.yiddishHebrew ?? ''}|${e.english ?? ''}|${e.source}`)
+      );
+      if (!isAllSaved) {
+        const proceed = await confirmSaveTrim(entries.length);
+        if (!proceed) return;
       }
+      // Group entries by their own source field
+      const bySource = new Map<DictSource, DictEntry[]>();
+      for (const e of entries) {
+        const src = e.source as DictSource;
+        if (!bySource.has(src)) bySource.set(src, []);
+        bySource.get(src)!.push(e);
+      }
+      for (const [src, srcEntries] of bySource) {
+        if (isAllSaved) {
+          await deleteEntriesByKey(srcEntries, src);
+        } else {
+          await saveEntries(query.trim(), srcEntries, src);
+        }
+      }
+      if (!isAllSaved && !trimAlertShownThisSave.current) {
+        await checkApproachingMaxSaved();
+      }
+      await refreshSaved();
+    } finally {
+      setIsSaving(false);
+      saveInFlight.current = false;
     }
-    if (!isAllSaved && !trimAlertShownThisSave.current) {
-      await checkApproachingMaxSaved();
-    }
-    await refreshSaved();
   }, [query, entries, savedKeySet, refreshSaved, checkApproachingMaxSaved, confirmSaveTrim]);
 
   const handleClear = useCallback(() => {
@@ -684,8 +768,9 @@ export default function SearchScreen() {
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
-            style={[s.searchBtn, { backgroundColor: theme.primary }]}
+            style={[s.searchBtn, { backgroundColor: theme.primary }, isLoading && { opacity: 0.45 }]}
             onPress={handleSearch}
+            disabled={isLoading}
             accessibilityLabel="Search"
             testID="search-button"
           >
@@ -763,6 +848,7 @@ export default function SearchScreen() {
                     : theme.sourceFinkel
                   }
                   isSaved={savedKeySet.has(key)}
+                  saveDisabled={isSaving}
                   onSave={() => handleSaveEntry(item, item.source)}
                 />
               );
@@ -793,8 +879,13 @@ export default function SearchScreen() {
                   ) : null}
                   {entries.length > 0 ? (
                     <TouchableOpacity
-                      style={[s.saveAllBtn, { borderColor: allSaved ? theme.primary : theme.border }]}
+                      style={[
+                        s.saveAllBtn,
+                        { borderColor: allSaved ? theme.primary : theme.border },
+                        isSaving && { opacity: 0.45 },
+                      ]}
                       onPress={handleSaveAll}
+                      disabled={isSaving}
                       testID="save-all-button"
                     >
                       <Ionicons
@@ -923,10 +1014,11 @@ interface EntryRowProps {
   theme: ReturnType<typeof useTheme>['theme'];
   sourceColor: string;
   isSaved: boolean;
+  saveDisabled: boolean;
   onSave: () => void;
 }
 
-function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps) {
+function EntryRow({ entry, theme, sourceColor, isSaved, saveDisabled, onSave }: EntryRowProps) {
   const s = makeStyles(theme);
   return (
     <View
@@ -945,7 +1037,7 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
             <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
           ) : null}
           <Text style={[s.hebrew, { color: theme.text }]}>
-            {formatHebrewLemma(entry.yiddishHebrew)}
+            {markPartialHebrew(formatHebrewLemma(entry.yiddishHebrew), entry.hebrewIsPartial)}
           </Text>
           {entry.hebrewIsGenerated ? (
             <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
@@ -953,6 +1045,8 @@ function EntryRow({ entry, theme, sourceColor, isSaved, onSave }: EntryRowProps)
         </View>
         <TouchableOpacity
           onPress={onSave}
+          disabled={saveDisabled}
+          style={[saveDisabled && { opacity: 0.45 }]}
           accessibilityLabel={isSaved ? 'Remove from saved' : 'Save entry'}
           testID="save-entry-button"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -1200,11 +1294,13 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     transliteratedWrapper: {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     saveAllBtn: {
       flexDirection: 'row',
@@ -1223,11 +1319,13 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     transliterated: {
       fontSize: 16,
       fontStyle: 'italic',
+      flexShrink: 1,
     },
     hebrew: {
       fontSize: 16,
       writingDirection: 'rtl',
       textAlign: 'left',
+      flexShrink: 1,
     },
     generatedMarker: {
       fontSize: 13,
@@ -1237,10 +1335,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       fontSize: 13,
       fontStyle: 'italic',
       marginBottom: 4,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     definition: {
       fontSize: 16,
       marginBottom: 2,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     entryMeta: {
       flexDirection: 'row',
@@ -1252,6 +1352,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     entrySourceLabel: {
       fontSize: 11,

@@ -151,6 +151,11 @@ describe('parseFinkelHtml', () => {
       expect(sheyn!.grammaticalInfo).toContain('adjectival form with "-ink"');
     });
 
+    it('does not mistake the stem value "shen" for a new alt headword', () => {
+      const sheyn = entries.find(e => e.yiddishTransliterated === 'sheyn' && !e.isPhrase);
+      expect(sheyn!.grammaticalInfo).not.toContain('Also:');
+    });
+
   });
 
   // ---------------------------------------------------------------------------
@@ -180,6 +185,94 @@ describe('parseFinkelHtml', () => {
 <form></form>
 <ul>
 <li><span class='lexeme'>sheynkayt </span><span class="grammar">noun, plural in</span> -n, <span class="grammar">gender f,</span> <span class='definition'>beauty</span> sheynhayt <span class="grammar">noun, plural in</span> -n, <span class="grammar">gender f,</span> <span class='definition'>beautiful person or thing</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML (from a "khuts" search) — a primary sense
+  // ("earth") is followed by a second, independent grammar+def group
+  // ("adjectival form with -ish"/"-en" → "earthy") within the same <li>.
+  // Previously mis-split into two entries at the "-ish" suffix text.
+  const ERD_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>erd </span><span class="grammar">noun, plural in</span> -n,  <span class="grammar">gender f,</span> <span class='definition'>earth</span>  <span class="grammar">adjectival form with</span> -ish,  <span class="grammar">adjectival form with</span> -en, <span class='definition'>earthy</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML (also from the "khuts" search) — an alt headword
+  // ("mekutsefte") embedded mid-bare-text after "adjectival form with -dik",
+  // with its own Hebrew span. Previously the Hebrew was silently dropped
+  // (leaving "mekutsefte()") and the name stayed folded into the "-dik" line
+  // instead of becoming its own *Also:* entry.
+  const MEKHUTSEF_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>me<span class="weakmatch">khuts</span>ef(</span><span class='hebrew'>מחוצף</span>) <span class="grammar">plural </span> me<span class="weakmatch">khuts</span>ofem(<span class='hebrew'>מחוצפֿים</span>),  <span class="grammar">gender m,</span>  <span class="grammar">adjectival form with</span> -dik, mekutsefte(<span class='hebrew'>מחוצפֿטע</span>) <span class="grammar">noun, plural in</span> -s,  <span class="grammar">gender f,</span> <span class='definition'>impudent person</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML — two headwords ("parekh"/"parkh") sharing one
+  // definition, with the second name mixed into the first's own bare text
+  // ("-es, parkh"). Should become an *Also:* note on "parekh", not folded
+  // into "parekh"'s own plural-suffix line and not a separate top-level entry
+  // (they share one meaning, unlike sheynkayt/sheynhayt which don't).
+  const PAREKH_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>parekh </span><span class="grammar">noun, plural in</span> -es, parkh <span class="grammar">noun, plural in</span> -es, <span class='definition'>scalp canker, mange, scab (disease); nasty person</span>  <span class="grammar">has diminutive</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML — alt headword name is the "pure" shape (not
+  // mixed with a suffix, like o'ngelaf), but unlike o'ngelaf it carries its
+  // own Hebrew span — a combination not covered by the other fixtures.
+  const KHUTSPENIK_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'><span class="weakmatch">khu'ts</span>penik(</span><span class='hebrew'>חוצפּהניק</span>) <span class="grammar">noun, plural in</span> -es,  <span class="grammar">gender m,</span> <span class="weakmatch">khu'ts</span>penitse(<span class='hebrew'>חוצפּהניצע</span>) <span class="grammar">noun, plural in</span> -s,  <span class="grammar">gender f,</span> <span class='definition'>impudent person</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML — the alt headword ("khatsufe") itself has its
+  // own "plural" grammar line with its own Hebrew ("khatsufes" → "חצופֿות"),
+  // nested inside the alt headword's own grammar lines.
+  const KHOTSEF_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>khotsef(</span><span class='hebrew'>חצוף</span>) <span class="grammar">plural </span> khatsufem(<span class='hebrew'>חצופֿים</span>),  <span class="grammar">gender m,</span> khatsufe(<span class='hebrew'>חצופֿה</span>) <span class="grammar">plural </span> khatsufes(<span class='hebrew'>חצופֿות</span>),  <span class="grammar">gender f,</span> <span class='definition'>impudent or wanton person</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML — headword text ("-erdish") appears right after
+  // the base Hebrew span's closing paren, before any grammar starts. Was
+  // previously dropped entirely, leaving yiddishTransliterated as just "khuts".
+  const KHUTS_ERDISH_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'><span class="goodmatch">khuts</span>(</span><span class='hebrew'>חוץ</span>)-erdish <span class="grammar">adjective</span>, <span class='definition'>extra-terrestrial</span></li>
+</ul>
+<form></form>
+</body></html>`;
+
+  // Real live-captured HTML — a multi-word phrase where Finkel's Hebrew span
+  // only covers the last word ("mayse"); "a khuts a" has no Hebrew at all.
+  const KHUTS_A_MAYSE_HTML = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>a <span class="goodmatch">khuts</span> a mayse(</span><span class='hebrew'>מעשׂה</span>) <span class='definition'>a matter to set aside</span></li>
 </ul>
 <form></form>
 </body></html>`;
@@ -403,10 +496,10 @@ describe('parseFinkelHtml', () => {
       expect(entry.english).toBe('stampede; running to something');
     });
 
-    it('grammaticalInfo includes gender and also: line with bold marker and full grammar for each alt', () => {
+    it('grammaticalInfo includes gender and also: line with bold marker, each alt\'s own plural suffix folded into its name like a primary entry', () => {
       expect(entry.grammaticalInfo).toContain('gender n');
       expect(entry.grammaticalInfo).toContain(
-        "*also:* o'ngelaf, noun, plural in -n, gender n;\r" + "tsunoyfloyf, noun, plural in -n, gender n"
+        "*Also:* o'ngelaf, -n, noun, gender n;\r" + "tsunoyfloyf, -n, noun, gender n"
       );
     });
 
@@ -432,8 +525,8 @@ describe('parseFinkelHtml', () => {
       expect(entry.english).toBe('running away');
     });
 
-    it("grammaticalInfo includes bold also: line for antloy'fenish with full grammar", () => {
-      expect(entry.grammaticalInfo).toContain("*also:* antloy'fenish, noun, plural in -n, gender n");
+    it("grammaticalInfo includes bold also: line for antloy'fenish, its own plural suffix folded into its name", () => {
+      expect(entry.grammaticalInfo).toContain("*Also:* antloy'fenish, -n, noun, gender n");
     });
   });
 
@@ -510,7 +603,7 @@ describe('parseFinkelHtml', () => {
     });
 
     it('grammaticalInfo contains inline also: line for kindenyu', () => {
-      expect(entry.grammaticalInfo).toContain('*also:* kindenyu — dear child');
+      expect(entry.grammaticalInfo).toContain('*Also:* kindenyu — dear child');
     });
 
     it('grammaticalInfo does not contain "child" in the grammar display', () => {
@@ -540,7 +633,7 @@ describe('parseFinkelHtml', () => {
     });
 
     it('grammaticalInfo has no spurious also: line', () => {
-      expect(entry.grammaticalInfo).not.toContain('also:');
+      expect(entry.grammaticalInfo).not.toContain('Also:');
     });
   });
 
@@ -602,6 +695,280 @@ describe('parseFinkelHtml', () => {
     it('second entry is sheynhayt with plural enrichment', () => {
       expect(entries[1].yiddishTransliterated).toBe('sheynhayt, -n');
       expect(entries[1].english).toBe('beautiful person or thing');
+    });
+  });
+
+  describe('erd — trailing grammar+def group must not split into a second entry', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(ERD_HTML); });
+
+    it('produces exactly one entry, not two', () => {
+      expect(parseFinkelHtml(ERD_HTML)).toHaveLength(1);
+    });
+
+    it('enriches yiddishTransliterated with the plural suffix', () => {
+      expect(entry.yiddishTransliterated).toBe('erd, -n');
+    });
+
+    it('primary english is "earth", the first def, not "earthy"', () => {
+      expect(entry.english).toBe('earth');
+    });
+
+    it('grammaticalInfo preserves both adjectival forms and does not drop "earthy"', () => {
+      expect(entry.grammaticalInfo).toContain('gender f');
+      expect(entry.grammaticalInfo).toContain('adjectival form with "-ish"');
+      expect(entry.grammaticalInfo).toContain('adjectival form with "-en" — earthy');
+    });
+  });
+
+  describe('mekhutsef/mekutsefte — alt headword embedded in mixed bare text, with its own Hebrew', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(MEKHUTSEF_HTML); });
+
+    it('produces exactly one entry', () => {
+      expect(parseFinkelHtml(MEKHUTSEF_HTML)).toHaveLength(1);
+    });
+
+    it('enriches yiddishTransliterated and yiddishHebrew with the primary plural form', () => {
+      expect(entry.yiddishTransliterated).toBe('mekhutsef, mekhutsofem');
+      expect(entry.yiddishHebrew).toBe('מחוצף, מחוצפֿים');
+    });
+
+    it('primary english is the shared definition', () => {
+      expect(entry.english).toBe('impudent person');
+    });
+
+    it('adjectival form with "-dik" no longer swallows mekutsefte', () => {
+      expect(entry.grammaticalInfo).toContain('adjectival form with "-dik"');
+      expect(entry.grammaticalInfo).not.toContain('mekutsefte()');
+    });
+
+    it('mekutsefte becomes its own also: entry, with its own plural-in suffix folded into its name like a primary entry', () => {
+      expect(entry.grammaticalInfo).toContain('*Also:* mekutsefte, -s (מחוצפֿטע, -ס), noun, gender f');
+    });
+  });
+
+  describe('parekh/parkh — two headwords sharing one definition, name mixed into the first\'s bare text', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(PAREKH_HTML); });
+
+    it('produces exactly one entry (not two, since they share one definition)', () => {
+      expect(parseFinkelHtml(PAREKH_HTML)).toHaveLength(1);
+    });
+
+    it('enriches yiddishTransliterated with parekh\'s own plural suffix only', () => {
+      expect(entry.yiddishTransliterated).toBe('parekh, -es');
+    });
+
+    it('primary english is the shared definition', () => {
+      expect(entry.english).toBe('scalp canker, mange, scab (disease); nasty person');
+    });
+
+    it('parkh becomes its own also: entry, with its own plural-in suffix folded into its name and the trailing "has diminutive" note kept', () => {
+      expect(entry.grammaticalInfo).toContain('*Also:* parkh, -es, noun, has diminutive');
+    });
+  });
+
+  describe('khu\'tspenik/khu\'tspenitse — pure-shape alt headword with its own Hebrew (no suffix mixed in)', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(KHUTSPENIK_HTML); });
+
+    it('produces exactly one entry', () => {
+      expect(parseFinkelHtml(KHUTSPENIK_HTML)).toHaveLength(1);
+    });
+
+    it('enriches yiddishTransliterated with the primary plural suffix', () => {
+      expect(entry.yiddishTransliterated).toBe("khu'tspenik, -es");
+    });
+
+    it('primary english is the shared definition', () => {
+      expect(entry.english).toBe('impudent person');
+    });
+
+    it('khu\'tspenitse becomes its own also: entry with its Hebrew and its own suffix folded into its name', () => {
+      expect(entry.grammaticalInfo).toContain("*Also:* khu'tspenitse, -s (חוצפּהניצע, -ס), noun, gender f");
+    });
+  });
+
+  describe('khotsef/khatsufe — alt headword with its own nested "plural" trigger and Hebrew', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(KHOTSEF_HTML); });
+
+    it('produces exactly one entry', () => {
+      expect(parseFinkelHtml(KHOTSEF_HTML)).toHaveLength(1);
+    });
+
+    it('enriches yiddishTransliterated and yiddishHebrew with the primary plural form', () => {
+      expect(entry.yiddishTransliterated).toBe('khotsef, khatsufem');
+      expect(entry.yiddishHebrew).toBe('חצוף, חצופֿים');
+    });
+
+    it('primary english is the shared definition', () => {
+      expect(entry.english).toBe('impudent or wanton person');
+    });
+
+    it('khatsufe becomes its own also: entry, with its own plural form and Hebrew folded in — no stray "()"', () => {
+      expect(entry.grammaticalInfo).toContain('*Also:* khatsufe, khatsufes (חצופֿה, חצופֿות), gender f');
+      expect(entry.grammaticalInfo).not.toContain('khatsufes()');
+    });
+  });
+
+  describe('khuts-erdish — headword text appended after the base Hebrew span, before any grammar', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(KHUTS_ERDISH_HTML); });
+
+    it('produces exactly one entry', () => {
+      expect(parseFinkelHtml(KHUTS_ERDISH_HTML)).toHaveLength(1);
+    });
+
+    it('"-erdish" is no longer dropped from the headword', () => {
+      expect(entry.yiddishTransliterated).toBe('khuts-erdish');
+    });
+
+    it('yiddishHebrew only covers "khuts", flagged via hebrewIsPartial/hebrewCoveredWord', () => {
+      expect(entry.yiddishHebrew).toBe('חוץ');
+      expect(entry.hebrewIsPartial).toBe(true);
+      expect(entry.hebrewCoveredWord).toBe('khuts');
+    });
+
+    it('primary english is the definition', () => {
+      expect(entry.english).toBe('extra-terrestrial');
+    });
+  });
+
+  describe('a khuts a mayse — multi-word phrase where Hebrew only covers the last word', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => { [entry] = parseFinkelHtml(KHUTS_A_MAYSE_HTML); });
+
+    it('produces exactly one entry, full phrase preserved in yiddishTransliterated', () => {
+      expect(parseFinkelHtml(KHUTS_A_MAYSE_HTML)).toHaveLength(1);
+      expect(entry.yiddishTransliterated).toBe('a khuts a mayse');
+    });
+
+    it('yiddishHebrew only covers "mayse", flagged via hebrewIsPartial/hebrewCoveredWord', () => {
+      expect(entry.yiddishHebrew).toBe('מעשׂה');
+      expect(entry.hebrewIsPartial).toBe(true);
+      expect(entry.hebrewCoveredWord).toBe('mayse');
+    });
+
+    it('primary english is the definition', () => {
+      expect(entry.english).toBe('a matter to set aside');
+    });
+  });
+
+  describe('sforem khitsoynem — two-word phrase where each word has its own Hebrew span', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => {
+      const html = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>sforem(</span><span class='hebrew'>ספֿרים</span>) khitsoynem(<span class='hebrew'>חיצונים</span>) <span class='definition'>secular books</span></li>
+</ul>
+<form></form>
+</body></html>`;
+      [entry] = parseFinkelHtml(html);
+    });
+
+    it('produces exactly one entry', () => {
+      expect(entry).toBeDefined();
+    });
+
+    it('both words merge into yiddishTransliterated', () => {
+      expect(entry.yiddishTransliterated).toBe('sforem khitsoynem');
+    });
+
+    it('both Hebrew spans merge into yiddishHebrew, fully covered — not partial', () => {
+      expect(entry.yiddishHebrew).toBe('ספֿרים חיצונים');
+      expect(entry.hebrewIsPartial).toBeUndefined();
+    });
+
+    it('primary english is the shared definition', () => {
+      expect(entry.english).toBe('secular books');
+    });
+  });
+
+  describe('mikhuts dem oygngreykh — phrase continuation with no further Hebrew', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => {
+      const html = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>mi<span class="weakmatch">khuts</span>(</span><span class='hebrew'>מחוץ</span>) dem oygngreykh <span class='definition'>out of sight</span></li>
+</ul>
+<form></form>
+</body></html>`;
+      [entry] = parseFinkelHtml(html);
+    });
+
+    it('produces exactly one entry', () => {
+      expect(entry).toBeDefined();
+    });
+
+    it('"dem oygngreykh" is no longer dropped from the headword', () => {
+      expect(entry.yiddishTransliterated).toBe('mikhuts dem oygngreykh');
+    });
+
+    it('yiddishHebrew only covers "mikhuts", flagged via hebrewIsPartial', () => {
+      expect(entry.yiddishHebrew).toBe('מחוץ');
+      expect(entry.hebrewIsPartial).toBe(true);
+    });
+
+    it('primary english is the definition', () => {
+      expect(entry.english).toBe('out of sight');
+    });
+  });
+
+  describe('khuts / mikhuts / akhuts — alt names appearing after the primary definition, closed by a shared trailing grammar', () => {
+    let entry: ReturnType<typeof parseFinkelHtml>[0];
+    beforeAll(() => {
+      const html = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'><span class="goodmatch">khuts</span>(</span><span class='hebrew'>חוץ</span>)  <span class="grammar">prep,</span> <span class='definition'>except for; in addition to</span> mi<span class="weakmatch">khuts</span>(<span class='hebrew'>מחוץ</span>) a<span class="weakmatch">khuts</span>(<span class='hebrew'>אַחוץ</span>) <span class="grammar">preposition</span></li>
+</ul>
+<form></form>
+</body></html>`;
+      [entry] = parseFinkelHtml(html);
+    });
+
+    it('produces exactly one entry', () => {
+      expect(entry).toBeDefined();
+    });
+
+    it('primary headword and definition are khuts / "except for; in addition to"', () => {
+      expect(entry.yiddishTransliterated).toBe('khuts');
+      expect(entry.yiddishHebrew).toBe('חוץ');
+      expect(entry.english).toBe('except for; in addition to');
+    });
+
+    it('mikhuts and akhuts are no longer dropped — merged into one also: entry with the shared trailing grammar', () => {
+      expect(entry.grammaticalInfo).toContain('*Also:* mikhuts akhuts (מחוץ אַחוץ), preposition');
+    });
+  });
+
+  describe('"source:" spans are bolded and capitalized to match *Also:*', () => {
+    it('reformats a literal "source: X" span to "*Source:* X"', () => {
+      const html = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'>parkhutsh </span><span class="grammar">noun, plural in</span> -n,  <span class="grammar">gender m,</span> <span class='definition'>nasty person</span> <span class='source'>source: Sholem Aleykhem</span></li>
+</ul>
+<form></form>
+</body></html>`;
+      const [entry] = parseFinkelHtml(html);
+      expect(entry.grammaticalInfo).toContain('*Source:* Sholem Aleykhem');
+      expect(entry.grammaticalInfo).not.toContain('source:');
+    });
+
+    it('leaves non-citation .source content (e.g. "indeclinable") unchanged', () => {
+      const entries = parseFinkelHtml(SHEYN_HTML);
+      const shney = entries.find(e => e.yiddishTransliterated?.includes('shney'));
+      expect(shney!.grammaticalInfo).toContain('indeclinable');
+      expect(shney!.grammaticalInfo).not.toContain('*Source:*');
     });
   });
 });

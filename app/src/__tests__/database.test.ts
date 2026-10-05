@@ -60,10 +60,20 @@ describe('database', () => {
       expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS user_settings/);
     });
 
+    // Filters runAsync calls down to the user_settings seed inserts —
+    // initDatabase() also issues other runAsync calls unrelated to settings
+    // (e.g. the saved_entries dedup migration), which don't have a
+    // [sql, params] shape and would otherwise break the param-based lookups
+    // below.
+    function settingsCalls(mockDb: ReturnType<typeof freshModules>['mockDb']) {
+      return (mockDb.runAsync.mock.calls as [string, string[]][])
+        .filter(([sql]) => sql.includes('INTO user_settings'));
+    }
+
     it('seeds the default settings including source order and max_saved_entries', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const keys = mockDb.runAsync.mock.calls.map(([, params]: [string, string[]]) => params[0]);
+      const keys = settingsCalls(mockDb).map(([, params]) => params[0]);
       expect(keys).toContain('source_order_1');
       expect(keys).toContain('source_order_2');
       expect(keys).toContain('source_order_3');
@@ -74,71 +84,71 @@ describe('database', () => {
     it('seeds source_order_1 as "finkel"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_1');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'source_order_1');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('finkel');
+      expect(call![1][1]).toBe('finkel');
     });
 
     it('seeds source_order_2 as "google_translate"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_2');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'source_order_2');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('google_translate');
+      expect(call![1][1]).toBe('google_translate');
     });
 
     it('seeds source_order_3 as "none" (verterbukh is not a default source until the user logs in)', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'source_order_3');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'source_order_3');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('none');
+      expect(call![1][1]).toBe('none');
     });
 
     it('seeds max_saved_entries as "500"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'max_saved_entries');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'max_saved_entries');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('500');
+      expect(call![1][1]).toBe('500');
     });
 
     it('seeds theme as "system"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'theme');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'theme');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('system');
+      expect(call![1][1]).toBe('system');
     });
 
     it('seeds verterbukh_exhausted_alert as "1"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'verterbukh_exhausted_alert');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'verterbukh_exhausted_alert');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('1');
+      expect(call![1][1]).toBe('1');
     });
 
     it('seeds verterbukh_low_token_alert as "1"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'verterbukh_low_token_alert');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'verterbukh_low_token_alert');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('1');
+      expect(call![1][1]).toBe('1');
     });
 
     it('seeds save_trim_alert as "1"', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      const call = mockDb.runAsync.mock.calls.find(([, p]: [string, string[]]) => p[0] === 'save_trim_alert');
+      const call = settingsCalls(mockDb).find(([, p]) => p[0] === 'save_trim_alert');
       expect(call).toBeDefined();
-      expect(call[1][1]).toBe('1');
+      expect(call![1][1]).toBe('1');
     });
 
     it('uses INSERT OR IGNORE to avoid overwriting existing settings', async () => {
       const { initDatabase, mockDb } = freshModules();
       await initDatabase();
-      mockDb.runAsync.mock.calls.forEach(([sql]: [string]) => {
+      settingsCalls(mockDb).forEach(([sql]) => {
         expect(sql).toMatch(/INSERT OR IGNORE/);
       });
     });
@@ -182,6 +192,45 @@ describe('database', () => {
       await initDatabase();
       expect(() => getDatabase()).not.toThrow();
       expect(getDatabase()).toBe(mockDb);
+    });
+
+    describe('saved_entries dedup index', () => {
+      it('cleans up any pre-existing duplicates before creating the index, when the index does not exist yet', async () => {
+        const { initDatabase, mockDb } = freshModules();
+        // getFirstAsync defaults to resolving null (see __mocks__/expo-sqlite.ts),
+        // so the "does idx_saved_entries_dedup already exist" check reports not-found.
+        await initDatabase();
+        const deleteCall = (mockDb.runAsync.mock.calls as [string, unknown[]?][])
+          .find(([sql]) => sql.includes('DELETE FROM saved_entries'));
+        expect(deleteCall).toBeDefined();
+        expect(deleteCall![0]).toMatch(/GROUP BY COALESCE\(yiddish_hebrew, ''\), COALESCE\(english, ''\), source/);
+      });
+
+      it('creates a UNIQUE index on (yiddish_hebrew, english, source) when it does not exist yet', async () => {
+        const { initDatabase, mockDb } = freshModules();
+        await initDatabase();
+        const indexCall = (mockDb.execAsync.mock.calls as [string][])
+          .find(([sql]) => sql.includes('CREATE UNIQUE INDEX'));
+        expect(indexCall).toBeDefined();
+        expect(indexCall![0]).toMatch(/idx_saved_entries_dedup/);
+        expect(indexCall![0]).toMatch(/ON saved_entries \(COALESCE\(yiddish_hebrew, ''\), COALESCE\(english, ''\), source\)/);
+      });
+
+      it('does not re-run the cleanup/index-creation when the index already exists', async () => {
+        const { initDatabase, mockDb } = freshModules();
+        mockDb.getFirstAsync.mockImplementation((sql: string) =>
+          sql.includes('idx_saved_entries_dedup')
+            ? Promise.resolve({ name: 'idx_saved_entries_dedup' })
+            : Promise.resolve(null)
+        );
+        await initDatabase();
+        const deleteCall = (mockDb.runAsync.mock.calls as [string, unknown[]?][])
+          .find(([sql]) => sql.includes('DELETE FROM saved_entries'));
+        const indexCall = (mockDb.execAsync.mock.calls as [string][])
+          .find(([sql]) => sql.includes('CREATE UNIQUE INDEX'));
+        expect(deleteCall).toBeUndefined();
+        expect(indexCall).toBeUndefined();
+      });
     });
   });
 });

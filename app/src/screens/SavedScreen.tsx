@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useSaved } from '../context/SavedContext';
 import { DictSource, SOURCE_LABELS } from '../db/settingsDb';
-import { formatHebrewLemma, splitHebrewLemma, toSuperscript } from '../utils/hebrewDisplay';
+import { formatHebrewLemma, splitHebrewLemma, toSuperscript, markPartialHebrew } from '../utils/hebrewDisplay';
 import { GrammarText } from '../components/GrammarText';
 import { GoogleTranslateAttribution } from '../components/GoogleTranslateAttribution';
 import {
@@ -26,6 +26,11 @@ import {
   generateCsv,
   generateTsv,
 } from '../db/savedDb';
+
+// Caps each entry row's text at 85% of the row's width, leaving a
+// consistent reserved margin on the right so long headwords/phrases wrap
+// instead of overlapping the delete button.
+const ENTRY_TEXT_MAX_WIDTH = '85%';
 
 export default function SavedScreen() {
   const { theme } = useTheme();
@@ -198,7 +203,7 @@ function SavedRow({ entry, theme, onDelete }: SavedRowProps) {
             {entry.hebrewIsGenerated ? (
               <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
             ) : null}
-            <Text style={[s.hebrew, { color: theme.text }]}>{formatHebrewLemma(entry.yiddishHebrew)}</Text>
+            <Text style={[s.hebrew, { color: theme.text }]}>{markPartialHebrew(formatHebrewLemma(entry.yiddishHebrew), entry.hebrewIsPartial)}</Text>
             {entry.hebrewIsGenerated ? (
               <Text style={[s.generatedMarker, { color: theme.textSecondary }]}>~</Text>
             ) : null}
@@ -329,20 +334,24 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     transliteratedWrapper: {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 4,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     transliterated: {
       fontSize: 16,
       fontStyle: 'italic',
+      flexShrink: 1,
     },
     hebrew: {
       fontSize: 16,
       writingDirection: 'rtl',
       textAlign: 'left',
+      flexShrink: 1,
     },
     generatedMarker: {
       fontSize: 12,
@@ -351,6 +360,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     english: {
       fontSize: 16,
       marginBottom: 2,
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     rowMeta: {
       flexDirection: 'row',
@@ -361,10 +371,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     grammar: {
       fontSize: 13,
       fontStyle: 'italic',
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
     sourceName: {
       fontSize: 11,
       fontWeight: '600',
+      maxWidth: ENTRY_TEXT_MAX_WIDTH,
     },
   });
 }

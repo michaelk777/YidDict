@@ -88,6 +88,18 @@ describe('getSavedEntries', () => {
     const [result] = await getSavedEntries();
     expect(result.isPhrase).toBe(true);
   });
+
+  it('maps hebrew_is_partial=1 to hebrewIsPartial=true', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([{ ...sampleRow, hebrew_is_partial: 1 }]);
+    const [result] = await getSavedEntries();
+    expect(result.hebrewIsPartial).toBe(true);
+  });
+
+  it('maps missing hebrew_is_partial to hebrewIsPartial=false', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([sampleRow]);
+    const [result] = await getSavedEntries();
+    expect(result.hebrewIsPartial).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -126,8 +138,14 @@ describe('saveEntry', () => {
   it('inserts one row into saved_entries', async () => {
     await saveEntry('sheyn', sampleEntry, 'finkel');
     const insertCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
-      .filter(([sql]) => sql.includes('INSERT INTO saved_entries'));
+      .filter(([sql]) => sql.includes('INTO saved_entries'));
     expect(insertCalls.length).toBe(1);
+  });
+
+  it('uses INSERT OR IGNORE, so a duplicate save (same yiddish_hebrew/english/source) is silently ignored', async () => {
+    await saveEntry('sheyn', sampleEntry, 'finkel');
+    const [sql] = __mockDb.runAsync.mock.calls[0];
+    expect(sql).toMatch(/INSERT OR IGNORE INTO saved_entries/i);
   });
 
   it('stores the query and source', async () => {
@@ -147,6 +165,18 @@ describe('saveEntry', () => {
     await saveEntry('sheyn', sampleEntry, 'finkel');
     const [, params] = __mockDb.runAsync.mock.calls[0];
     expect(params).toContain(0);
+  });
+
+  it('stores hebrew_is_partial as the last INSERT param, 1 when set', async () => {
+    await saveEntry('sheyn', { ...sampleEntry, hebrewIsPartial: true }, 'finkel');
+    const [, params] = __mockDb.runAsync.mock.calls[0] as [string, unknown[]];
+    expect(params[params.length - 1]).toBe(1);
+  });
+
+  it('stores hebrew_is_partial as 0 when unset', async () => {
+    await saveEntry('sheyn', sampleEntry, 'finkel');
+    const [, params] = __mockDb.runAsync.mock.calls[0] as [string, unknown[]];
+    expect(params[params.length - 1]).toBe(0);
   });
 
   it('trims to max entries after saving', async () => {
@@ -176,7 +206,7 @@ describe('saveEntries', () => {
     const entries = [sampleEntry, { ...sampleEntry, english: 'beautiful' }];
     await saveEntries('sheyn', entries, 'finkel');
     const insertCalls = (__mockDb.runAsync.mock.calls as [string, unknown[]][])
-      .filter(([sql]) => sql.includes('INSERT INTO saved_entries'));
+      .filter(([sql]) => sql.includes('INTO saved_entries'));
     expect(insertCalls.length).toBe(2);
   });
 
@@ -294,6 +324,7 @@ const savedEntry: SavedEntry = {
   isPhrase: false,
   hebrewIsGenerated: false,
   transliteratedIsGenerated: false,
+  hebrewIsPartial: false,
 };
 
 describe('generateCsv', () => {

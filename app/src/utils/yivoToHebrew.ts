@@ -14,6 +14,7 @@
 // Digraph rules — longest patterns first to prevent partial matches (e.g. "tsh" before "sh").
 const DIGRAPHS: [string, string][] = [
   ['tsh', 'טש'],    // tes + shin
+  ['dzh', 'דזש'],   // dzh cluster (rare in native Yiddish) — must come before 'dz' below
   ['kh',  'כ'],     // khof (sofit: ך)
   ['sh',  'ש'],     // shin
   ['ts',  'צ'],     // tsadek (sofit: ץ)
@@ -21,6 +22,7 @@ const DIGRAPHS: [string, string][] = [
   ['ay',  'ייַ'], // pasekh-tsvey-yudn (yud yud pasekh)
   ['ey',  'יי'],    // tsvey-yudn
   ['oy',  'וי'],    // vov + yud
+  ['yi',  'ייִ'], // tsvey-yudn + khirik, e.g. "yingl" — mirrors hebrewToYivo.ts's own rule
   ['dz',  'דז'],    // dz cluster
 ];
 

@@ -79,6 +79,14 @@ describe('yivoToHebrew()', () => {
     expect(yivoToHebrew('ay')).toBe('ייַ');
   });
 
+  it('converts dzh → dzh cluster (dalet-zayin-shin), not dz + h separately', () => {
+    expect(yivoToHebrew('dzhez')).toBe('דזשעז');
+  });
+
+  it('converts yi → tsvey-yudn + khirik, not two plain yuds', () => {
+    expect(yivoToHebrew('yingl')).toBe('ייִנגל');
+  });
+
   // tsh must win over sh when tsh appears
   it('prefers tsh over sh in "tsh" sequence', () => {
     const result = yivoToHebrew('tshaynik');

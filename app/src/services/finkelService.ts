@@ -122,6 +122,77 @@ function baseHebrewOf(li: HTMLElement): string | null {
   return null;
 }
 
+/**
+ * Walks the sequence of word(+Hebrew) pairs that can appear directly after
+ * the base Hebrew span, before the first grammar span or definition. A word
+ * followed by its own Hebrew span is fully covered and merges into both
+ * yiddishTransliterated and yiddishHebrew; a word with no Hebrew span merges
+ * into yiddishTransliterated only, which is what makes the result partial.
+ *
+ * Stops the moment a grammar span appears, leaving everything from there on
+ * for extractAltHeadwords — that's the mechanism for headwords that get
+ * their own full grammar description, not this one.
+ */
+function collectHeadwordContinuation(li: HTMLElement): {
+  transliteratedSuffix: string;
+  hebrewSuffix: string;
+  isPartial: boolean;
+} {
+  let transliteratedSuffix = '';
+  let hebrewSuffix = '';
+  let isPartial = false;
+  let sawBaseHebrew = false;
+  // A word ending in an unclosed "(" — waiting to see if a Hebrew span
+  // follows it before it's committed to transliteratedSuffix.
+  let pendingWord: string | null = null;
+
+  for (const child of li.childNodes) {
+    const el = child as HTMLElement;
+
+    if (el.tagName) {
+      if (el.classList?.contains('lexeme')) continue;
+
+      if (el.classList?.contains('hebrew')) {
+        if (!sawBaseHebrew) {
+          sawBaseHebrew = true;
+          continue;
+        }
+        if (pendingWord !== null) {
+          transliteratedSuffix += pendingWord;
+          hebrewSuffix += ` ${el.text.trim()}`;
+          pendingWord = null;
+          continue;
+        }
+        break;
+      }
+
+      // Any other tag (grammar, definition, source, etc.) ends the window.
+      break;
+    }
+
+    if (!sawBaseHebrew) continue;
+    const afterParen = (child.text ?? '').replace(/^\)/, '');
+    const cleaned = afterParen.trim();
+    if (!cleaned) continue;
+
+    if (cleaned.endsWith('(')) {
+      // A new word that's about to get its own Hebrew span.
+      const word = cleaned.slice(0, -1);
+      pendingWord = /^\s/.test(afterParen) ? ` ${word}` : word;
+      continue;
+    }
+
+    // Plain continuation text with no Hebrew of its own — hyphen-prefixed
+    // fuses directly ("-erdish"); anything else needs a space to join.
+    const needsSpace = /^\s/.test(afterParen) && !cleaned.startsWith('-');
+    transliteratedSuffix += needsSpace ? ` ${cleaned}` : cleaned;
+    isPartial = true;
+    break;
+  }
+
+  return { transliteratedSuffix, hebrewSuffix, isPartial };
+}
+
 function collectEntries(
   lis: HTMLElement[],
   isPhrase: boolean,
@@ -165,7 +236,29 @@ function collectEntries(
     // Spans appearing after a grammar span are inflected forms captured via events.
     const baseHebrew = baseHebrewOf(li);
 
-    out.push(...parseEntryChildren(li.childNodes, baseTransliterated, baseHebrew, isPhrase));
+    // Words (and their Hebrew, if any) that continue directly after the base
+    // Hebrew span, before any grammar starts — see collectHeadwordContinuation.
+    const continuation = collectHeadwordContinuation(li);
+    const fullTransliterated = continuation.transliteratedSuffix
+      ? `${baseTransliterated ?? ''}${continuation.transliteratedSuffix}`
+      : baseTransliterated;
+    const fullHebrew = continuation.hebrewSuffix
+      ? `${baseHebrew ?? ''}${continuation.hebrewSuffix}`
+      : baseHebrew;
+
+    // The Hebrew span, when present, only ever covers the one word of
+    // baseTransliterated directly before it (plus whatever collectHeadword-
+    // Continuation merged in above). If the full headword turns out to have
+    // more words than that — a multi-word baseTransliterated on its own, or
+    // uncovered continuation text — the rest will have no matching Hebrew.
+    // hebrewCoveredWord records exactly which word, so the app can later
+    // splice generated Hebrew in around it instead of discarding it.
+    const isPartial =
+      baseHebrew !== null &&
+      (continuation.isPartial || (baseTransliterated?.trim().split(/\s+/).length ?? 1) > 1);
+    const hebrewCoveredWord = isPartial ? baseTransliterated?.trim().split(/\s+/).pop() ?? null : null;
+
+    out.push(...parseEntryChildren(li.childNodes, fullTransliterated, fullHebrew, isPhrase, hebrewCoveredWord));
 
     // Some entries have phrase sub-entries in an inline nested <ul>.
     const inlineUl = (li.childNodes as Node[]).find(
@@ -278,7 +371,12 @@ function findSplitIndices(events: Ev[]): number[] {
         }
       }
       if (ev.kind === 'bare' && wordIdx < 0) {
-        if (/[a-zA-Zא-תיִ-פֿ]/.test(ev.text)) wordIdx = j;
+        const trimmed = ev.text.trim();
+        // Hyphen-prefixed bare text (e.g. "-ish", "-en") is a grammatical
+        // suffix value, not a new headword — real headwords never start with
+        // a hyphen. Without this check, a suffix like "-ish" gets misread as
+        // a word-like token and triggers a false entry split.
+        if (/[a-zA-Zא-תיִ-פֿ]/.test(trimmed) && !trimmed.startsWith('-')) wordIdx = j;
       }
     }
   }
@@ -295,47 +393,86 @@ function findSplitIndices(events: Ev[]): number[] {
  * This handles cases like: grammar "adjectival form with '-ish'," →
  * def "skeletal" (secondary) → def "skeleton" (main English).
  */
+interface GrammarLine {
+  span: string;
+  bare: string;
+  hebrew: string;
+  secondaryDef: string | null;
+  closedByGrammar: boolean;
+}
+
 function processSegmentEvents(slice: Ev[]): {
-  grammarLines: Array<{ span: string; bare: string; hebrew: string }>;
+  grammarLines: GrammarLine[];
   english: string | null;
   sources: string[];
   inlineAlts: Array<{ name: string; english: string }>;
+  postDefAltName: string;
+  postDefAltHebrew: string;
+  postDefAltGrammar: string | null;
 } {
   const lastDefIdx = slice.reduce((last, ev, i) => (ev.kind === 'def' ? i : last), -1);
-  const grammarLines: Array<{ span: string; bare: string; hebrew: string }> = [];
+  const grammarLines: GrammarLine[] = [];
   let pendingSpan: string | null = null;
   let pendingBare = '';
   let pendingHebrew = '';
+  let pendingSecondaryDef: string | null = null;
   let english: string | null = null;
   const sources: string[] = [];
-  // Tracks a bare-text alt headword name seen after the main def is set.
-  let pendingInlineAltName: string | null = null;
+  // Raw bare text accumulating into a candidate name after the main def is
+  // set (e.g. "mi" + "khuts" + "(" while building up "mikhuts").
+  let pendingPostDefWord = '';
   const inlineAlts: Array<{ name: string; english: string }> = [];
+  // Word(+Hebrew) pairs appearing after the main def, with no definition of
+  // their own — merged into one alt entry (see collectHeadwordContinuation
+  // for the analogous pre-definition case; same reasoning applies here:
+  // there's no reliable signal to split multiple such pairs into separate
+  // alt headwords, e.g. "mikhuts(מחוץ) akhuts(אַחוץ)").
+  let postDefAltName = '';
+  let postDefAltHebrew = '';
+  let postDefAltGrammar: string | null = null;
+
+  const pushPending = (closedByGrammar: boolean) => {
+    if (pendingSpan === null) return;
+    grammarLines.push({
+      span: pendingSpan,
+      bare: pendingBare,
+      hebrew: pendingHebrew,
+      secondaryDef: pendingSecondaryDef,
+      closedByGrammar,
+    });
+    pendingSpan = null;
+    pendingBare = '';
+    pendingHebrew = '';
+    pendingSecondaryDef = null;
+  };
 
   for (let i = 0; i < slice.length; i++) {
     const ev = slice[i];
     switch (ev.kind) {
       case 'grammar':
-        if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
+        if (pendingSpan === null && english !== null && postDefAltName) {
+          // Shared trailing grammar for the post-definition alt name(s)
+          // accumulated above (e.g. "preposition" describing "mikhuts akhuts").
+          postDefAltGrammar = ev.text;
+          break;
+        }
+        pushPending(true);
         pendingSpan = ev.text;
         pendingBare = '';
         pendingHebrew = '';
-        // A new grammar context means any pending inline alt name (bare text
+        pendingSecondaryDef = null;
+        // A new grammar context means any pending post-def word (bare text
         // between defs) belongs to this new grammar, not to a headword variant.
-        pendingInlineAltName = null;
+        pendingPostDefWord = '';
         break;
 
-      case 'def':
-        if (pendingInlineAltName !== null) {
+      case 'def': {
+        const pendingPostDefName = pendingPostDefWord.trim().replace(/[,\s]+$/, '').trim();
+        if (pendingPostDefName) {
           // This def is the meaning of the pending inline alt headword.
-          inlineAlts.push({ name: pendingInlineAltName, english: ev.text });
-          pendingInlineAltName = null;
-          if (pendingSpan !== null) {
-            grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
-            pendingSpan = null;
-            pendingBare = '';
-            pendingHebrew = '';
-          }
+          inlineAlts.push({ name: pendingPostDefName, english: ev.text });
+          pendingPostDefWord = '';
+          pushPending(false);
         } else if (pendingSpan !== null && i < lastDefIdx) {
           // Potential secondary definition. Look ahead: if a non-empty bare word
           // appears before the next def, this def is the main entry's primary
@@ -353,39 +490,58 @@ function processSegmentEvents(slice: Ev[]): {
           }
           if (hasBareBetweenDefs) {
             // Close grammar context; treat this def as the primary English meaning.
-            grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
-            pendingSpan = null;
-            pendingBare = '';
-            pendingHebrew = '';
+            pushPending(false);
             if (english === null) english = ev.text || null;
           } else {
             // True secondary def: append text to current grammar line's bare.
             pendingBare += ev.text;
           }
+        } else if (
+          pendingSpan !== null &&
+          english !== null &&
+          pendingSpan.trim().startsWith('adjectival form with')
+        ) {
+          // Trailing "adjectival form with" def is a secondary meaning for
+          // that derived form (e.g. "erd" → "earth", then "-en" → "earthy"),
+          // not a new primary meaning. Scoped narrowly here since other
+          // trigger spans (plural, plural in, participle) have their own
+          // headword-enrichment handling that a trailing def would corrupt.
+          // Kept as its own field (not merged into pendingBare) so it renders
+          // outside the quoted suffix, e.g. adjectival form with "-en", earthy.
+          pendingSecondaryDef = pendingSecondaryDef ? `${pendingSecondaryDef}; ${ev.text}` : ev.text;
         } else {
-          if (pendingSpan !== null) {
-            grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
-            pendingSpan = null;
-            pendingBare = '';
-            pendingHebrew = '';
-          }
+          pushPending(false);
           if (english === null) english = ev.text || null;
         }
         break;
+      }
 
       case 'bare':
         if (pendingSpan !== null) {
           pendingBare += ev.text;
         } else if (english !== null) {
-          // Grammar context is closed and main def is already set — a non-empty
-          // bare word here is the name of an inline alt headword.
-          const altName = ev.text.trim().replace(/[,\s]+$/, '').trim();
-          if (altName) pendingInlineAltName = altName;
+          // Grammar context is closed and main def is already set — accumulate
+          // raw bare text into the pending post-def word (e.g. "mi" + "khuts").
+          pendingPostDefWord += ev.text;
         }
         break;
 
       case 'hebrew':
-        if (pendingSpan === 'plural') pendingHebrew += ev.text;
+        // Captured for any pending grammar context, not just "plural" — a
+        // Hebrew span can also belong to an alt headword's own name (see
+        // extractAltHeadwords), not only to the primary entry's plural-form
+        // enrichment.
+        if (pendingSpan !== null) {
+          pendingHebrew += ev.text;
+        } else if (english !== null && pendingPostDefWord.trim()) {
+          const word = pendingPostDefWord.replace(/\($/, '').trim().replace(/^[),\s]+/, '').trim();
+          if (word) {
+            postDefAltName = postDefAltName ? `${postDefAltName} ${word}` : word;
+            const hebrewText = ev.text.trim();
+            postDefAltHebrew = postDefAltHebrew ? `${postDefAltHebrew} ${hebrewText}` : hebrewText;
+          }
+          pendingPostDefWord = '';
+        }
         break;
 
       case 'source':
@@ -396,9 +552,9 @@ function processSegmentEvents(slice: Ev[]): {
         break;
     }
   }
-  if (pendingSpan !== null) grammarLines.push({ span: pendingSpan, bare: pendingBare, hebrew: pendingHebrew });
+  pushPending(false);
 
-  return { grammarLines, english, sources, inlineAlts };
+  return { grammarLines, english, sources, inlineAlts, postDefAltName, postDefAltHebrew, postDefAltGrammar };
 }
 
 /**
@@ -408,11 +564,15 @@ function processSegmentEvents(slice: Ev[]): {
  * separator (e.g. "adjectival form with '-ish', skeletal"), so it is kept.
  * When bare content is empty, the trailing comma is spurious and stripped
  * (e.g. "gender f," → "gender f").
+ *
+ * secondaryDef, when present, is a trailing meaning that renders after the
+ * quoted bare value with the same " — " separator used for adverbial
+ * complements (e.g. adjectival form with "-en" — earthy).
  */
-function formatGrammarLine(span: string, bare: string): string {
+function formatGrammarLine(span: string, bare: string, secondaryDef: string | null = null): string {
   const cleaned = bare.trim().replace(/,\s*$/, '').trim();
-  if (cleaned) return `${span} "${cleaned}"`;
-  return span.replace(/,\s*$/, '').trim();
+  const base = cleaned ? `${span} "${cleaned}"` : span.replace(/,\s*$/, '').trim();
+  return secondaryDef ? `${base} — ${secondaryDef}` : base;
 }
 
 /** Strip trailing comma and whitespace from bare text. */
@@ -421,65 +581,141 @@ function cleanBare(s: string): string {
 }
 
 /**
- * Returns true if bare text following a grammar span looks like an alternative
- * headword rather than a grammar value.
- *
- * In Finkel HTML, alternative headwords always appear as bare text immediately
- * after a "gender X," span (gender m, gender f, gender n). Secondary definitions
- * (English words like "skeletal") appear after other span types. Restricting to
- * gender spans avoids misidentifying those as alt headwords.
+ * Bolds and capitalizes a literal "source:" prefix in a Finkel .source span
+ * (e.g. "source: Sholem Aleykhem" → "*Source:* Sholem Aleykhem"), matching
+ * the *Also:* convention. Other .source content (e.g. "indeclinable") isn't
+ * a citation and is left as plain text.
  */
-function isAltHeadwordBare(span: string, bare: string): boolean {
-  const cleaned = bare.trim().replace(/[,\s]+$/, '').trim();
-  if (!cleaned || !/^[a-zA-Z']/.test(cleaned)) return false;
-  return span.trimStart().startsWith('gender ');
+function formatSourceLine(s: string): string {
+  return s.replace(/^source:\s*/i, '*Source:* ');
 }
 
 /**
- * Splits grammar lines into the main entry's lines and any alternative headwords
- * whose names appeared as bare text between grammar spans.
+ * Tries to pull a new alt-headword name out of a grammar line's bare text.
+ * Two shapes show up in real Finkel data:
  *
- * For each alternative headword line at index i:
- *   - The span at i belongs to the preceding (main or prior alt) entry's grammar.
- *   - The bare at i is the alternative headword's name.
- *   - Grammar lines from i+1 up to the next alt index belong to that headword.
+ *   - Mixed: suffix + comma + word, e.g. "-dik, mekutsefte(" → kept "-dik,",
+ *     name "mekutsefte". The leading hyphen is what makes this safe — the
+ *     "plural"/"participle" triggers never produce hyphen-prefixed bare text,
+ *     so this can't collide with them.
+ *   - Pure: bare text is just one word, e.g. "o'ngelaf" or "khu'tspenitse()"
+ *     (empty parens = where a Hebrew span got pulled out separately).
+ *     Excluded when the span is exactly "plural" or "participle", since
+ *     those consume a bare word as their own enrichment value, not a name.
+ *
+ * Either way, the caller only trusts the result if the line was also
+ * closedByGrammar (a fresh grammar event followed, not a definition) — that's
+ * what rules out e.g. "gradable adjective with stem" → "shen" → "pretty",
+ * where "shen" matches the pure shape but is just a stem value.
+ */
+function splitAltHeadwordCandidate(
+  span: string,
+  bare: string
+): { keptBare: string; candidateName: string | null } {
+  const mixedMatch = bare.match(/^(\s*-[^,]*,)\s*([a-zA-Z'][a-zA-Z']*)\(?\)?\s*,?\s*$/);
+  if (mixedMatch) return { keptBare: mixedMatch[1], candidateName: mixedMatch[2] };
+
+  const pureMatch = bare.match(/^\s*([a-zA-Z'][a-zA-Z']*)\(?\)?\s*,?\s*$/);
+  const trimmedSpan = span.trim();
+  if (pureMatch && trimmedSpan !== 'plural' && trimmedSpan !== 'participle') {
+    return { keptBare: '', candidateName: pureMatch[1] };
+  }
+
+  return { keptBare: bare, candidateName: null };
+}
+
+/**
+ * Splits grammar lines into the main entry's lines and any alt headwords
+ * whose names turned up as bare text between grammar spans (name at index i
+ * belongs to grammar line i's span; lines i+1 up to the next alt belong to
+ * that headword).
  */
 function extractAltHeadwords(
-  grammarLines: Array<{ span: string; bare: string; hebrew: string }>
+  grammarLines: GrammarLine[]
 ): {
-  mainLines: Array<{ span: string; bare: string; hebrew: string }>;
-  altHeadwords: Array<{ name: string; grammarLines: Array<{ span: string; bare: string }> }>;
+  mainLines: GrammarLine[];
+  altHeadwords: Array<{ name: string; hebrew: string; grammarLines: Array<{ span: string; bare: string }> }>;
 } {
-  const altIndices = grammarLines.reduce<number[]>((acc, { span, bare }, i) =>
-    isAltHeadwordBare(span, bare) ? [...acc, i] : acc, []);
+  const splits = grammarLines.map(line =>
+    line.closedByGrammar
+      ? splitAltHeadwordCandidate(line.span, line.bare)
+      : { keptBare: line.bare, candidateName: null as string | null }
+  );
+
+  const altIndices = splits.reduce<number[]>(
+    (acc, s, i) => (s.candidateName !== null ? [...acc, i] : acc), []
+  );
 
   if (altIndices.length === 0) return { mainLines: grammarLines, altHeadwords: [] };
 
   const firstAltIdx = altIndices[0];
   const mainLines = grammarLines.slice(0, firstAltIdx + 1).map((line, i) =>
-    i === firstAltIdx ? { ...line, bare: '' } : line
+    i === firstAltIdx ? { ...line, bare: splits[i].keptBare, hebrew: '' } : line
   );
 
   const altHeadwords = altIndices.map((altIdx, wi) => {
     const nextAltIdx = altIndices[wi + 1] ?? grammarLines.length;
-    const name = grammarLines[altIdx].bare.trim().replace(/[,\s]+$/, '').trim();
+    let name = splits[altIdx].candidateName!;
+    let hebrew = grammarLines[altIdx].hebrew;
     const lines: Array<{ span: string; bare: string }> = [];
-    for (let j = altIdx + 1; j < nextAltIdx; j++) {
-      lines.push({ span: grammarLines[j].span, bare: grammarLines[j].bare });
-    }
-    // The line at nextAltIdx (if another alt) contributes its span to this alt's grammar
-    // and its bare as the next alt's name — include span-only here.
-    if (nextAltIdx < grammarLines.length) {
-      lines.push({ span: grammarLines[nextAltIdx].span, bare: '' });
-    }
-    return { name, grammarLines: lines };
+    let enriched = false;
+
+    // Mirror buildEntryFromSegment's headword enrichment (plural-in suffix,
+    // participle, full plural form) for the alt headword's own grammar
+    // lines, same as a primary entry gets — only the first matching line is
+    // folded in, the rest render as normal grammar text.
+    const addOwnLine = (j: number) => {
+      const line = grammarLines[j];
+      const bare = splits[j].keptBare;
+      const span = line.span;
+      const b = cleanBare(bare);
+
+      if (!enriched && span.includes('plural in') && b.startsWith('-')) {
+        name = `${name}, ${b}`;
+        if (hebrew) {
+          const h = yivoToHebrew(b);
+          if (h) hebrew = `${hebrew}, ${h}`;
+        }
+        enriched = true;
+        lines.push({ span: span.split(',')[0].trim(), bare: '' });
+        return;
+      }
+
+      if (!enriched && span.trim() === 'participle' && b) {
+        name = `${name}, ${b}`;
+        if (hebrew) {
+          const h = yivoToHebrew(b);
+          if (h) hebrew = `${hebrew}, ${h}`;
+        }
+        enriched = true;
+        return;
+      }
+
+      if (!enriched && span.trim() === 'plural') {
+        const plural = b.replace(/\(\)/g, '').trim();
+        if (plural && /[a-zA-Z]/.test(plural)) {
+          name = `${name}, ${plural}`;
+          if (line.hebrew) hebrew = hebrew ? `${hebrew}, ${line.hebrew}` : line.hebrew;
+          enriched = true;
+          return;
+        }
+      }
+
+      lines.push({ span, bare });
+    };
+
+    for (let j = altIdx + 1; j < nextAltIdx; j++) addOwnLine(j);
+    // The next alt's own line still contributes its span to this alt's grammar.
+    if (nextAltIdx < grammarLines.length) addOwnLine(nextAltIdx);
+
+    return { name, hebrew, grammarLines: lines };
   });
 
   return { mainLines, altHeadwords };
 }
 
-/** Format one alt headword with its compact grammar (no quotes). */
-function formatAltHeadword(name: string, lines: Array<{ span: string; bare: string }>): string {
+/** Format one alt headword with its name, optional Hebrew, and compact grammar. */
+function formatAltHeadword(name: string, hebrew: string, lines: Array<{ span: string; bare: string }>): string {
   const parts = lines
     .map(({ span, bare }) => {
       const cleanSpan = span.replace(/,\s*$/, '').trim();
@@ -487,14 +723,16 @@ function formatAltHeadword(name: string, lines: Array<{ span: string; bare: stri
       return cleanBare ? `${cleanSpan} ${cleanBare}` : cleanSpan;
     })
     .filter(Boolean);
-  return parts.length > 0 ? `${name}, ${parts.join(', ')}` : name;
+  const label = hebrew ? `${name} (${hebrew})` : name;
+  return parts.length > 0 ? `${label}, ${parts.join(', ')}` : label;
 }
 
 function parseEntryChildren(
   nodes: Node[],
   baseTransliterated: string | null,
   baseHebrew: string | null,
-  isPhrase: boolean
+  isPhrase: boolean,
+  hebrewCoveredWord: string | null = null
 ): DictEntry[] {
   const events = collectEvents(nodes);
   const splitIndices = findSplitIndices(events);
@@ -517,8 +755,11 @@ function parseEntryChildren(
   }
   segments.push({ lexeme: segLexeme, hebrew: segHebrew, slice: events.slice(start) });
 
-  return segments.map(seg =>
-    buildEntryFromSegment(seg.lexeme, seg.hebrew, seg.slice, isPhrase)
+  // hebrewCoveredWord describes the relationship between baseTransliterated
+  // and baseHebrew specifically — only meaningful for the first segment,
+  // which is the one that actually inherited them.
+  return segments.map((seg, i) =>
+    buildEntryFromSegment(seg.lexeme, seg.hebrew, seg.slice, isPhrase, i === 0 ? hebrewCoveredWord : null)
   );
 }
 
@@ -526,9 +767,11 @@ function buildEntryFromSegment(
   lexeme: string | null,
   hebrew: string | null,
   slice: Ev[],
-  isPhrase: boolean
+  isPhrase: boolean,
+  hebrewCoveredWord: string | null = null
 ): DictEntry {
-  const { grammarLines, english, sources, inlineAlts } = processSegmentEvents(slice);
+  const { grammarLines, english, sources, inlineAlts, postDefAltName, postDefAltHebrew, postDefAltGrammar } =
+    processSegmentEvents(slice);
   const { mainLines, altHeadwords } = extractAltHeadwords(grammarLines);
 
   // Headword enrichment: find the first grammar line that matches a trigger.
@@ -596,8 +839,8 @@ function buildEntryFromSegment(
   // Format grammar lines. The enriched line is replaced by enrichedLineReplacement
   // (null = drop, string = use as the formatted line).
   const formattedLines = mainLines
-    .map(({ span, bare }, i) =>
-      i !== enrichedLineIndex ? formatGrammarLine(span, bare) : enrichedLineReplacement
+    .map(({ span, bare, secondaryDef }, i) =>
+      i !== enrichedLineIndex ? formatGrammarLine(span, bare, secondaryDef) : enrichedLineReplacement
     )
     .filter((l): l is string => l !== null && l !== '');
 
@@ -607,20 +850,28 @@ function buildEntryFromSegment(
   // so React Native shows each alt on its own visual line with no hairline
   // divider between them.
   const alsoLine = altHeadwords.length > 0
-    ? `*also:* ${altHeadwords.map(ah => formatAltHeadword(ah.name, ah.grammarLines)).join(';\r')}`
+    ? `*Also:* ${altHeadwords.map(ah => formatAltHeadword(ah.name, ah.hebrew, ah.grammarLines)).join(';\r')}`
     : null;
 
   // Inline alts come from def→bare→def patterns (e.g. "kind" → "child" / "kindenyu" → "dear child").
-  // Format: *also:* name — definition (no grammar, since these forms have none in Finkel HTML).
+  // Format: *Also:* name — definition (no grammar, since these forms have none in Finkel HTML).
   const inlineAltLine = inlineAlts.length > 0
-    ? `*also:* ${inlineAlts.map(a => `${a.name} — ${a.english}`).join(';\r')}`
+    ? `*Also:* ${inlineAlts.map(a => `${a.name} — ${a.english}`).join(';\r')}`
+    : null;
+
+  // Word(+Hebrew) pairs appearing after the main definition with no
+  // definition of their own (e.g. "mikhuts(מחוץ) akhuts(אַחוץ)" under
+  // "khuts" — merged into one alt entry; see processSegmentEvents).
+  const postDefAltLine = postDefAltName
+    ? `*Also:* ${postDefAltHebrew ? `${postDefAltName} (${postDefAltHebrew})` : postDefAltName}${postDefAltGrammar ? `, ${postDefAltGrammar}` : ''}`
     : null;
 
   const lines = [
     ...formattedLines,
     ...(alsoLine ? [alsoLine] : []),
     ...(inlineAltLine ? [inlineAltLine] : []),
-    ...sources,
+    ...(postDefAltLine ? [postDefAltLine] : []),
+    ...sources.map(formatSourceLine),
   ].filter(Boolean);
   const grammaticalInfo = lines.length > 0 ? lines.join('\n') : null;
   const partOfSpeech = formattedLines.length > 0 ? formattedLines[0] : null;
@@ -634,5 +885,6 @@ function buildEntryFromSegment(
     partOfSpeech,
     grammaticalInfo,
     isPhrase,
+    ...(hebrewCoveredWord ? { hebrewIsPartial: true, hebrewCoveredWord } : {}),
   };
 }

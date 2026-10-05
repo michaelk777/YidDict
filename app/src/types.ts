@@ -19,4 +19,12 @@ export interface DictEntry {
   isPhrase: boolean;
   hebrewIsGenerated?: boolean;
   transliteratedIsGenerated?: boolean;
+  // A Finkel phrase's Hebrew may not cover the full phrase if the rest has
+  // no Hebrew text. Unset if fully covered.
+  hebrewIsPartial?: boolean;
+  // The one word of yiddishTransliterated that yiddishHebrew actually
+  // covers, when hebrewIsPartial is true — lets the "YIVO → Hebrew" toggle
+  // splice generated Hebrew around the real Hebrew instead of discarding
+  // it. Not persisted for saved entries; live-search use only.
+  hebrewCoveredWord?: string;
 }

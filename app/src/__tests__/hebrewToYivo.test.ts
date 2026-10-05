@@ -41,12 +41,32 @@ describe('hebrewToYivo()', () => {
     expect(hebrewToYivo('וו')).toBe('v');
   });
 
+  it('converts khes → kh', () => {
+    expect(hebrewToYivo('ח')).toBe('kh');
+  });
+
+  it('converts bare (undotted) sof → s', () => {
+    expect(hebrewToYivo('ת')).toBe('s');
+  });
+
+  it('converts tof (sof with dagesh) → t', () => {
+    expect(hebrewToYivo('תּ')).toBe('t');
+  });
+
   // ---------------------------------------------------------------------------
   // Digraphs
   // ---------------------------------------------------------------------------
 
   it('converts shin → sh', () => {
     expect(hebrewToYivo('ש')).toBe('sh');
+  });
+
+  it('converts sin (shin + sin-dot, U+05C2) → s, distinct from shin', () => {
+    expect(hebrewToYivo('שׂ')).toBe('s');
+  });
+
+  it('converts shin with an explicit shin-dot (U+05C1) → sh, same as bare shin', () => {
+    expect(hebrewToYivo('שׁ')).toBe('sh');
   });
 
   it('converts langer khof → kh', () => {
@@ -238,6 +258,10 @@ describe('hebrewToYivo()', () => {
 
   it('converts "ליגן" (to lie/recline)', () => {
     expect(hebrewToYivo('ליגן')).toBe('lign');
+  });
+
+  it('converts "חוץ" (khuts, "outside"/"except") — exercises khes', () => {
+    expect(hebrewToYivo('חוץ')).toBe('khuts');
   });
 
   // ---------------------------------------------------------------------------

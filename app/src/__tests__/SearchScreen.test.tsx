@@ -11,7 +11,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ThemeProvider, lightTheme, darkTheme } from '../context/ThemeContext';
-import SearchScreen from '../screens/SearchScreen';
+import SearchScreen, { mergePartialHebrew } from '../screens/SearchScreen';
 import { DictEntry } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -78,6 +78,7 @@ import { getCachedEntries, saveToCache } from '../db/cacheDb';
 import { deleteEntriesByKey, getSavedEntriesCount, saveEntry, saveEntries } from '../db/savedDb';
 import { getSourceOrder, getUseAllSources, getVerterbukhExhaustedAlert, getVerterbukhLowTokenAlert, getMaxSavedEntries, getSaveTrimAlert } from '../db/settingsDb';
 import { useSaved } from '../context/SavedContext';
+import { yivoToHebrew } from '../utils/yivoToHebrew';
 
 const mockLookup = lookupFinkel as jest.Mock;
 const mockLookupVerterbukh = lookupVerterbukh as jest.Mock;
@@ -1757,5 +1758,98 @@ describe('SearchScreen — Google Translate source', () => {
 
     await waitFor(() => expect(screen.getByTestId('no-results')).toBeTruthy());
     expect(mockSaveCache).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// In-flight guards — double-tap protection on Search/Save buttons
+// ---------------------------------------------------------------------------
+
+describe('SearchScreen — in-flight guards', () => {
+  it('ignores a second tap on the search button while a search is in flight', async () => {
+    mockGetCached.mockResolvedValue(null);
+    mockLookup.mockReturnValue(new Promise(() => {})); // never resolves
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+    await waitFor(() => expect(screen.getByTestId('loading-indicator')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    expect(mockLookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a second tap on a save-entry button while that save is in flight', async () => {
+    mockGetCached.mockResolvedValue(null);
+    mockLookup.mockResolvedValue(sampleEntries);
+    mockSaveEntry.mockReturnValue(new Promise(() => {})); // never resolves
+    // Pin well under the trim threshold so confirmSaveTrim resolves without
+    // popping a (non-dismissable, in this test environment) Alert — doesn't
+    // rely on whatever earlier tests last left these mocks at.
+    mockGetSavedEntriesCount.mockResolvedValue(0);
+    mockGetMaxSavedEntries.mockResolvedValue(500);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getAllByTestId('save-entry-button'));
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+    fireEvent.press(screen.getAllByTestId('save-entry-button')[0]);
+
+    await waitFor(() => expect(mockSaveEntry).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a second tap on the save-all button while that save is in flight', async () => {
+    mockGetCached.mockResolvedValue(null);
+    mockLookup.mockResolvedValue(sampleEntries);
+    mockSaveEntries.mockReturnValue(new Promise(() => {})); // never resolves
+    // Pin well under the trim threshold — see comment in the save-entry test above.
+    mockGetSavedEntriesCount.mockResolvedValue(0);
+    mockGetMaxSavedEntries.mockResolvedValue(500);
+
+    renderScreen();
+    fireEvent.changeText(screen.getByTestId('search-input'), 'sheyn');
+    fireEvent.press(screen.getByTestId('search-button'));
+
+    await waitFor(() => screen.getByTestId('save-all-button'));
+    fireEvent.press(screen.getByTestId('save-all-button'));
+    fireEvent.press(screen.getByTestId('save-all-button'));
+
+    await waitFor(() => expect(mockSaveEntries).toHaveBeenCalledTimes(1));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mergePartialHebrew — splicing real + generated Hebrew for partial phrases
+// ---------------------------------------------------------------------------
+
+describe('mergePartialHebrew()', () => {
+  it('splices generated Hebrew after the real Hebrew for a hyphen-fused suffix', () => {
+    const generatedSuffix = yivoToHebrew('-erdish');
+    expect(mergePartialHebrew('khuts-erdish', 'חוץ', 'khuts')).toBe(`חוץ${generatedSuffix}`);
+  });
+
+  it('splices generated Hebrew before the real Hebrew for a prefix phrase', () => {
+    const generatedPrefix = yivoToHebrew('a khuts a');
+    expect(mergePartialHebrew('a khuts a mayse', 'מעשׂה', 'mayse')).toBe(`${generatedPrefix} מעשׂה`);
+  });
+
+  it('splices generated Hebrew on both sides when both are missing', () => {
+    const generatedPrefix = yivoToHebrew('loyfn vi nokh');
+    const generatedSuffix = yivoToHebrew('-vaser');
+    expect(mergePartialHebrew('loyfn vi nokh matse-vaser', 'מצה', 'matse')).toBe(
+      `${generatedPrefix} מצה${generatedSuffix}`
+    );
+  });
+
+  it('adds a space before a word-continuation suffix (not hyphen-fused)', () => {
+    const generatedSuffix = yivoToHebrew('dem oygngreykh');
+    expect(mergePartialHebrew('mikhuts dem oygngreykh', 'מחוץ', 'mikhuts')).toBe(`מחוץ ${generatedSuffix}`);
+  });
+
+  it('returns null when the covered word cannot be found in the phrase', () => {
+    expect(mergePartialHebrew('something else', 'חוץ', 'khuts')).toBeNull();
   });
 });

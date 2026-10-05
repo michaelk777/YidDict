@@ -75,6 +75,43 @@ export async function initDatabase(): Promise<void> {
     await db.execAsync('ALTER TABLE saved_entries ADD COLUMN transliterated_is_generated INTEGER NOT NULL DEFAULT 0');
   } catch { /* already exists (either from RENAME above or previous run) */ }
 
+  // hebrew_is_partial: add if not present.
+  try {
+    await db.execAsync('ALTER TABLE saved_entries ADD COLUMN hebrew_is_partial INTEGER NOT NULL DEFAULT 0');
+  } catch { /* already exists */ }
+
+  // Allow for live updates to cached words in relation to the "YIVO -> Hebrew"
+  // toggle to account for partial Hebrew.
+  try {
+    await db.execAsync('ALTER TABLE cached_results ADD COLUMN hebrew_is_partial INTEGER NOT NULL DEFAULT 0');
+  } catch { /* already exists */ }
+  try {
+    await db.execAsync('ALTER TABLE cached_results ADD COLUMN hebrew_covered_word TEXT');
+  } catch { /* already exists */ }
+
+  // Enforce the same "duplicate entry" definition the app already uses
+  // elsewhere (savedKeySet / deleteEntriesByKey: yiddish_hebrew + english +
+  // source, nulls treated as ''), at the DB level — resolves an issue where
+  // a fast double-tap on the save button could fire two INSERTs before the
+  // client's own dedup check had refreshed, creating a duplicate row.
+  const savedEntriesIndex = await db.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_saved_entries_dedup'"
+  );
+  if (!savedEntriesIndex) {
+    // Collapse any existing duplicates (from before this fix) to the oldest
+    // row first — CREATE UNIQUE INDEX fails if current data would violate it.
+    await db.runAsync(`
+      DELETE FROM saved_entries WHERE id NOT IN (
+        SELECT MIN(id) FROM saved_entries
+        GROUP BY COALESCE(yiddish_hebrew, ''), COALESCE(english, ''), source
+      )
+    `);
+    await db.execAsync(`
+      CREATE UNIQUE INDEX idx_saved_entries_dedup
+      ON saved_entries (COALESCE(yiddish_hebrew, ''), COALESCE(english, ''), source)
+    `);
+  }
+
   log('[YidDict] database: tables created');
 
   const defaults: [string, string][] = [

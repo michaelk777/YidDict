@@ -98,6 +98,22 @@ describe('getCachedEntries', () => {
     expect(result![0].isPhrase).toBe(true);
   });
 
+  it('maps hebrew_is_partial=1 and hebrew_covered_word to hebrewIsPartial/hebrewCoveredWord', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([
+      { ...sampleRow, hebrew_is_partial: 1, hebrew_covered_word: 'khuts' },
+    ]);
+    const result = await getCachedEntries('sheyn', 'finkel');
+    expect(result![0].hebrewIsPartial).toBe(true);
+    expect(result![0].hebrewCoveredWord).toBe('khuts');
+  });
+
+  it('leaves hebrewIsPartial/hebrewCoveredWord unset when the row has no partial flag', async () => {
+    __mockDb.getAllAsync.mockResolvedValueOnce([sampleRow]);
+    const result = await getCachedEntries('sheyn', 'finkel');
+    expect(result![0].hebrewIsPartial).toBeUndefined();
+    expect(result![0].hebrewCoveredWord).toBeUndefined();
+  });
+
   it('passes a TTL cutoff as the third SQL parameter', async () => {
     __mockDb.getAllAsync.mockResolvedValueOnce([]);
     const before = Date.now();
@@ -153,6 +169,21 @@ describe('saveToCache', () => {
   it('does nothing when entries array is empty', async () => {
     await saveToCache('sheyn', [], 'finkel');
     expect(__mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('stores hebrew_is_partial=1 and hebrew_covered_word for a partial entry', async () => {
+    const partial = { ...sampleEntry, hebrewIsPartial: true, hebrewCoveredWord: 'khuts' };
+    await saveToCache('khuts-erdish', [partial], 'finkel');
+    const [, params] = __mockDb.runAsync.mock.calls[0] as [string, unknown[]];
+    expect(params[params.length - 2]).toBe(1);
+    expect(params[params.length - 1]).toBe('khuts');
+  });
+
+  it('stores hebrew_is_partial=0 and a null hebrew_covered_word for a fully-covered entry', async () => {
+    await saveToCache('sheyn', [sampleEntry], 'finkel');
+    const [, params] = __mockDb.runAsync.mock.calls[0] as [string, unknown[]];
+    expect(params[params.length - 2]).toBe(0);
+    expect(params[params.length - 1]).toBeNull();
   });
 
   it('trims to max entries after saving', async () => {

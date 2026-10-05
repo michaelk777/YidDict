@@ -22,3 +22,25 @@ export function formatHebrewLemma(lemma: string | null | undefined): string {
   const { text, sup } = splitHebrewLemma(lemma);
   return text + (sup ? toSuperscript(sup) : '');
 }
+
+// Unicode bidi isolate marks (LRI/PDI) — same mechanism used in
+// verterbukh-service.ts, just for an LTR label instead of an RTL phrase.
+// Forces "(partial)" to render as plain, correctly-ordered Latin text
+// (including its parentheses, which bidi would otherwise mirror) regardless
+// of the RTL Hebrew text directly before it.
+const LRI = '⁦';
+const PDI = '⁩';
+
+/**
+ * Appends a "(partial)" label when a Finkel phrase's Hebrew only covers one
+ * word of the full phrase (see DictEntry.hebrewIsPartial) — the rest of the
+ * phrase has no matching Hebrew at all. Returns the Hebrew unchanged when
+ * not partial.
+ */
+export function markPartialHebrew(
+  yiddishHebrew: string | null,
+  hebrewIsPartial: boolean | undefined
+): string | null {
+  if (!yiddishHebrew || !hebrewIsPartial) return yiddishHebrew;
+  return `${yiddishHebrew} ${LRI}(partial)${PDI}`;
+}

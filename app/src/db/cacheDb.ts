@@ -16,6 +16,8 @@ interface CachedResultRow {
   source: string;
   fetched_at: number;
   is_phrase: number; // SQLite stores booleans as 0/1
+  hebrew_is_partial: number;
+  hebrew_covered_word: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,8 +65,8 @@ export async function saveToCache(
       `INSERT OR IGNORE INTO cached_results
          (query, yiddish_hebrew, yiddish_transliterated, english,
           part_of_speech, conjugation_info, source,
-          fetched_at, is_phrase)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          fetched_at, is_phrase, hebrew_is_partial, hebrew_covered_word)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         query,
         entry.yiddishHebrew,
@@ -75,6 +77,8 @@ export async function saveToCache(
         source,
         now,
         entry.isPhrase ? 1 : 0,
+        entry.hebrewIsPartial ? 1 : 0,
+        entry.hebrewCoveredWord ?? null,
       ]
     );
   }
@@ -149,5 +153,7 @@ function rowToEntry(row: CachedResultRow): DictEntry {
     partOfSpeech: row.part_of_speech,
     grammaticalInfo: row.conjugation_info,
     isPhrase: row.is_phrase === 1,
+    ...(row.hebrew_is_partial === 1 ? { hebrewIsPartial: true } : {}),
+    ...(row.hebrew_covered_word ? { hebrewCoveredWord: row.hebrew_covered_word } : {}),
   };
 }
