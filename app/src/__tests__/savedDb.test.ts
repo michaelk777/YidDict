@@ -12,7 +12,6 @@ import {
   deleteEntry,
   clearSaved,
   trimSaved,
-  buildFullGrammar,
   generateCsv,
   generateTsv,
   SavedEntry,
@@ -286,28 +285,6 @@ describe('trimSaved', () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildFullGrammar
-// ---------------------------------------------------------------------------
-
-describe('buildFullGrammar', () => {
-  it('joins partOfSpeech and grammaticalInfo with two spaces', () => {
-    expect(buildFullGrammar('noun', 'gender f')).toBe('noun  gender f');
-  });
-
-  it('returns only partOfSpeech when grammaticalInfo is null', () => {
-    expect(buildFullGrammar('verb', null)).toBe('verb');
-  });
-
-  it('returns only grammaticalInfo when partOfSpeech is null', () => {
-    expect(buildFullGrammar(null, 'gender f')).toBe('gender f');
-  });
-
-  it('returns empty string when both are null', () => {
-    expect(buildFullGrammar(null, null)).toBe('');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // generateCsv
 // ---------------------------------------------------------------------------
 
@@ -368,6 +345,102 @@ describe('generateCsv', () => {
     const csv = generateCsv([entry]);
     expect(csv).toContain('"say ""hi"""');
   });
+
+  it('wraps an auto-generated Yiddish value in ~, matching the on-screen marker', () => {
+    const entry = { ...savedEntry, hebrewIsGenerated: true };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"~שיין~"');
+  });
+
+  it('wraps an auto-generated transliteration value in ~', () => {
+    const entry = { ...savedEntry, transliteratedIsGenerated: true };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"~sheyn~"');
+  });
+
+  it('appends "(partial)" to a partial Yiddish value, no bidi marks', () => {
+    const entry = { ...savedEntry, hebrewIsPartial: true };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"שיין (partial)"');
+  });
+
+  it('combines the ~ marker and "(partial)" when a value is both generated and partial', () => {
+    const entry = { ...savedEntry, hebrewIsGenerated: true, hebrewIsPartial: true };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"~שיין~ (partial)"');
+  });
+
+  it('does not mark values when their flags are false', () => {
+    const csv = generateCsv([savedEntry]);
+    expect(csv).not.toContain('~');
+    expect(csv).not.toContain('(partial)');
+  });
+
+  it('includes a header row with Grammar, Additional Entries, and Source columns', () => {
+    const csv = generateCsv([]);
+    const firstLine = csv.split('\n')[0];
+    expect(firstLine).toContain('Grammar');
+    expect(firstLine).toContain('Additional Entries');
+    expect(firstLine).toContain('Source');
+  });
+
+  it('joins multiple grammar lines with commas instead of newlines', () => {
+    const entry = { ...savedEntry, partOfSpeech: null, grammaticalInfo: 'noun\ngender f' };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"noun, gender f"');
+    // The data row itself must stay on one line, not split across several.
+    expect(csv.split('\n').length).toBe(2);
+  });
+
+  it('does not duplicate partOfSpeech when it matches grammaticalInfo\'s first line (the real Finkel/Verterbukh shape)', () => {
+    const entry = { ...savedEntry, partOfSpeech: 'noun', grammaticalInfo: 'noun\ngender f' };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"noun, gender f"');
+    expect(csv).not.toContain('noun noun');
+    expect(csv).not.toContain('noun, noun');
+  });
+
+  it('moves an "Also:" line out of Grammar and into its own Additional Entries column, with asterisks stripped', () => {
+    const entry = {
+      ...savedEntry,
+      partOfSpeech: null,
+      grammaticalInfo: 'noun\ngender n\n*Also:* mikhuts akhuts (מחוץ אַחוץ), preposition',
+    };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"noun, gender n"');
+    expect(csv).toContain('"mikhuts akhuts (מחוץ אַחוץ), preposition"');
+    expect(csv).not.toContain('Also:');
+    expect(csv).not.toContain('*');
+  });
+
+  it('strips "*Source:*" bold markup from a citation line that stays in Grammar', () => {
+    const entry = {
+      ...savedEntry,
+      partOfSpeech: null,
+      grammaticalInfo: 'noun\n*Source:* Sholem Aleykhem',
+    };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"noun, Source: Sholem Aleykhem"');
+  });
+
+  it('converts internal "\\r" soft-breaks within an "Also:" line to "; " in Additional Entries', () => {
+    const entry = {
+      ...savedEntry,
+      partOfSpeech: null,
+      grammaticalInfo: "noun\n*Also:* o'ngelaf, -n, noun, gender n;\rtsunoyfloyf, -n, noun, gender n",
+    };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain("o'ngelaf, -n, noun, gender n; tsunoyfloyf, -n, noun, gender n");
+  });
+
+  it('leaves Additional Entries empty when grammaticalInfo has no "Also:" line', () => {
+    const entry = { ...savedEntry, partOfSpeech: null, grammaticalInfo: 'noun\ngender f' };
+    const csv = generateCsv([entry]);
+    const dataLine = csv.split('\n')[1];
+    const columns = dataLine.split('","');
+    // Additional Entries is the 5th column (index 4): Yiddish, Transliteration, English, Grammar, Additional Entries, ...
+    expect(columns[4]).toBe('');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -400,5 +473,17 @@ describe('generateTsv', () => {
     const tsv = generateTsv([savedEntry]);
     const dataLine = tsv.split('\n')[1];
     expect(dataLine).toContain('YidDict');
+  });
+
+  it('wraps an auto-generated Yiddish value in ~, matching the on-screen marker', () => {
+    const entry = { ...savedEntry, hebrewIsGenerated: true };
+    const tsv = generateTsv([entry]);
+    expect(tsv).toContain('~שיין~');
+  });
+
+  it('appends "(partial)" to a partial Yiddish value, no bidi marks', () => {
+    const entry = { ...savedEntry, hebrewIsPartial: true };
+    const tsv = generateTsv([entry]);
+    expect(tsv).toContain('שיין (partial)');
   });
 });

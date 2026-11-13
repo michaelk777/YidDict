@@ -160,26 +160,66 @@ export async function clearSaved(): Promise<void> {
 // Export
 // ---------------------------------------------------------------------------
 
+const EXPORT_HEADER = ['Yiddish', 'Transliteration', 'English', 'Grammar', 'Additional Entries', 'Source', 'Tags'];
+
 /**
- * Combines partOfSpeech and grammaticalInfo into a single display string.
- * Called fullGrammar to make clear it is the union of the two fields.
+ * Marks auto-generated/partial Hebrew or transliteration in exported text,
+ * mirroring the same indicators shown on screen (SearchScreen/SavedScreen):
+ * a "~" on both sides for an auto-generated value, "(partial)" appended for
+ * a Finkel phrase whose Hebrew only covers part of it. Plain text only — no
+ * bidi-isolate marks here (those exist to fix React Native's own text
+ * rendering; a CSV/TSV file is read by other software's own Unicode
+ * handling, not RN's, so they're not needed and could render as stray bytes
+ * in some tools).
  */
-export function buildFullGrammar(
-  partOfSpeech: string | null,
-  grammaticalInfo: string | null
-): string {
-  if (partOfSpeech && grammaticalInfo) return `${partOfSpeech}  ${grammaticalInfo}`;
-  return partOfSpeech ?? grammaticalInfo ?? '';
+function markExportedValue(value: string, isGenerated: boolean, isPartial = false): string {
+  if (!value) return value;
+  let marked = value;
+  if (isGenerated) marked = `~${marked}~`;
+  if (isPartial) marked = `${marked} (partial)`;
+  return marked;
 }
 
-const EXPORT_HEADER = ['Yiddish', 'Transliteration', 'English', 'Grammar', 'Source', 'Tags'];
+/** Strips "*text*" bold markup (rendered as bold on screen) to plain text, e.g. "*Also:*" → "Also:". */
+function stripBoldMarkers(text: string): string {
+  return text.replace(/\*([^*]+)\*/g, '$1');
+}
+
+/**
+ * Splits grammaticalInfo's "Also:" alt-headword lines out from the rest of
+ * its grammar lines (part of speech, gender, "Source:" citations, etc.), so
+ * they can export into their own "Additional Entries" column instead of
+ * being buried in Grammar. Internal "\r" soft-breaks (used on screen to
+ * keep a multi-alt "Also:" line as one visual block) become "; " for a
+ * flat file.
+ */
+function splitGrammarAndAdditionalEntries(
+  grammaticalInfo: string | null
+): { grammar: string; additionalEntries: string } {
+  if (!grammaticalInfo) return { grammar: '', additionalEntries: '' };
+  const grammarLines: string[] = [];
+  const additionalEntryLines: string[] = [];
+  for (const rawLine of grammaticalInfo.split('\n')) {
+    // ";\r" is the multi-alt separator — collapse the pair, not just "\r".
+    const line = stripBoldMarkers(rawLine).replace(/;?\r/g, '; ');
+    const alsoMatch = line.match(/^Also:\s*(.*)$/);
+    if (alsoMatch) {
+      additionalEntryLines.push(alsoMatch[1]);
+    } else {
+      grammarLines.push(line);
+    }
+  }
+  return { grammar: grammarLines.join(', '), additionalEntries: additionalEntryLines.join('; ') };
+}
 
 function entryToColumns(e: SavedEntry): string[] {
+  const { grammar, additionalEntries } = splitGrammarAndAdditionalEntries(e.grammaticalInfo);
   return [
-    e.yiddishHebrew ?? '',
-    e.yiddishTransliterated ?? '',
+    markExportedValue(e.yiddishHebrew ?? '', e.hebrewIsGenerated, e.hebrewIsPartial),
+    markExportedValue(e.yiddishTransliterated ?? '', e.transliteratedIsGenerated),
     e.english ?? '',
-    buildFullGrammar(e.partOfSpeech, e.grammaticalInfo),
+    grammar || e.partOfSpeech || '',
+    additionalEntries,
     e.source,
     'YidDict',
   ];
