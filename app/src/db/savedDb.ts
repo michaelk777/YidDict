@@ -160,7 +160,7 @@ export async function clearSaved(): Promise<void> {
 // Export
 // ---------------------------------------------------------------------------
 
-const EXPORT_HEADER = ['Yiddish', 'Transliteration', 'English', 'Grammar', 'Additional Entries', 'Source', 'Tags'];
+const EXPORT_HEADER = ['Yiddish', 'Transliteration', 'English', 'Grammar', 'Additional Entries', 'Notes', 'Source', 'Tags'];
 
 /**
  * Marks auto-generated/partial Hebrew or transliteration in exported text,
@@ -186,40 +186,53 @@ function stripBoldMarkers(text: string): string {
 }
 
 /**
- * Splits grammaticalInfo's "Also:" alt-headword lines out from the rest of
- * its grammar lines (part of speech, gender, "Source:" citations, etc.), so
- * they can export into their own "Additional Entries" column instead of
- * being buried in Grammar. Internal "\r" soft-breaks (used on screen to
- * keep a multi-alt "Also:" line as one visual block) become "; " for a
- * flat file.
+ * Splits grammaticalInfo into three export columns:
+ *   - Additional Entries: "Also:" alt-headword lines
+ *   - Notes: "Note:" remarks and "Source:" citations (Finkel's .source spans).
+ *     The redundant "Note:" label is dropped; "Source:" is kept so a
+ *     citation stays distinguishable from a usage remark.
+ *   - Grammar: everything else (part of speech, gender, "alt. plural", etc.)
+ * Internal "\r" soft-breaks (used on screen to keep a multi-alt "Also:" line
+ * as one visual block) become "; " for a flat file.
  */
-function splitGrammarAndAdditionalEntries(
+function splitGrammarFields(
   grammaticalInfo: string | null
-): { grammar: string; additionalEntries: string } {
-  if (!grammaticalInfo) return { grammar: '', additionalEntries: '' };
+): { grammar: string; additionalEntries: string; notes: string } {
+  if (!grammaticalInfo) return { grammar: '', additionalEntries: '', notes: '' };
   const grammarLines: string[] = [];
   const additionalEntryLines: string[] = [];
+  const noteLines: string[] = [];
   for (const rawLine of grammaticalInfo.split('\n')) {
     // ";\r" is the multi-alt separator — collapse the pair, not just "\r".
     const line = stripBoldMarkers(rawLine).replace(/;?\r/g, '; ');
     const alsoMatch = line.match(/^Also:\s*(.*)$/);
+    const noteMatch = line.match(/^Note:\s*(.*)$/);
     if (alsoMatch) {
       additionalEntryLines.push(alsoMatch[1]);
+    } else if (noteMatch) {
+      noteLines.push(noteMatch[1]);
+    } else if (/^Source:/.test(line)) {
+      noteLines.push(line);
     } else {
       grammarLines.push(line);
     }
   }
-  return { grammar: grammarLines.join(', '), additionalEntries: additionalEntryLines.join('; ') };
+  return {
+    grammar: grammarLines.join(', '),
+    additionalEntries: additionalEntryLines.join('; '),
+    notes: noteLines.join('; '),
+  };
 }
 
 function entryToColumns(e: SavedEntry): string[] {
-  const { grammar, additionalEntries } = splitGrammarAndAdditionalEntries(e.grammaticalInfo);
+  const { grammar, additionalEntries, notes } = splitGrammarFields(e.grammaticalInfo);
   return [
     markExportedValue(e.yiddishHebrew ?? '', e.hebrewIsGenerated, e.hebrewIsPartial),
     markExportedValue(e.yiddishTransliterated ?? '', e.transliteratedIsGenerated),
     e.english ?? '',
     grammar || e.partOfSpeech || '',
     additionalEntries,
+    notes,
     e.source,
     'YidDict',
   ];

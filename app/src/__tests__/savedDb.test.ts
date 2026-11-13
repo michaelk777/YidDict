@@ -376,11 +376,12 @@ describe('generateCsv', () => {
     expect(csv).not.toContain('(partial)');
   });
 
-  it('includes a header row with Grammar, Additional Entries, and Source columns', () => {
+  it('includes a header row with Grammar, Additional Entries, Notes, and Source columns', () => {
     const csv = generateCsv([]);
     const firstLine = csv.split('\n')[0];
     expect(firstLine).toContain('Grammar');
     expect(firstLine).toContain('Additional Entries');
+    expect(firstLine).toContain('Notes');
     expect(firstLine).toContain('Source');
   });
 
@@ -413,14 +414,47 @@ describe('generateCsv', () => {
     expect(csv).not.toContain('*');
   });
 
-  it('strips "*Source:*" bold markup from a citation line that stays in Grammar', () => {
+  it('moves a "*Source:*" citation out of Grammar into Notes, keeping the "Source:" label', () => {
     const entry = {
       ...savedEntry,
       partOfSpeech: null,
       grammaticalInfo: 'noun\n*Source:* Sholem Aleykhem',
     };
     const csv = generateCsv([entry]);
-    expect(csv).toContain('"noun, Source: Sholem Aleykhem"');
+    expect(csv).toContain('"noun"');
+    expect(csv).toContain('"Source: Sholem Aleykhem"');
+    expect(csv).not.toContain('noun, Source');
+    expect(csv).not.toContain('*');
+  });
+
+  it('moves a "*Note:*" remark into Notes and drops the redundant "Note:" label', () => {
+    const entry = {
+      ...savedEntry,
+      partOfSpeech: null,
+      grammaticalInfo: 'noun\n*Note:* variant plural',
+    };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"noun"');
+    expect(csv).toContain('"variant plural"');
+    expect(csv).not.toContain('Note:');
+  });
+
+  it('joins several notes with "; " and keeps Grammar (incl. "alt. plural") separate', () => {
+    const entry = {
+      ...savedEntry,
+      partOfSpeech: null,
+      grammaticalInfo: 'noun\nalt. plural "brinemer"\n*Note:* variant plural\n*Source:* Sholem Aleykhem',
+    };
+    const csv = generateCsv([entry]);
+    expect(csv).toContain('"noun, alt. plural ""brinemer"""');
+    expect(csv).toContain('"variant plural; Source: Sholem Aleykhem"');
+  });
+
+  it('leaves Notes empty when there are no Note/Source lines', () => {
+    const entry = { ...savedEntry, partOfSpeech: null, grammaticalInfo: 'noun\ngender f' };
+    const columns = generateCsv([entry]).split('\n')[1].split('","');
+    // Notes is the 6th column (index 5)
+    expect(columns[5]).toBe('');
   });
 
   it('converts internal "\\r" soft-breaks within an "Also:" line to "; " in Additional Entries', () => {
@@ -438,7 +472,7 @@ describe('generateCsv', () => {
     const csv = generateCsv([entry]);
     const dataLine = csv.split('\n')[1];
     const columns = dataLine.split('","');
-    // Additional Entries is the 5th column (index 4): Yiddish, Transliteration, English, Grammar, Additional Entries, ...
+    // Additional Entries is the 5th column (index 4): Yiddish, Transliteration, English, Grammar, Additional Entries, Notes, ...
     expect(columns[4]).toBe('');
   });
 });
