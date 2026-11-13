@@ -53,7 +53,10 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children, initialScheme = 'system' }: { children: React.ReactNode; initialScheme?: ColorSchemeOverride }) {
-  const systemScheme = useColorScheme() ?? 'light';
+  // useColorScheme() can return 'light' | 'dark' | 'unspecified' | null — this
+  // app only has a light/dark theme, so anything other than 'dark' falls
+  // back to 'light' (covers null, undefined, and the 'unspecified' case).
+  const systemScheme: 'light' | 'dark' = useColorScheme() === 'dark' ? 'dark' : 'light';
   const [schemeOverride, setSchemeOverride] = useState<ColorSchemeOverride>(initialScheme);
 
   const colorScheme: 'light' | 'dark' =

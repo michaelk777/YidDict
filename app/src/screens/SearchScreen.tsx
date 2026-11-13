@@ -899,7 +899,7 @@ export default function SearchScreen() {
                     </TouchableOpacity>
                   ) : null}
                 </View>
-              ) : null
+              ) : undefined
             }
             ListEmptyComponent={
               hasSearched && !suppressNoResultsMessage ? (
@@ -908,9 +908,8 @@ export default function SearchScreen() {
                     No results found. Try another word or stem.
                   </Text>
                 </View>
-              ) : null
+              ) : undefined
             }
-            ListFooterComponent={null}
           />
         ) : null}
 
