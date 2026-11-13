@@ -190,7 +190,7 @@ function stripBoldMarkers(text: string): string {
  *   - Additional Entries: "Also:" alt-headword lines
  *   - Notes: "Note:" remarks and "Source:" citations (Finkel's .source spans).
  *     The redundant "Note:" label is dropped; "Source:" is kept so a
- *     citation stays distinguishable from a usage remark.
+ *     citation stays distinguishable from grammatical details.
  *   - Grammar: everything else (part of speech, gender, "alt. plural", etc.)
  * Internal "\r" soft-breaks (used on screen to keep a multi-alt "Also:" line
  * as one visual block) become "; " for a flat file.

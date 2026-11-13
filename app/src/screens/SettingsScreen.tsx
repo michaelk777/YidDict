@@ -762,8 +762,19 @@ export default function SettingsScreen() {
         onRequestClose={() => setAboutVisible(false)}
         testID="about-modal"
       >
-        <Pressable style={s.modalOverlay} onPress={() => setAboutVisible(false)}>
-          <Pressable style={[s.aboutModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {/* The backdrop is a sibling Pressable (not an ancestor of the card) so the
+            ScrollView below isn't nested inside any Pressable: on Android a
+            Pressable ancestor can claim the touch before the ScrollView does,
+            making scrolling work only intermittently depending on where the
+            finger lands. */}
+        <View style={s.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setAboutVisible(false)}
+            accessibilityLabel="Close"
+            testID="about-modal-backdrop"
+          />
+          <View style={[s.aboutModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={s.aboutModalHeader}>
               <Text style={[s.aboutModalTitle, { color: theme.text }]}>About YidDict</Text>
               <TouchableOpacity
@@ -836,8 +847,8 @@ export default function SettingsScreen() {
                 {GOOGLE_TRANSLATE_DISCLAIMER}
               </Text>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </ScrollView>
   );
