@@ -581,13 +581,15 @@ function cleanBare(s: string): string {
 }
 
 /**
- * Bolds and capitalizes a literal "source:" prefix in a Finkel .source span
- * (e.g. "source: Sholem Aleykhem" → "*Source:* Sholem Aleykhem"), matching
- * the *Also:* convention. Other .source content (e.g. "indeclinable") isn't
- * a citation and is left as plain text.
+ * Formats a Finkel .source span as a labelled line, matching the *Also:*
+ * convention. Finkel's ".source" class holds more than citations: a literal
+ * "source: X" prefix marks a real citation ("*Source:* X"); anything else
+ * (e.g. "variant plural", "indeclinable") is a usage/grammar remark and is
+ * labelled "*Note:*" instead.
  */
 function formatSourceLine(s: string): string {
-  return s.replace(/^source:\s*/i, '*Source:* ');
+  const citation = s.match(/^source:\s*(.*)$/i);
+  return citation ? `*Source:* ${citation[1].trim()}` : `*Note:* ${s.trim()}`;
 }
 
 /**
@@ -838,10 +840,20 @@ function buildEntryFromSegment(
 
   // Format grammar lines. The enriched line is replaced by enrichedLineReplacement
   // (null = drop, string = use as the formatted line).
+  //
+  // A "plural" line that comes after an earlier plural-type line ("plural in"
+  // or "plural", whether or not it was the one folded into the headword) is a
+  // second, irregular plural (e.g. brunem: "plural in -s" + "plural brinemer"),
+  // so it's prefixed "alt." to distinguish it from the first.
+  const firstPluralIndex = mainLines.findIndex(l => l.span.includes('plural'));
   const formattedLines = mainLines
-    .map(({ span, bare, secondaryDef }, i) =>
-      i !== enrichedLineIndex ? formatGrammarLine(span, bare, secondaryDef) : enrichedLineReplacement
-    )
+    .map(({ span, bare, secondaryDef }, i) => {
+      if (i === enrichedLineIndex) return enrichedLineReplacement;
+      const line = formatGrammarLine(span, bare, secondaryDef);
+      return i > firstPluralIndex && firstPluralIndex !== -1 && span.trim() === 'plural'
+        ? `alt. ${line}`
+        : line;
+    })
     .filter((l): l is string => l !== null && l !== '');
 
   // Alt headwords are joined with \r as the internal separator. \r is not a

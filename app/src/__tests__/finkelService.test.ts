@@ -949,7 +949,7 @@ describe('parseFinkelHtml', () => {
     });
   });
 
-  describe('"source:" spans are bolded and capitalized to match *Also:*', () => {
+  describe('.source spans: "source:" citations get *Source:*, other remarks get *Note:*', () => {
     it('reformats a literal "source: X" span to "*Source:* X"', () => {
       const html = `<!DOCTYPE html>
 <html><body>
@@ -964,11 +964,36 @@ describe('parseFinkelHtml', () => {
       expect(entry.grammaticalInfo).not.toContain('source:');
     });
 
-    it('leaves non-citation .source content (e.g. "indeclinable") unchanged', () => {
+    it('labels non-citation .source content (e.g. "indeclinable") "*Note:*", not "*Source:*"', () => {
       const entries = parseFinkelHtml(SHEYN_HTML);
       const shney = entries.find(e => e.yiddishTransliterated?.includes('shney'));
-      expect(shney!.grammaticalInfo).toContain('indeclinable');
+      expect(shney!.grammaticalInfo).toContain('*Note:* indeclinable');
       expect(shney!.grammaticalInfo).not.toContain('*Source:*');
+    });
+  });
+
+  describe('brunem — second plural is labelled "alt."', () => {
+    const html = `<!DOCTYPE html>
+<html><body>
+<form></form>
+<ul>
+<li><span class='lexeme'><span class="goodmatch">brunem</span> </span><span class="grammar">noun, plural in</span> -s, <span class="grammar">plural </span> brinemer,  <span class="grammar">gender m,</span> brunen <span class="grammar">noun, plural in</span> -s, <span class='definition'>well</span> <span class="source">variant plural</span></li>
+</ul>
+<form></form>
+</body></html>`;
+    const [entry] = parseFinkelHtml(html);
+
+    it('prefixes the second plural with "alt."', () => {
+      expect(entry.grammaticalInfo).toContain('alt. plural "brinemer"');
+    });
+
+    it('labels the usage remark as a note', () => {
+      expect(entry.grammaticalInfo).toContain('*Note:* variant plural');
+    });
+
+    it('does not prefix a lone plural', () => {
+      const [k] = parseFinkelHtml(SHEYN_HTML);
+      expect(k.grammaticalInfo ?? '').not.toContain('alt.');
     });
   });
 });
